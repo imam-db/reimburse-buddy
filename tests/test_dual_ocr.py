@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from reimburse_web import app as _app  # noqa: F401  (import order: app wires upload_flow)
 from reimburse_web import extract
 from reimburse_web.extract import Draft, Field, boxes_to_lines, combine, get_extractor
 from reimburse_web.upload_flow import _file_entry, evidence_review_reasons
