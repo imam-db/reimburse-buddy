@@ -47,6 +47,7 @@ flowchart LR
 | `request_approval(manager_id, claim_id, item_id, reason)` | (Mock write) Ask the claimant's manager; returns a pending request |
 | `update_claim_status(claim_id, status, note)` | (Mock write) `on_hold`, `approved`, `partially_approved`, `rejected` |
 | `get_outbox()` | Everything the agent sent or changed this session |
+| `reset_demo()` | Restore all in-memory state before a new take (replies, outbox, approvals, statuses) |
 
 Write tools are mocks: state lives in memory for one server process. `send_message` is a
 closed loop: scripted replies in `data/replies.json` land in the employee's mailbox right away,
@@ -68,7 +69,13 @@ Unresolved problems come back as **gap codes** (`receipt_missing`, `boarding_pas
 `hotel_over_cap`, `hotel_nights_mismatch`, `late_checkout_unjustified`, `duplicate_suspected`,
 `return_flight_missing`). The skill maps each code to a tool. `human_decisions`
 (`approve_full` / `approve_capped` / `reject`) can settle any item, in any category.
-`ignored_evidence` lists IDs that did not count and why (`unknown_id`, `belongs_to_other_employee`, `memo_unsigned`).
+`ignored_evidence` lists IDs that did not count and why (`unknown_id`, `belongs_to_other_employee`, `memo_unsigned`,
+`no_matching_item`). Wrong argument shapes return an error with a correct example, so the model can retry.
+
+`search_inbox` is a ranked OR search (case-insensitive, `QZ7520` = `QZ 7520`, identifiers weigh more) that
+returns the top 5 summaries. Scripted replies react to English and Indonesian requests (receipt, struk,
+kuitansi, nota, bukti, taksi). The decision note's Indonesian section is fully localised and lists ignored
+evidence as an audit trail.
 
 ## Demo scenarios
 
@@ -104,7 +111,7 @@ uv run reimburse-buddy-mcp   # starts the server on stdio (WorkBuddy normally do
 1. Copy `.workbuddy/mcp.json` into your project's `.workbuddy/` folder (or merge it into
    `~/.workbuddy/mcp.json`) and replace `/ABSOLUTE/PATH/TO/reimburse-buddy` with your clone path.
    On Windows use a path like `C:\\Users\\you\\reimburse-buddy`.
-2. Restart WorkBuddy and confirm the `reimburse-buddy` server shows its 13 tools.
+2. Restart WorkBuddy and confirm the `reimburse-buddy` server shows its 14 tools.
 3. Add the skill in `skills/claim-auditor/SKILL.md` to WorkBuddy's skills. It covers the gap-code-to-tool
    mapping, the fallback search strategy, how to explain `ignored_evidence`, batching questions to the
    reviewer, and post-decision actions.

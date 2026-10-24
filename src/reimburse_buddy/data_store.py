@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from functools import cached_property
 from pathlib import Path
 from typing import Any
@@ -61,6 +62,12 @@ class DataStore:
     def status_log(self) -> list[dict]:
         return []
 
+    def reset(self) -> None:
+        """Drop all in-memory state (delivered replies, outbox, approvals, status changes) and reload data."""
+        for name in ("employees", "policy", "claims", "inbox", "calendar", "memos", "replies",
+                     "outbox", "approval_requests", "status_log"):
+            self.__dict__.pop(name, None)
+
     # --- lookups -------------------------------------------------------
     def get_claim(self, claim_id: str) -> dict:
         for c in self.claims:
@@ -82,18 +89,43 @@ class DataStore:
         return None
 
     # --- mock office tools --------------------------------------------
-    def search_inbox(self, employee_id: str, query: str = "") -> list[dict]:
-        terms = [t.lower() for t in query.split() if t]
-        out = []
+    STOPWORDS = {"the", "a", "an", "for", "of", "to", "and", "or", "in", "on", "at", "my", "is", "please", "send",
+                 "mohon", "kirim", "yang", "dan", "di", "ke", "untuk", "dari", "dengan"}
+
+    @staticmethod
+    def _compact(text: str) -> str:
+        return re.sub(r"[^a-z0-9]", "", text.lower())
+
+    def search_inbox(self, employee_id: str, query: str = "", limit: int = 5) -> list[dict]:
+        """Ranked OR search over subject (weight 2), body, sender and attachment file names (weight 1);
+        tokens containing digits (flight or invoice numbers) weigh 3x.
+        Case-insensitive; "QZ7520" and "QZ 7520" match the same text. Returns short summaries."""
+        tokens = [t for t in re.findall(r"[a-z0-9]+", query.lower()) if t not in self.STOPWORDS]
+        joined = self._compact(query)
+        scored = []
         for m in self.inbox:
             if m["owner_id"] != employee_id:
                 continue
-            # Like a real mail search: subject, body, sender and attachment file names only.
             names = [a.get("name", "") for a in m["attachments"]]
-            text = " ".join([m["subject"], m["body"], m["from"], *names]).lower()
-            if all(t in text for t in terms):
-                out.append(m)
-        return out
+            subject = m["subject"].lower()
+            rest = " ".join([m["body"], m["from"], *names]).lower()
+            if tokens:
+                cs, cr = self._compact(subject), self._compact(rest)
+                score = 0
+                for t in set(tokens):
+                    w = 3 if any(ch.isdigit() for ch in t) else 1  # identifiers (flight, invoice no.) weigh more
+                    score += w * (2 if t in subject or t in cs else 1 if t in rest or t in cr else 0)
+                if len(tokens) > 1 and joined and joined in self._compact(subject + " " + rest):
+                    score += 2  # whole query appears, ignoring spaces and punctuation
+            else:
+                score = 1
+            if score:
+                scored.append((score, m))
+        scored.sort(key=lambda x: x[1]["date"], reverse=True)  # newest first on ties
+        scored.sort(key=lambda x: -x[0])
+        return [{"id": m["id"], "date": m["date"], "from": m["from"], "subject": m["subject"],
+                 "snippet": m["body"][:160], "attachments": [a.get("name", "") for a in m["attachments"]],
+                 "score": score} for score, m in scored[:limit]]
 
     def get_calendar(self, employee_id: str, date_from: str, date_to: str) -> list[dict]:
         return [e for e in self.calendar if e["owner_id"] == employee_id and date_from <= e["date"] <= date_to]
