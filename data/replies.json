@@ -1,11 +1,54 @@
 [
   {
-    "id": "RPL-0001", "to": "EMP-003", "claim_id": "CLM-2026-0104", "keywords_any": ["IT-6", "taxi"],
+    "id": "RPL-0001",
+    "to": "EMP-003",
+    "claim_id": "CLM-2026-0104",
+    "keywords_any": [
+      "IT-6",
+      "taxi"
+    ],
     "reply": {
-      "id": "MSG-5101", "owner_id": "EMP-003", "from": "sari.kusumawati@nusantara-niaga.example", "date": "2026-10-24",
+      "id": "MSG-5101",
+      "owner_id": "EMP-003",
+      "from": "sari.kusumawati@nusantara-niaga.example",
+      "date": "2026-10-24",
       "subject": "Re: Claim CLM-2026-0104: taxi IT-6",
       "body": "Yes, separate ride: back to the vendor site after lunch. Second taxi receipt attached.",
-      "attachments": [{"name": "taxi_receipt_2.jpg", "type": "receipt", "claim_id": "CLM-2026-0104", "item_id": "IT-6", "receipt_no": "TX-90022"}]
+      "attachments": [
+        {
+          "name": "taxi_receipt_2.jpg",
+          "type": "receipt",
+          "claim_id": "CLM-2026-0104",
+          "item_id": "IT-6",
+          "receipt_no": "TX-90022"
+        }
+      ]
+    }
+  },
+  {
+    "id": "RPL-0002",
+    "to": "EMP-001",
+    "claim_id": "CLM-2026-0110",
+    "keywords_any": [
+      "IT-5",
+      "receipt"
+    ],
+    "reply": {
+      "id": "MSG-5203",
+      "owner_id": "EMP-001",
+      "from": "rina.wulandari@nusantara-niaga.example",
+      "date": "2026-10-24",
+      "subject": "Re: Claim CLM-2026-0110: taxi receipt",
+      "body": "Sorry, forgot to attach it. Taxi receipt for 3 Oct attached.",
+      "attachments": [
+        {
+          "name": "taxi_3oct.jpg",
+          "type": "receipt",
+          "claim_id": "CLM-2026-0110",
+          "item_id": "IT-5",
+          "receipt_no": "TX-30577"
+        }
+      ]
     }
   }
 ]

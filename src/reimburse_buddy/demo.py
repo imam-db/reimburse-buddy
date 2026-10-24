@@ -1,6 +1,6 @@
 """Simulate the three demo scenarios without WorkBuddy.
 
-Usage: python -m reimburse_buddy.demo {boarding-pass|hotel-memo|hotel-ask|late-checkout|all}
+Usage: python -m reimburse_buddy.demo {triage|hero|boarding-pass|hotel-memo|hotel-ask|late-checkout|all}
 
 Each scenario scripts what the agent would do: plan, call tools, revise the plan, decide.
 """
@@ -83,7 +83,59 @@ def late_checkout() -> None:
     print("\n" + draft_decision(store, c) + "\n")
 
 
+def hero() -> None:
+    """One claim, four problems: dead-end search, unsigned memo trap, cross-source meeting, missing receipt."""
+    cid, emp = "CLM-2026-0110", "EMP-001"
+    say("plan", "1) get_claim 2) check_claim 3) resolve each gap 4) ask the reviewer once 5) draft_decision 6) follow-up actions")
+    c = check_claim(store, cid); show_check(c)
+    ev: list[str] = []
+    say("plan revised", "4 gaps -> 3a boarding pass, 3b hotel memo, 3c late check-out, 3d taxi receipt")
+    # 3a: dead end, then an alternative query
+    hits = store.search_inbox(emp, "boarding pass")
+    say("search_inbox 'boarding pass'", json.dumps([h["id"] + ": " + h["subject"] for h in hits]) + "  <- other trip, dead end")
+    hits = store.search_inbox(emp, "QZ 7520")
+    say("search_inbox 'QZ 7520'", json.dumps([h["id"] + ": " + h["subject"] for h in hits]))
+    ev += [h["id"] for h in hits]
+    # 3b: memo found, but unsigned
+    memos = store.find_approval_memo(emp, "Surabaya", "2026-10-02")
+    say("find_approval_memo", json.dumps([(m["id"], "signed" if m["signed"] else "UNSIGNED") for m in memos]))
+    ev += [m["id"] for m in memos]
+    # 3c: calendar says 11:30, an email says the meeting moved
+    cal = store.get_calendar(emp, "2026-10-04", "2026-10-04")
+    say("get_calendar", json.dumps([f"{e['id']} {e['start']}-{e['end']}" for e in cal]))
+    ev += [e["id"] for e in cal]
+    c = check_claim(store, cid, ev); show_check(c)
+    say("plan revised", "Calendar meeting ends 11:30, before check-out time -> check email for a reschedule")
+    hits = store.search_inbox(emp, "meeting moved")
+    say("search_inbox 'meeting moved'", json.dumps([h["id"] + ": " + h["subject"] for h in hits]))
+    ev += [h["id"] for h in hits]
+    # 3d: ask the employee for the receipt
+    say("send_message", json.dumps(store.send_message(emp, "Hi Rina, please send the taxi receipt for 3 Oct (IT-5).",
+                                                      "Claim CLM-2026-0110: taxi receipt", cid)))
+    ev += [h["id"] for h in store.search_inbox(emp, "taxi receipt")]
+    c = check_claim(store, cid, ev); show_check(c)
+    for i in c.ignored_evidence:
+        say("ignored", f"{i.id}: {i.reason}")
+    say("ask human", "IT-3 hotel is Rp1.350.000/night vs Rp1.200.000 cap; MEMO-2026-038 is unsigned. "
+                     "approve_full, approve_capped or reject?")
+    say("human", "approve_capped")
+    c = check_claim(store, cid, ev, {"IT-3": "approve_capped"}); show_check(c)
+    say("update_claim_status", json.dumps(store.update_claim_status(cid, "partially_approved", "Hotel capped; memo unsigned")))
+    print("\n" + draft_decision(store, c) + "\n")
+
+
+def triage() -> None:
+    from .triage import triage_claims
+    t = triage_claims(store, "2026-W43")
+    say("triage_claims", f"{t['claims']} claims: {len(t['auto_cleared'])} auto-cleared, {len(t['exceptions'])} exceptions")
+    for e in t["exceptions"]:
+        say("  exception", f"{e['claim_id']} gaps={e['gaps']} rejected={e['rejected_items']}")
+    say("time saved", f"~{t['time_saved_estimate']['minutes']} min ({t['time_saved_estimate']['assumption']})")
+
+
 SCENARIOS = {
+    "triage": triage,
+    "hero": hero,
     "boarding-pass": boarding_pass,
     "hotel-memo": lambda: hotel(False),
     "hotel-ask": lambda: hotel(True),
@@ -95,8 +147,10 @@ def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     name = argv[0] if argv else "all"
     if name == "all":
+        global store
         for n, fn in SCENARIOS.items():
             print(f"===== {n} =====")
+            store = DataStore()  # fresh mock state per scenario
             fn()
         return 0
     if name not in SCENARIOS:
