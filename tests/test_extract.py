@@ -59,3 +59,14 @@ def test_ocr_accuracy_on_samples():
 def test_unreadable_photo_is_empty_card():
     d = TesseractExtractor().extract(SAMPLES / "unreadable_photo.jpg")
     assert d.fields["amount"].value is None and d.fields["doc_type"].value in (None, "other")
+
+
+@needs_tesseract
+def test_ocr_accuracy_on_heldout_samples():
+    """Held-out tricky layouts (TOTAL (3 item), cash larger than total, 2-digit year, TOTAL DISKON last)."""
+    folder = SAMPLES / "heldout"
+    truth = json.loads((folder / "truth.json").read_text())
+    ex = TesseractExtractor()
+    got = [(ex.extract(folder / n).fields[k].value, v) for n, want in truth.items() for k, v in want.items()]
+    assert sum(a == b for a, b in got) / len(got) >= 0.9
+    assert all(ex.extract(folder / n).fields["amount"].value == w["amount"] for n, w in truth.items())

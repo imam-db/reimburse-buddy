@@ -95,13 +95,13 @@ def test_missing_evidence_then_add_file(client):
     d = drop(client, ["taxi_kota_biru_0310.jpg"])
     client.post(f"/employee/drafts/{d['id']}", data=dict(form_of(d), action="add"))
     new = d["cards"][1]["id"]
-    form = dict(form_of(d), **{f"c_{new}_category": "taxi", f"c_{new}_date": "2026-10-04", f"c_{new}_amount": "120000",
+    form = dict(form_of(d), **{f"c_{new}_category": "taxi", f"c_{new}_date": "2026-10-03", f"c_{new}_amount": "185000",
                                 f"c_{new}_merchant": "Taksi"})
     r = client.post(f"/employee/drafts/{d['id']}", data=dict(form, action="submit"), follow_redirects=False)
     cid = r.headers["location"].split("/")[3].split("?")[0]
     assert "receipt missing" in client.get(f"/employee/claims/{cid}").text
     client.post(f"/employee/claims/{cid}/items/IT-2/files",
-                files={"file": ("taxi2.jpg", (SAMPLES / "taxi_pelangi_blurry.jpg").read_bytes())})
+                files={"file": ("taxi2.jpg", (SAMPLES / "heldout" / "taxi_2digit_year_cash.jpg").read_bytes())})
     assert all("receipt_missing" not in i.gaps for i in web.run_check(cid).items)
 
 
@@ -176,7 +176,7 @@ def test_self_declared_doc_type_needs_review(client):
     form[f"f_{fid}_doc_type"] = "meal_receipt"
     r = client.post(f"/employee/drafts/{d['id']}", data=dict(form, action="submit"), follow_redirects=False)
     cid = r.headers["location"].split("/")[3].split("?")[0]
-    assert web.review(cid)["pending"]["MSG-W001"]["reason"] == "self_declared_only"
+    assert {"self_declared_only", "doc_type_mismatch"} <= set(web.review(cid)["pending"]["MSG-W001"]["reasons"])
 
 
 def test_bulk_approve_skips_pending(client):
