@@ -26,7 +26,7 @@ class Finding:
     rule: str
     status: ItemStatus
     message: str
-    hint: str | None = None  # which tool or question would resolve it
+    gap: str | None = None  # machine-readable gap code, e.g. "boarding_pass_missing"
 
 
 @dataclass
@@ -38,6 +38,8 @@ class ItemResult:
     status: ItemStatus
     findings: list[Finding] = field(default_factory=list)
     evidence_used: list[str] = field(default_factory=list)
+    gaps: list[str] = field(default_factory=list)
+    human_decision: str | None = None
 
 
 @dataclass
@@ -49,7 +51,14 @@ class ClaimCheck:
     total_pending: Decimal  # amount blocked on missing evidence or a human decision
     decision: Decision
     items: list[ItemResult]
-    ignored_evidence: list[str] = field(default_factory=list)
+    ignored_evidence: list["IgnoredEvidence"] = field(default_factory=list)
+    warnings: list[Finding] = field(default_factory=list)  # claim-level, do not block payment
+
+
+@dataclass
+class IgnoredEvidence:
+    id: str
+    reason: str  # unknown_id | belongs_to_other_employee | memo_unsigned
 
 
 def to_jsonable(obj):
