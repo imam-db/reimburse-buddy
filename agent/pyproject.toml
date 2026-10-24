@@ -1,0 +1,22 @@
+[project]
+name = "reimburse-agent"
+version = "0.1.0"
+description = "Version B: a LangGraph agent that drives the reimburse-buddy MCP server with any OpenAI-compatible model."
+requires-python = ">=3.11"
+dependencies = [
+    "langgraph>=0.6",
+    "langchain-core>=0.3",
+    "langchain-openai>=0.3",
+    "langchain-mcp-adapters>=0.1",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = ["."]
