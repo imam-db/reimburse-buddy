@@ -22,7 +22,7 @@ async def test_entrypoint_and_hero_claim_without_evidence():
     assert SERVER_ENTRYPOINT == "reimburse-buddy-mcp"
     async with mcp_tools() as (_s, tools):
         by = {t.name: t for t in tools}
-        assert EXPECTED <= set(by)
+        assert set(by) == EXPECTED | {"request_missing_evidence"}  # flag set by mcp_client
         data = _json(await by["check_claim"].ainvoke({"claim_id": "CLM-2026-0110"}))
         assert data["total_approvable"] == "4840000"  # Rp4.840.000 before any evidence
         assert data["decision"] == "needs_info"

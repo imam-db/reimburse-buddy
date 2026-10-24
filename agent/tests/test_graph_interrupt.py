@@ -102,22 +102,68 @@ def test_every_send_message_is_gated(body):
     assert needs_confirmation("send_message", {"to": "EMP-999", "body": body})
 
 
-async def test_request_missing_evidence_runs_free_and_reaches_owner_only():
-    script = [call("request_missing_evidence", {"claim_id": HERO, "item_id": "IT-5", "gap_code": "receipt_missing"}, 1),
-              call("get_outbox", {}, 2), AIMessage(content="asked")]
-    async with mcp_tools() as (_s, tools):
-        g = build_graph(Scripted(messages=iter(script)), tools, checkpointer=InMemorySaver())
-        conf = {"configurable": {"thread_id": "e"}}
-        await g.ainvoke({"messages": [("user", "go")], "declined": {}}, conf)
-        st = await g.aget_state(conf)
-        assert not st.interrupts
-        assert "EMP-001" in st.values["messages"][-2].content and "IT-5" in st.values["messages"][-2].content
+def ev(item, gap, claim=None):
+    return {"claim_id": claim or HERO, "item_id": item, "gap_code": gap}
+
+
+async def _evidence_run(calls, answer=None, run_claim=HERO):
+    script = [call(n, a, i) for i, (n, a) in enumerate(calls, 1)] + [AIMessage(content="done")]
+    return await _drive(script, answer or _no, run_claim=run_claim)
+
+
+CHECK = ("check_claim", {"claim_id": HERO})
+
+
+async def test_evidence_request_free_for_run_claim_after_check():
+    seen, st = await _evidence_run([CHECK, ("request_missing_evidence", ev("IT-5", "receipt_missing")),
+                                    ("get_outbox", {})])
+    assert seen == []
+    out = st.values["messages"][-2].content
+    assert "EMP-001" in out and "IT-5" in out
+
+
+@pytest.mark.parametrize("calls,why", [
+    ([("request_missing_evidence", ev("IT-5", "receipt_missing"))], "no check_claim yet"),
+    ([CHECK, ("request_missing_evidence", ev("IT-6", "receipt_missing", "CLM-2026-0104"))], "other claim"),
+    ([CHECK, ("request_missing_evidence", ev("IT-3", "hotel_over_cap"))], "decision-adjacent gap"),
+    ([CHECK, ("request_missing_evidence", ev("IT-4", "late_checkout_unjustified"))], "decision-adjacent gap"),
+    ([CHECK, ("request_missing_evidence", ev("IT-2", "receipt_missing"))], "gap not in latest check"),
+])
+async def test_evidence_request_gated(calls, why):
+    seen, _ = await _evidence_run(calls)
+    assert [v["tool"] for v in seen] == ["request_missing_evidence"], why
+
+
+async def test_evidence_request_gated_without_run_claim():
+    seen, _ = await _evidence_run([CHECK, ("request_missing_evidence", ev("IT-5", "receipt_missing"))], run_claim=None)
+    assert len(seen) == 1
+
+
+async def test_evidence_request_repeat_and_cap_are_gated():
+    from reimburse_agent.graph import free_evidence_request
+    from langchain_core.messages import ToolMessage
+    msgs = [ToolMessage(content=json.dumps({"claim_id": HERO, "items": [
+        {"item_id": f"IT-{i}", "status": "needs_evidence", "gaps": ["receipt_missing"]} for i in range(1, 6)]}), tool_call_id="x", name="check_claim")]
+    used = []
+    for i in range(1, 4):
+        assert free_evidence_request(ev(f"IT-{i}", "receipt_missing"), HERO, msgs, used)
+        used.append([HERO, f"IT-{i}", "receipt_missing"])
+    assert not free_evidence_request(ev("IT-4", "receipt_missing"), HERO, msgs, used)  # cap of 3
+    assert not free_evidence_request(ev("IT-1", "receipt_missing"), HERO, msgs, used[:1])  # repeat
+
+
+def test_prompt_addendum_is_version_b_only():
+    from reimburse_agent.graph import SKILL_PATH
+    full = load_system_prompt()
+    raw = load_system_prompt(addendum=False)
+    assert raw == SKILL_PATH.read_text(encoding="utf-8")
+    assert full.startswith(raw) and "request_missing_evidence" in full and "request_missing_evidence" not in raw
 
 
 def test_allowlist_gates_everything_not_read_only():
     for t in READ_ONLY_TOOLS:
         assert not needs_confirmation(t, {})
-    for t in ("update_claim_status", "approve_cleared_batch", "request_approval", "reset_demo",
+    for t in ("request_missing_evidence", "update_claim_status", "approve_cleared_batch", "request_approval", "reset_demo",
               "some_future_write_tool"):
         assert needs_confirmation(t, {})
 
@@ -214,3 +260,11 @@ async def test_gated_call_cap_per_run():
     seen, st = await _drive(script, _no, max_gated=2)
     assert len(seen) == 2
     assert "limit of 2 approval requests" in [m.content for m in st.values["messages"] if m.type == "tool"][-1]
+
+
+def test_reviewer_resolved_gap_is_not_free():
+    from reimburse_agent.graph import free_evidence_request
+    from langchain_core.messages import ToolMessage
+    msgs = [ToolMessage(content=json.dumps({"claim_id": HERO, "items": [
+        {"item_id": "IT-5", "status": "partial", "gaps": ["receipt_missing"]}]}), tool_call_id="x", name="check_claim")]
+    assert not free_evidence_request(ev("IT-5", "receipt_missing"), HERO, msgs, [])

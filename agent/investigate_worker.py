@@ -204,7 +204,7 @@ async def _run(a) -> int:
     pending: dict[str, dict] = {}
     n = 0
     async with mcp_tools() as (_s, tools):
-        graph = build_graph(model, tools, checkpointer=InMemorySaver(), compact=True)
+        graph = build_graph(model, tools, checkpointer=InMemorySaver(), compact=True, run_claim=a.claim)
         conf = {"configurable": {"thread_id": str(uuid.uuid4())}, "recursion_limit": a.max_steps}
         payload: object = {"messages": [("user", a.prompt.format(claim=a.claim))], "declined": {}}
         loop = asyncio.get_running_loop()

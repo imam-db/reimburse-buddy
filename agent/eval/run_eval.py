@@ -64,7 +64,7 @@ async def run_one(model_name, case, compact, api_key, budget):
     async with mcp_tools() as (_s, tools):
         schemas = {t.name: (t.args_schema if isinstance(t.args_schema, dict) else t.args_schema.model_json_schema())
                    for t in tools}
-        g = build_graph(model, tools, checkpointer=InMemorySaver(), compact=compact)
+        g = build_graph(model, tools, checkpointer=InMemorySaver(), compact=compact, run_claim=case.claim_id)
         conf = {"configurable": {"thread_id": str(uuid.uuid4())}, "recursion_limit": 60}
         payload = {"messages": [("user", f"Review claim {case.claim_id} and draft the decision note.")],
                    "declined": {}}
