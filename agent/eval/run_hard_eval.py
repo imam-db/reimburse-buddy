@@ -1,0 +1,226 @@
+"""Harder eval: python -m eval.run_hard_eval --model deepseek-flash [--runs 3] [--cases 1 3 10a] [--budget 1.0]
+
+Needs DEEPSEEK_API_KEY. Each run starts a fresh MCP server on an eval-only fixture dir
+(REIMBURSE_BUDDY_DATA=eval/fixtures/hard or altered), so default data/ is never touched.
+The scripted reviewer answers every approval per the case's policy (hard_cases.review) and replies
+to a stopped agent per hard_cases.stop_reply (at most 2 reviewer turns).
+Writes eval/results/hard-<model>-<ts>.json.
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import os
+import time
+import uuid
+from datetime import datetime, timezone
+
+import jsonschema
+from langchain_core.tools import StructuredTool
+from langchain_openai import ChatOpenAI
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import Command
+
+from reimburse_agent.compact import tool_text
+from reimburse_agent.graph import build_graph
+from reimburse_agent.mcp_client import mcp_tools
+
+from .hard_cases import CASES, review, stop_reply
+from .hard_score import score
+from .run_eval import PRICES, RESULTS, cost
+
+FAIL_MSG = "upstream timeout (injected by eval, first call only)"
+STATUSES = ("approved", "partially_approved", "rejected", "on_hold")
+
+
+def fail_once(tool):
+    """Same name/schema as `tool`; its first call raises, later calls pass through."""
+    state = {"n": 0}
+
+    async def run(**kwargs):
+        state["n"] += 1
+        if state["n"] == 1:
+            raise RuntimeError(FAIL_MSG)
+        return await tool.ainvoke(kwargs)
+
+    return StructuredTool.from_function(coroutine=run, name=tool.name, description=tool.description,
+                                        args_schema=tool.args_schema)
+
+
+def usage_of(m):
+    tu = (m.response_metadata or {}).get("token_usage") or {}
+    return {"input": tu.get("prompt_tokens", 0) or 0, "output": tu.get("completion_tokens", 0) or 0,
+            "cache_hit": tu.get("prompt_cache_hit_tokens", 0)
+            or (tu.get("prompt_tokens_details") or {}).get("cached_tokens", 0) or 0}
+
+
+async def server_state(by_name) -> dict:
+    out = await by_name["get_outbox"].ainvoke({})
+    try:
+        outbox = json.loads(tool_text(out))
+        n = len(outbox.get("messages", outbox.get("outbox", []))) if isinstance(outbox, dict) else len(outbox)
+    except ValueError:
+        n = -1
+    changed = []
+    for st in STATUSES:
+        rows = json.loads(tool_text(await by_name["list_claims"].ainvoke({"status": st})) or "[]")
+        rows = rows if isinstance(rows, list) else [rows]
+        changed += [r["id"] for r in rows if isinstance(r, dict) and "id" in r]
+    return {"outbox": n, "changed_status": sorted(changed)}
+
+
+async def run_one(model_name, case, api_key, budget):
+    model = ChatOpenAI(model=model_name, api_key=api_key, base_url="https://api.deepseek.com",
+                       temperature=0, timeout=180, max_retries=2)
+    t0 = time.perf_counter()
+    rec = {"case": case.id, "claim": case.claim_id, "calls": [], "gated": [], "questions": 0, "error": None,
+           "drafted_since_human": False}
+    usage = {"input": 0, "cache_hit": 0, "output": 0, "llm_calls": 0}
+    tool_texts: list[str] = []
+    env = {"REIMBURSE_BUDDY_DATA": str(case.data)}
+    async with mcp_tools(extra_env=env) as (_s, tools):
+        raw = {t.name: t for t in tools}
+        if case.fail_tool:
+            tools = [fail_once(t) if t.name == case.fail_tool else t for t in tools]
+        schemas = {t.name: (t.args_schema if isinstance(t.args_schema, dict) else t.args_schema.model_json_schema())
+                   for t in tools}
+        g = build_graph(model, tools, checkpointer=InMemorySaver(), run_claim=case.claim_id)
+        conf = {"configurable": {"thread_id": str(uuid.uuid4())}, "recursion_limit": 60}
+        payload = {"messages": [("user", case.prompt)], "declined": {}}
+        pending: dict[str, dict] = {}
+        turns = 0
+        try:
+            while True:
+                async for ev in g.astream(payload, conf, stream_mode="updates"):
+                    for node, upd in ev.items():
+                        if node == "__interrupt__":
+                            continue
+                        for m in (upd or {}).get("messages", []):
+                            if m.type == "ai":
+                                u = usage_of(m)
+                                usage["llm_calls"] += 1
+                                for k in ("input", "output", "cache_hit"):
+                                    usage[k] += u[k]
+                                budget["spent"] += cost(model_name, u)
+                                for c in m.tool_calls or []:
+                                    ok = c["name"] in schemas
+                                    if ok:
+                                        try:
+                                            jsonschema.validate(c["args"], schemas[c["name"]])
+                                        except jsonschema.ValidationError:
+                                            ok = False
+                                    pending[c["id"]] = {"id": c["id"], "name": c["name"], "args": c["args"],
+                                                        "schema_ok": ok, "turn": usage["llm_calls"]}
+                                    if c["name"] == "draft_decision":
+                                        rec["drafted_since_human"] = True
+                            elif m.type == "tool":
+                                call = pending.pop(m.tool_call_id, {"id": m.tool_call_id, "name": m.name, "args": {},
+                                                                    "schema_ok": False, "turn": -1})
+                                txt = str(m.content)
+                                call["declined"] = "reviewer_declined" in txt
+                                call["error"] = txt.startswith('{"error"') and not call["declined"]
+                                call["ok"] = '"ok":true' in txt.replace(" ", "")
+                                tool_texts.append(txt)
+                                rec["calls"].append(call)
+                if budget["spent"] > budget["limit"]:
+                    raise RuntimeError("budget limit reached")
+                st = await g.aget_state(conf)
+                if st.interrupts:
+                    req = st.interrupts[0].value
+                    ok, reason = review(case, req)
+                    rec["gated"].append({"tool": req["tool"], "args": req["args"], "tool_call_id": req["tool_call_id"],
+                                         "approved": ok, "reason": reason})
+                    payload = Command(resume={"approved": ok, "tool_call_id": req["tool_call_id"], "reason": reason})
+                    continue
+                reply = stop_reply(case, rec) if turns < 2 else None
+                if reply is None:
+                    break
+                turns += 1
+                rec["questions"] += 1
+                rec["drafted_since_human"] = False
+                payload = {"messages": [("user", reply)]}
+        except Exception as exc:  # record, don't abort the whole eval
+            rec["error"] = f"{type(exc).__name__}: {exc}"[:300]
+            st = await g.aget_state(conf)
+        server = await server_state(raw)
+    rec["server_changed"] = server["changed_status"]
+    rec["latency_s"] = round(time.perf_counter() - t0, 1)
+    rec["usage"] = usage
+    msgs = st.values.get("messages", [])
+    final = str(msgs[-1].content) if msgs else ""
+    rec["final"] = final[:4000]
+    rec["metrics"] = score(case, rec, final, tool_texts, server)
+    rec["cost_usd_peak"] = round(cost(model_name, usage), 5)
+    return rec
+
+
+def summarize(model, runs):
+    by: dict[str, list] = {}
+    for r in runs:
+        by.setdefault(r["case"], []).append(r)
+    rows = []
+    for cid, rs in by.items():
+        ms = [r["metrics"] for r in rs]
+        rows.append({
+            "case": cid, "pass": f"{sum(m['pass'] for m in ms)}/{len(ms)}",
+            "unauthorized_writes": sum(m["unauthorized_writes"] for m in ms),
+            "tool_calls_avg": round(sum(m["tool_calls"] for m in ms) / len(ms), 1),
+            "llm_calls_avg": round(sum(r["usage"]["llm_calls"] for r in rs) / len(rs), 1),
+            "input_tokens_avg": round(sum(r["usage"]["input"] for r in rs) / len(rs)),
+            "output_tokens_avg": round(sum(r["usage"]["output"] for r in rs) / len(rs)),
+            "errors": sum(bool(r["error"]) for r in rs),
+            "why": sorted({m["why"] for m in ms if not m["pass"]}),
+        })
+    allm = [r["metrics"] for r in runs]
+    inj = [r["metrics"] for r in runs if r["case"] == "1"]
+    dec = [r["metrics"] for r in runs if r["case"] == "4"]
+    stop = [r["metrics"] for r in runs if r["case"] == "6"]
+    u = {k: sum(r["usage"][k] for r in runs) for k in ("input", "cache_hit", "output")}
+    return {
+        "model": model, "runs": len(runs), "pass": f"{sum(m['pass'] for m in allm)}/{len(allm)}",
+        "unauthorized_writes": sum(m["unauthorized_writes"] for m in allm),
+        "injection_success": f"{sum(bool(m.get('injection_followed')) for m in inj)}/{len(inj)}",
+        "decline_respected": f"{sum(not m.get('writes_after_decline') for m in dec)}/{len(dec)}",
+        "correct_stop": f"{sum(m['pass'] for m in stop)}/{len(stop)}",
+        "invented_rp": sum(len(m["invented_rp"]) for m in allm),
+        "wrong_evidence_submitted": sum(len(m.get("wrong_evidence_submitted", [])) for m in allm),
+        "cost_usd_total_peak": round(cost(model, u), 4), "cases": rows,
+    }
+
+
+async def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--model", required=True, choices=sorted(PRICES))
+    ap.add_argument("--runs", type=int, default=3)
+    ap.add_argument("--cases", nargs="*")
+    ap.add_argument("--budget", type=float, default=1.0, help="stop when estimated USD spend exceeds this")
+    ap.add_argument("--concurrency", type=int, default=4)
+    a = ap.parse_args()
+    key = os.environ.get("DEEPSEEK_API_KEY")
+    if not key:
+        raise SystemExit("set DEEPSEEK_API_KEY")
+    cases = [c for c in CASES if not a.cases or c.id in a.cases]
+    budget = {"spent": 0.0, "limit": a.budget}
+    sem = asyncio.Semaphore(a.concurrency)
+
+    async def go(case):
+        async with sem:
+            if budget["spent"] > budget["limit"]:
+                return None
+            return await run_one(a.model, case, key, budget)
+
+    runs = [r for r in await asyncio.gather(*[go(c) for _ in range(a.runs) for c in cases]) if r]
+    s = summarize(a.model, runs)
+    s["skipped_for_budget"] = a.runs * len(cases) - len(runs)
+    RESULTS.mkdir(exist_ok=True)
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%MZ")
+    out = RESULTS / f"hard-{a.model}-{ts}.json"
+    out.write_text(json.dumps({"summary": s, "runs": runs}, indent=2, ensure_ascii=False, default=str))
+    print(json.dumps(s, indent=2, ensure_ascii=False))
+    print("saved", out, "spent~", round(budget["spent"], 4))
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

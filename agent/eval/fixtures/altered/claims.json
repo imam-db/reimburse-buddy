@@ -1,0 +1,749 @@
+[
+  {
+    "id": "CLM-2027-0501",
+    "employee_id": "EMP-401",
+    "status": "submitted",
+    "submitted_at": "2026-10-16",
+    "purpose": "Client visit to PT Samudra Logistik (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Surabaya",
+      "start_date": "2026-10-12",
+      "end_date": "2026-10-14"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-12",
+        "description": "CGK-SUB flight GA 312",
+        "amount": "1450000",
+        "receipt": true,
+        "boarding_pass": false,
+        "flight_no": "GA 312",
+        "leg": "outbound",
+        "receipt_no": "GA-TKT-8801"
+      },
+      {
+        "id": "IT-2",
+        "category": "hotel",
+        "date": "2026-10-12",
+        "description": "Hotel Tunjungan Raya, 2 nights",
+        "amount": "1900000",
+        "nights": 2,
+        "receipt": true,
+        "receipt_no": "TRH-55120"
+      },
+      {
+        "id": "IT-3",
+        "category": "per_diem",
+        "date": "2026-10-12",
+        "description": "Per diem 3 days",
+        "amount": "1350000",
+        "days": 3,
+        "receipt": false
+      },
+      {
+        "id": "IT-4",
+        "category": "taxi",
+        "date": "2026-10-13",
+        "description": "Taxi to client office",
+        "amount": "185000",
+        "receipt": true,
+        "receipt_no": "TX-30111"
+      },
+      {
+        "id": "IT-5",
+        "category": "flight",
+        "date": "2026-10-14",
+        "description": "SUB-CGK flight GA 317",
+        "amount": "1380000",
+        "flight_no": "GA 317",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "GA-TKT-8802",
+        "boarding_pass": true
+      }
+    ],
+    "batch": "2026-W43"
+  },
+  {
+    "id": "CLM-2027-0502",
+    "employee_id": "EMP-402",
+    "status": "submitted",
+    "submitted_at": "2026-10-19",
+    "purpose": "Booth staff at Indonesia Retail Tech Expo 2026 (fictional)",
+    "trip": {
+      "origin": "Makassar",
+      "destination": "Jakarta",
+      "start_date": "2026-10-14",
+      "end_date": "2026-10-16"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-14",
+        "description": "UPG-CGK flight JT 771",
+        "amount": "1650000",
+        "receipt": true,
+        "boarding_pass": true,
+        "flight_no": "JT 771",
+        "leg": "outbound",
+        "receipt_no": "JT-TKT-4410"
+      },
+      {
+        "id": "IT-2",
+        "category": "hotel",
+        "date": "2026-10-14",
+        "description": "Hotel Kemayoran Expo, 2 nights",
+        "amount": "3300000",
+        "nights": 2,
+        "receipt": true,
+        "receipt_no": "HKE-77310"
+      },
+      {
+        "id": "IT-3",
+        "category": "per_diem",
+        "date": "2026-10-14",
+        "description": "Per diem 3 days",
+        "amount": "1350000",
+        "days": 3,
+        "receipt": false
+      },
+      {
+        "id": "IT-4",
+        "category": "flight",
+        "date": "2026-10-16",
+        "description": "CGK-UPG flight JT 778",
+        "amount": "1590000",
+        "flight_no": "JT 778",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "JT-TKT-4411",
+        "boarding_pass": true
+      }
+    ]
+  },
+  {
+    "id": "CLM-2027-0503",
+    "employee_id": "EMP-402",
+    "status": "submitted",
+    "submitted_at": "2026-10-22",
+    "purpose": "Partner workshop in Medan (fictional)",
+    "trip": {
+      "origin": "Makassar",
+      "destination": "Medan",
+      "start_date": "2026-10-20",
+      "end_date": "2026-10-21"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "hotel",
+        "date": "2026-10-20",
+        "description": "Hotel Deli Permai, 1 night",
+        "amount": "1050000",
+        "nights": 1,
+        "receipt": true,
+        "receipt_no": "HDP-1209"
+      },
+      {
+        "id": "IT-2",
+        "category": "per_diem",
+        "date": "2026-10-20",
+        "description": "Per diem 2 days",
+        "amount": "700000",
+        "days": 2,
+        "receipt": false
+      }
+    ]
+  },
+  {
+    "id": "CLM-2027-0504",
+    "employee_id": "EMP-403",
+    "status": "submitted",
+    "submitted_at": "2026-10-23",
+    "purpose": "Vendor onboarding workshop in Bali (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Denpasar",
+      "start_date": "2026-10-19",
+      "end_date": "2026-10-21"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-19",
+        "description": "CGK-DPS flight ID 6510",
+        "amount": "1580000",
+        "receipt": true,
+        "boarding_pass": true,
+        "flight_no": "ID 6510",
+        "leg": "outbound",
+        "receipt_no": "ID-TKT-6510"
+      },
+      {
+        "id": "IT-8",
+        "category": "flight",
+        "date": "2026-10-21",
+        "description": "DPS-CGK flight ID 6517",
+        "amount": "1490000",
+        "flight_no": "ID 6517",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "ID-TKT-6517",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "hotel",
+        "date": "2026-10-19",
+        "description": "Hotel Sanur Asri, 2 nights",
+        "amount": "2200000",
+        "nights": 2,
+        "receipt": true,
+        "receipt_no": "HSA-3301"
+      },
+      {
+        "id": "IT-3",
+        "category": "late_checkout",
+        "date": "2026-10-21",
+        "description": "Late check-out until 17:00",
+        "amount": "450000",
+        "receipt": true,
+        "checkout_time": "17:00",
+        "location": "Denpasar",
+        "receipt_no": "HSA-3302"
+      },
+      {
+        "id": "IT-4",
+        "category": "per_diem",
+        "date": "2026-10-19",
+        "description": "Per diem 3 days",
+        "amount": "1350000",
+        "days": 3,
+        "receipt": false
+      },
+      {
+        "id": "IT-5",
+        "category": "taxi",
+        "date": "2026-10-20",
+        "description": "Taxi to vendor site",
+        "amount": "120000",
+        "receipt": true,
+        "receipt_no": "TX-90021"
+      },
+      {
+        "id": "IT-6",
+        "category": "taxi",
+        "date": "2026-10-20",
+        "description": "Taxi to vendor site",
+        "amount": "120000",
+        "receipt": true
+      },
+      {
+        "id": "IT-7",
+        "category": "meal",
+        "date": "2026-10-23",
+        "description": "Dinner after returning",
+        "amount": "210000",
+        "receipt": true,
+        "receipt_no": "RM-1180"
+      }
+    ],
+    "batch": "2026-W43"
+  },
+  {
+    "id": "CLM-2027-0510",
+    "employee_id": "EMP-401",
+    "status": "submitted",
+    "submitted_at": "2026-10-06",
+    "batch": "2026-W43",
+    "purpose": "Contract closing with PT Samudra Logistik (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Surabaya",
+      "start_date": "2026-10-02",
+      "end_date": "2026-10-04"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-02",
+        "description": "CGK-SUB flight QZ 7520",
+        "amount": "1120000",
+        "flight_no": "QZ 7520",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "QZ-TKT-7520",
+        "boarding_pass": false
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-04",
+        "description": "SUB-CGK flight QZ 7525",
+        "amount": "1090000",
+        "flight_no": "QZ 7525",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "QZ-TKT-7525",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "hotel",
+        "date": "2026-10-02",
+        "description": "Hotel Majapahit Kencana, 2 nights",
+        "amount": "2700000",
+        "nights": 2,
+        "receipt": true,
+        "receipt_no": "HMK-20441"
+      },
+      {
+        "id": "IT-4",
+        "category": "late_checkout",
+        "date": "2026-10-04",
+        "description": "Late check-out until 16:30",
+        "amount": "400000",
+        "checkout_time": "16:30",
+        "location": "Surabaya",
+        "receipt": true,
+        "receipt_no": "HMK-20442"
+      },
+      {
+        "id": "IT-5",
+        "category": "taxi",
+        "date": "2026-10-03",
+        "description": "Taxi hotel to client office and back",
+        "amount": "230000",
+        "receipt": false
+      },
+      {
+        "id": "IT-6",
+        "category": "per_diem",
+        "date": "2026-10-02",
+        "description": "Per diem 3 days",
+        "amount": "1350000",
+        "days": 3,
+        "receipt": false
+      }
+    ]
+  },
+  {
+    "id": "CLM-2027-0511",
+    "employee_id": "EMP-404",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-W43",
+    "purpose": "Routine branch visit to Yogyakarta (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Yogyakarta",
+      "start_date": "2026-10-19",
+      "end_date": "2026-10-20"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-19",
+        "description": "CGK-YIA flight ID 6600",
+        "amount": "1100000",
+        "flight_no": "ID 6600",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2027-0511-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-20",
+        "description": "YIA-CGK flight ID 6601",
+        "amount": "1080000",
+        "flight_no": "ID 6601",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2027-0511-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "hotel",
+        "date": "2026-10-19",
+        "description": "Hotel in Yogyakarta, 1 night(s)",
+        "amount": "650000",
+        "nights": 1,
+        "receipt": true,
+        "receipt_no": "HTL-CLM-2027-0511"
+      },
+      {
+        "id": "IT-4",
+        "category": "per_diem",
+        "date": "2026-10-19",
+        "description": "Per diem 2 days",
+        "amount": "700000",
+        "days": 2,
+        "receipt": false
+      }
+    ]
+  },
+  {
+    "id": "CLM-2027-0512",
+    "employee_id": "EMP-405",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-W43",
+    "purpose": "Routine branch visit to Makassar (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Makassar",
+      "start_date": "2026-10-20",
+      "end_date": "2026-10-22"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-20",
+        "description": "CGK-UPG flight ID 6602",
+        "amount": "1150000",
+        "flight_no": "ID 6602",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2027-0512-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-22",
+        "description": "UPG-CGK flight ID 6603",
+        "amount": "1130000",
+        "flight_no": "ID 6603",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2027-0512-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "hotel",
+        "date": "2026-10-20",
+        "description": "Hotel in Makassar, 2 night(s)",
+        "amount": "1320000",
+        "nights": 2,
+        "receipt": true,
+        "receipt_no": "HTL-CLM-2027-0512"
+      },
+      {
+        "id": "IT-4",
+        "category": "per_diem",
+        "date": "2026-10-20",
+        "description": "Per diem 3 days",
+        "amount": "1050000",
+        "days": 3,
+        "receipt": false
+      }
+    ]
+  },
+  {
+    "id": "CLM-2027-0513",
+    "employee_id": "EMP-402",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-W43",
+    "purpose": "Routine branch visit to Medan (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Medan",
+      "start_date": "2026-10-19",
+      "end_date": "2026-10-21"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-19",
+        "description": "CGK-KNO flight ID 6604",
+        "amount": "1200000",
+        "flight_no": "ID 6604",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2027-0513-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-21",
+        "description": "KNO-CGK flight ID 6605",
+        "amount": "1180000",
+        "flight_no": "ID 6605",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2027-0513-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "hotel",
+        "date": "2026-10-19",
+        "description": "Hotel in Medan, 2 night(s)",
+        "amount": "1340000",
+        "nights": 2,
+        "receipt": true,
+        "receipt_no": "HTL-CLM-2027-0513"
+      },
+      {
+        "id": "IT-4",
+        "category": "per_diem",
+        "date": "2026-10-19",
+        "description": "Per diem 3 days",
+        "amount": "1050000",
+        "days": 3,
+        "receipt": false
+      }
+    ]
+  },
+  {
+    "id": "CLM-2027-0514",
+    "employee_id": "EMP-404",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-W43",
+    "purpose": "Routine branch visit to Balikpapan (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Balikpapan",
+      "start_date": "2026-10-21",
+      "end_date": "2026-10-22"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-21",
+        "description": "CGK-BPN flight ID 6606",
+        "amount": "1250000",
+        "flight_no": "ID 6606",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2027-0514-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-22",
+        "description": "BPN-CGK flight ID 6607",
+        "amount": "1230000",
+        "flight_no": "ID 6607",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2027-0514-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "hotel",
+        "date": "2026-10-21",
+        "description": "Hotel in Balikpapan, 1 night(s)",
+        "amount": "680000",
+        "nights": 1,
+        "receipt": true,
+        "receipt_no": "HTL-CLM-2027-0514"
+      },
+      {
+        "id": "IT-4",
+        "category": "per_diem",
+        "date": "2026-10-21",
+        "description": "Per diem 2 days",
+        "amount": "700000",
+        "days": 2,
+        "receipt": false
+      }
+    ]
+  },
+  {
+    "id": "CLM-2027-0515",
+    "employee_id": "EMP-403",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-W43",
+    "purpose": "Routine branch visit to Yogyakarta (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Yogyakarta",
+      "start_date": "2026-10-22",
+      "end_date": "2026-10-23"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-22",
+        "description": "CGK-YIA flight ID 6608",
+        "amount": "1300000",
+        "flight_no": "ID 6608",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2027-0515-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-23",
+        "description": "YIA-CGK flight ID 6609",
+        "amount": "1280000",
+        "flight_no": "ID 6609",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2027-0515-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "hotel",
+        "date": "2026-10-22",
+        "description": "Hotel in Yogyakarta, 1 night(s)",
+        "amount": "690000",
+        "nights": 1,
+        "receipt": true,
+        "receipt_no": "HTL-CLM-2027-0515"
+      },
+      {
+        "id": "IT-4",
+        "category": "per_diem",
+        "date": "2026-10-22",
+        "description": "Per diem 2 days",
+        "amount": "700000",
+        "days": 2,
+        "receipt": false
+      }
+    ]
+  },
+  {
+    "id": "CLM-2027-0516",
+    "employee_id": "EMP-401",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-W43",
+    "purpose": "Routine branch visit to Makassar (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Makassar",
+      "start_date": "2026-10-19",
+      "end_date": "2026-10-20"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-19",
+        "description": "CGK-UPG flight ID 6610",
+        "amount": "1350000",
+        "flight_no": "ID 6610",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2027-0516-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-20",
+        "description": "UPG-CGK flight ID 6611",
+        "amount": "1330000",
+        "flight_no": "ID 6611",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2027-0516-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "hotel",
+        "date": "2026-10-19",
+        "description": "Hotel in Makassar, 1 night(s)",
+        "amount": "700000",
+        "nights": 1,
+        "receipt": true,
+        "receipt_no": "HTL-CLM-2027-0516"
+      },
+      {
+        "id": "IT-4",
+        "category": "per_diem",
+        "date": "2026-10-19",
+        "description": "Per diem 2 days",
+        "amount": "700000",
+        "days": 2,
+        "receipt": false
+      }
+    ]
+  },
+  {
+    "id": "CLM-2027-0517",
+    "employee_id": "EMP-405",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-W43",
+    "purpose": "Routine branch visit to Medan (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Medan",
+      "start_date": "2026-10-22",
+      "end_date": "2026-10-23"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-22",
+        "description": "CGK-KNO flight ID 6612",
+        "amount": "1400000",
+        "flight_no": "ID 6612",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2027-0517-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-23",
+        "description": "KNO-CGK flight ID 6613",
+        "amount": "1380000",
+        "flight_no": "ID 6613",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2027-0517-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "hotel",
+        "date": "2026-10-22",
+        "description": "Hotel in Medan, 1 night(s)",
+        "amount": "710000",
+        "nights": 1,
+        "receipt": true,
+        "receipt_no": "HTL-CLM-2027-0517"
+      },
+      {
+        "id": "IT-4",
+        "category": "per_diem",
+        "date": "2026-10-22",
+        "description": "Per diem 2 days",
+        "amount": "700000",
+        "days": 2,
+        "receipt": false
+      }
+    ]
+  }
+]
