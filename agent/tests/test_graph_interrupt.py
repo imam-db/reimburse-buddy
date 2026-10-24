@@ -76,10 +76,9 @@ async def test_approve_cleared_batch_is_gated():
     assert intr["tool"] == "approve_cleared_batch"
 
 
-async def test_read_tools_and_document_requests_do_not_interrupt():
+async def test_read_tools_do_not_interrupt():
     script = [call("check_claim", {"claim_id": "CLM-2026-0110"}, 1),
-              call("send_message", {"to": "EMP-001", "claim_id": "CLM-2026-0110", "body": "Please forward the missing hotel receipt."}, 2),
-              AIMessage(content="asked for receipt")]
+              AIMessage(content="checked")]
     async with mcp_tools() as (_s, tools):
         g = build_graph(Scripted(messages=iter(script)), tools, checkpointer=InMemorySaver())
         conf = {"configurable": {"thread_id": "t"}}
@@ -97,25 +96,22 @@ LEAKS = ["We will only pay Rp2.400.000", "will be reimbursed up to the cap 2,400
          "Final amount: Rp6.590.000", "Your claim is OK'd, 6590000 total", "Kami potong malam ke-3: 1.200.000"]
 
 
-@pytest.mark.parametrize("body", LEAKS)
-def test_money_messages_are_gated_even_to_owner(body):
-    assert needs_confirmation("send_message", {"to": OWNER, "claim_id": HERO, "body": body}, OWNER)
+@pytest.mark.parametrize("body", LEAKS + ["tidak bisa kami bayar", "Mohon kirim struk hotel"])
+def test_every_send_message_is_gated(body):
+    assert needs_confirmation("send_message", {"to": OWNER, "claim_id": HERO, "body": body})
+    assert needs_confirmation("send_message", {"to": "EMP-999", "body": body})
 
 
-@pytest.mark.parametrize("body", ["will be reimbursed up to the cap", "tidak bisa kami bayar",
-                                  "Your claim is OK'd", "Kami potong malam ke-3"])
-def test_leaks_without_numbers_are_gated_when_not_to_owner(body):
-    # without amounts these pass the money check, so recipient/claim rules must catch them
-    assert needs_confirmation("send_message", {"to": "EMP-999", "claim_id": HERO, "body": body}, OWNER)
-    assert needs_confirmation("send_message", {"to": OWNER, "body": body}, OWNER)  # no claim_id
-    assert needs_confirmation("send_message", {"to": OWNER, "claim_id": HERO, "body": body}, None)  # owner unknown
-
-
-def test_plain_evidence_request_to_owner_is_free():
-    assert not needs_confirmation("send_message", {"to": OWNER, "claim_id": HERO,
-                                                   "body": "Mohon kirim struk hotel"}, OWNER)
-    assert needs_confirmation("send_message", {"to": OWNER, "claim_id": HERO,
-                                               "subject": "Rp", "body": "Mohon kirim struk"}, OWNER)
+async def test_request_missing_evidence_runs_free_and_reaches_owner_only():
+    script = [call("request_missing_evidence", {"claim_id": HERO, "item_id": "IT-5", "gap_code": "receipt_missing"}, 1),
+              call("get_outbox", {}, 2), AIMessage(content="asked")]
+    async with mcp_tools() as (_s, tools):
+        g = build_graph(Scripted(messages=iter(script)), tools, checkpointer=InMemorySaver())
+        conf = {"configurable": {"thread_id": "e"}}
+        await g.ainvoke({"messages": [("user", "go")], "declined": {}}, conf)
+        st = await g.aget_state(conf)
+        assert not st.interrupts
+        assert "EMP-001" in st.values["messages"][-2].content and "IT-5" in st.values["messages"][-2].content
 
 
 def test_allowlist_gates_everything_not_read_only():

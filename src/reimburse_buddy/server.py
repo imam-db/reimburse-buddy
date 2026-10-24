@@ -6,6 +6,7 @@ from mcp.server.fastmcp import FastMCP
 
 from .data_store import DataStore
 from .decision import draft_decision as _draft
+from .evidence_request import request_missing_evidence as _request_evidence
 from .models import to_jsonable
 from .rules import check_claim as _check
 from .triage import approve_cleared_batch as _approve_batch
@@ -104,6 +105,14 @@ def send_message(to: str, body: str, subject: str = "", claim_id: str = "") -> d
     """(Mock) Email an employee, e.g. to ask for a missing receipt. Goes to the outbox.
     The employee's scripted reply arrives in the reimburse@ mailbox; check with search_reimburse_mailbox."""
     return store.send_message(to, body, subject, claim_id)
+
+
+@mcp.tool()
+def request_missing_evidence(claim_id: str, item_id: str, gap_code: str) -> dict:
+    """(Mock) Ask the claim's owner for a missing document, using a fixed template (no free text,
+    no amounts, no decision). gap_code must be one check_claim reports for that item. Sending the
+    same request twice returns the first message instead of resending."""
+    return _request_evidence(store, claim_id, item_id, gap_code)
 
 
 @mcp.tool()
