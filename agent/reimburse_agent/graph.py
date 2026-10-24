@@ -45,6 +45,14 @@ PROMPT_ADDENDUM = """
   code from your latest `check_claim`. It writes a fixed message to the claim owner.
 - `send_message` always needs reviewer approval here; use it only when a free-text message is
   really needed. Never put amounts or decisions in employee messages.
+- Be efficient. Search the mailbox at most once per gap; search again only with new information
+  (a new flight number, date, receipt number or sender), never the same query reworded.
+- Once `check_claim` shows no gaps, stop investigating: go straight to `draft_decision`.
+- Only state Rp amounts that appear verbatim in tool output. Do not add, subtract or compute your
+  own sub-totals.
+- Two extra gap codes may appear: `receipt_amount_mismatch` (a receipt's amount differs from the item)
+  and `multiple_receipts` (several receipts for one item). Never pick one receipt yourself: ask the
+  reviewer, or leave the item open.
 """
 # Never offered to the agent at all: wipes outbox, statuses and replies.
 HIDDEN_TOOLS = frozenset({"reset_demo"})

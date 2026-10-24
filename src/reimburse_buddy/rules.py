@@ -122,8 +122,11 @@ def check_claim(
         raise ValueError(f"human_decisions refers to unknown item(s) {sorted(unknown_items)} in {claim_id}. {SHAPE_HELP}")
 
     evidence, ignored = _resolve_evidence(store, emp, evidence_ids)
-    receipts = {(a.get("claim_id"), a.get("item_id")): (eid, a)
-                for eid, a in _attachments(evidence) if a.get("type") == "receipt"}
+    all_receipts: dict[tuple, list] = {}
+    for eid, a in _attachments(evidence):
+        if a.get("type") == "receipt":
+            all_receipts.setdefault((a.get("claim_id"), a.get("item_id")), []).append((eid, a))
+    receipts = {k: v[0] for k, v in all_receipts.items()}
 
     # Effective receipt numbers (from the claim or from receipts found in the inbox).
     receipt_no: dict[str, str | None] = {}
@@ -161,7 +164,18 @@ def check_claim(
         # Receipt required (a receipt found in the inbox counts)
         if cat in policy["receipt_required_categories"] and not item.get("receipt"):
             found = receipts.get((claim_id, iid))
-            if found:
+            several = all_receipts.get((claim_id, iid), [])
+            if len(several) > 1:
+                # Two or more different receipts for one item: never pick one silently.
+                res.evidence_used += [e for e, _ in several]
+                gap("receipt_required", G.MULTIPLE_RECEIPTS, "multiple_receipts", srcs=", ".join(e for e, _ in several))
+            elif found and found[1].get("amount") is not None and _d(found[1]["amount"]) != amount:
+                # Exact match, no tolerance: a receipt states the exact amount paid, and the claim
+                # amount is meant to be copied from it. Receipts without an amount are not compared.
+                res.evidence_used.append(found[0])
+                gap("receipt_required", G.RECEIPT_AMOUNT_MISMATCH, "receipt_amount_mismatch", src=found[0],
+                    receipt_amount=_d(found[1]["amount"]), item_amount=amount)
+            elif found:
                 res.evidence_used.append(found[0])
                 res.findings.append(F("receipt_required", ItemStatus.OK, "receipt_found", src=found[0]))
             else:
