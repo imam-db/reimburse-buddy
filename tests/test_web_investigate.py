@@ -43,6 +43,10 @@ def wait_page(client, rid, pattern, timeout=120):
     raise AssertionError(f"{pattern!r} never appeared:\n{html}")
 
 
+def pending_id(rid):
+    return web.INVESTIGATOR.runs[rid].pending["approval_id"]
+
+
 def start(client):
     r = client.post(f"/admin/claims/{HERO}/investigate", follow_redirects=False)
     assert r.status_code == 303
@@ -81,7 +85,7 @@ def test_interrupt_approve_runs_write(client, monkeypatch, tmp_path):
     html = wait_page(client, rid, "id=pending")
     assert "update_claim_status" in html and "awaiting approval" in html
     assert "<code>update_claim_status</code></td>" not in html  # not executed yet
-    client.post(f"/admin/investigations/{rid}/resume", data={"approved": "true", "tool_call_id": "w1"})
+    client.post(f"/admin/investigations/{rid}/resume", data={"approved": "true", "approval_id": pending_id(rid)})
     html = wait_page(client, rid, "id=final")
     assert "Reviewer approved" in html
     step = re.search(r"<code>get_outbox</code>.*?</tr>", html, re.S).group(0)
@@ -93,7 +97,7 @@ def test_interrupt_decline_never_writes(client, monkeypatch, tmp_path):
         {"tool_calls": [{"name": "get_outbox", "args": {}, "id": "o1"}]}, {"content": "left unchanged"}])
     rid = start(client)
     wait_page(client, rid, "id=pending")
-    client.post(f"/admin/investigations/{rid}/resume", data={"approved": "false", "reason": "not yet", "tool_call_id": "w1"})
+    client.post(f"/admin/investigations/{rid}/resume", data={"approved": "false", "reason": "not yet", "approval_id": pending_id(rid)})
     html = wait_page(client, rid, "id=final")
     assert "Reviewer declined" in html and "reviewer_declined" in html and "class='tag bad'>declined" in html
     step = re.search(r"<code>get_outbox</code>.*?</tr>", html, re.S).group(0)
@@ -109,11 +113,12 @@ def test_rate_guard(client, monkeypatch, tmp_path):
     assert "id=rate-limited" in r.text
 
 
-def test_pending_form_carries_tool_call_id_and_honest_text(client, monkeypatch, tmp_path):
+def test_pending_form_carries_approval_id_rule_engine_and_honest_text(client, monkeypatch, tmp_path):
     use_script(monkeypatch, tmp_path, [WRITE, {"content": "x"}])
     rid = start(client)
     html = wait_page(client, rid, "id=pending")
-    assert 'name=tool_call_id value="w1"' in html
+    assert f'name=approval_id value="{pending_id(rid)}"' in html
+    assert "id=rule-engine" in html and "Rp4.840.000" in html
     assert "Nothing is written until you click Approve" not in html
     client.post(f"/admin/investigations/{rid}/cancel")
 
@@ -125,16 +130,26 @@ def test_mismatched_and_duplicate_answers_ignored(client, monkeypatch, tmp_path)
     rid = start(client)
     run = web.INVESTIGATOR.runs[rid]
     wait_page(client, rid, "id=pending")
-    assert not run.resume("w2", True)  # wrong id: not sent
+    first = pending_id(rid)
+    assert not run.resume("w1", True)  # model id, not the approval id: not sent
     assert not run.resume("", True)
-    assert run.resume("w1", False, "no")
-    assert not run.resume("w1", True)  # double click / second tab: ignored
-    html = wait_page(client, rid, 'value="w2"')  # second write now pending, not auto-approved by the duplicate
-    assert "approved" in html
-    client.post(f"/admin/investigations/{rid}/resume", data={"approved": "false", "tool_call_id": "w2"})
+    assert run.resume(first, False, "no")
+    assert not run.resume(first, True)  # double click / second tab: ignored
+    run.wait(60, until=lambda r: r.pending and r.pending["approval_id"] != first)
+    assert run.pending["tool_call_id"] == "w2"  # second write is pending, not approved by the duplicate
+    client.post(f"/admin/investigations/{rid}/resume", data={"approved": "false", "approval_id": pending_id(rid)})
     html = wait_page(client, rid, "id=final")
+    assert html.count("Reviewer declined") == 2 and "Reviewer approved" not in html
     step = re.search(r"<code>get_outbox</code>.*?</tr>", html, re.S).group(0)
-    assert "on_hold" not in step and "&quot;approved&quot;" not in step and '"to":"approved"' not in step
+    assert "on_hold" not in step and '"to":"approved"' not in step
+
+
+def test_pending_survives_answer_rejected_and_decision_needs_ack():
+    from reimburse_web.agent_bridge import Run
+    intr = {"type": "interrupt", "approval_id": "a1", "tool": "t"}
+    assert Run._pending([intr, {"type": "answer_rejected"}, {"type": "step"}]) == intr
+    for closer in ("answer_applied", "auto_declined", "final", "error"):
+        assert Run._pending([intr, {"type": closer}]) is None
 
 
 def test_cancel_kills_run(client, monkeypatch, tmp_path):

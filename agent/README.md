@@ -20,9 +20,12 @@ OpenAI-compatible tool-calling model (DeepSeek, Qwen, Gemini via its OpenAI endp
   contains no "Rp" and no number of 4+ digits. This is a stopgap: a message like "tidak bisa kami
   bayar" to the owner still passes. The permanent fix is a server tool
   `request_missing_evidence(claim_id, item_id, gap_code)` that writes the text itself.
-- **Approvals name their call:** each interrupt carries `tool_call_id`; an answer without the
-  matching id (stale page, second tab, double click) counts as a decline and is never applied to
-  another call. A declined call never reaches the server; the model gets `reviewer_declined` back.
+- **Approvals name their call:** the worker gives each interrupt its own `approval_id` (not the
+  model's `tool_call_id`); an answer without the matching id (stale page, second tab, double click)
+  is rejected and never applied to another call. The trace shows a decision only after the worker
+  acknowledges it (`answer_applied`). The approval box also shows `check_claim`'s current verdict.
+- **Fewer prompts:** unknown or hidden tool names return an error without asking; an identical
+  repeat of a declined call is declined automatically; at most 10 approval requests per run. A declined call never reaches the server; the model gets `reviewer_declined` back.
 
 ## Run
 
@@ -150,7 +153,8 @@ the LangGraph interrupt and runs only after the reviewer clicks **Approve**; **D
 `reviewer_declined`. The web side checks and writes each answer under one lock, sends the
 `tool_call_id`, and ignores duplicates.
 
-Run limits: `REIMBURSE_AGENT_RUN_DEADLINE` (default 600 s per run), `REIMBURSE_AGENT_APPROVAL_DEADLINE`
+Run limits: `REIMBURSE_AGENT_RUN_DEADLINE` (default 600 s of agent work; the clock pauses while an
+approval is pending), `REIMBURSE_AGENT_APPROVAL_DEADLINE`
 (default 900 s, then the pending call is auto-declined), model calls time out after 60 s with one retry.
 **Cancel run** stops a run; each run is its own process group, so uv, python and the MCP server all
 exit. stderr goes to a per-run log (`REIMBURSE_AGENT_LOG_DIR`, default a temp dir); on errors the page

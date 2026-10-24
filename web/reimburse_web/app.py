@@ -481,6 +481,22 @@ def _get_run(rid: str):
     return run
 
 
+def decision_box(d: dict | None) -> str:
+    """Rule engine's current verdict next to the proposed write, so the model's wording isn't the only input."""
+    if not d:
+        return ""
+
+    def rp(v):
+        try:
+            return "Rp" + f"{int(float(v)):,}".replace(",", ".")
+        except (TypeError, ValueError):
+            return e(v)
+
+    return (f"<div class=box id=rule-engine><b>Rule engine now (check_claim, no extra evidence):</b> "
+            f"decision <code>{e(d.get('decision'))}</code>, approvable {rp(d.get('total_approvable'))} "
+            f"of {rp(d.get('total_claimed'))}, pending {rp(d.get('total_pending'))}</div>")
+
+
 @app.get("/admin/investigations/{rid}", response_class=HTMLResponse)
 def investigation_page(rid: str):
     run = _get_run(rid)
@@ -494,7 +510,7 @@ def investigation_page(rid: str):
                      f"<td><code>{e(x['args_summary'])}</code></td><td>{e(x['result_summary'])}</td></tr>")
         elif x["type"] == "auto_declined":
             rows += "<tr><td></td><td colspan=3 class=note>No answer in time: auto-declined</td></tr>"
-        elif x["type"] == "decision":
+        elif x["type"] == "answer_applied":  # shown only once the worker acknowledged it
             rows += (f"<tr><td></td><td colspan=3 class=note>Reviewer {'approved' if x['approved'] else 'declined'} "
                      f"<code>{e(x['tool'])}</code></td></tr>")
     pend = run.pending
@@ -502,9 +518,10 @@ def investigation_page(rid: str):
     if pend:
         pending_html = f"""<div class="box" id=pending><h2>Pending write: awaiting your approval</h2>
 <p><code>{e(pend['tool'])}</code></p><pre>{e(json.dumps(pend['args'], ensure_ascii=False, indent=2))}</pre>
+{decision_box(pend.get('current_decision'))}
 <p class=note>This call runs only if you click Approve. Read-only lookups, and a plain evidence request to the claim's owner (no amounts), run without asking; every other write or message waits here. Unanswered approvals are declined automatically.</p>
-<form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=tool_call_id value="{e(pend['tool_call_id'])}"><input type=hidden name=approved value=true><button>Approve</button></form>
-<form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=tool_call_id value="{e(pend['tool_call_id'])}"><input type=hidden name=approved value=false>
+<form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=approval_id value="{e(pend['approval_id'])}"><input type=hidden name=approved value=true><button>Approve</button></form>
+<form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=approval_id value="{e(pend['approval_id'])}"><input type=hidden name=approved value=false>
 <input name=reason size=40 placeholder="Reason (optional)"><button>Decline</button></form></div>"""
     final = next((x for x in evs if x["type"] == "final"), None)
     err = next((x for x in evs if x["type"] == "error"), None)
@@ -535,10 +552,10 @@ def investigation_page(rid: str):
 
 
 @app.post("/admin/investigations/{rid}/resume")
-def investigation_resume(rid: str, tool_call_id: str = Form(""), approved: str = Form("false"),
+def investigation_resume(rid: str, approval_id: str = Form(""), approved: str = Form("false"),
                          reason: str = Form("")):
     run = _get_run(rid)
-    run.resume(tool_call_id, approved == "true", reason)  # stale/duplicate answers are ignored
+    run.resume(approval_id, approved == "true", reason)  # stale/duplicate answers are ignored
     return RedirectResponse(f"/admin/investigations/{rid}", status_code=303)
 
 
