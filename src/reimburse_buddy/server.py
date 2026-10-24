@@ -62,8 +62,9 @@ def check_claim(claim_id: str, evidence_ids: list[str] | None = None,
     """Run the deterministic policy rules on a claim. ALWAYS use this for any money figure.
 
     evidence_ids: IDs you found (inbox MSG-..., calendar EVT-..., memo MEMO-...).
-    human_decisions: {item_id: approve_full | approve_capped | reject} for items a human decided.
-    Items with status needs_evidence carry a `hint` telling you what to look for next."""
+    human_decisions: {item_id: approve_full | approve_capped | reject}; works for any item category.
+    Items with status needs_evidence list gap codes (e.g. boarding_pass_missing, hotel_over_cap,
+    late_checkout_unjustified, duplicate_suspected). `ignored_evidence` explains IDs that did not count."""
     return to_jsonable(_check(store, claim_id, evidence_ids, human_decisions))
 
 

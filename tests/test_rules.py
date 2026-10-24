@@ -23,16 +23,18 @@ def test_boarding_pass_missing_then_found(store):
     assert c.decision == Decision.NEEDS_INFO
     assert item(c, "IT-1").status == ItemStatus.NEEDS_EVIDENCE
     assert c.total_pending == Decimal("1450000")
+    assert item(c, "IT-1").gaps == ["boarding_pass_missing"]
     hits = store.search_inbox("EMP-001", "boarding pass")
     assert [h["id"] for h in hits] == ["MSG-5001"]
     c = check_claim(store, "CLM-2026-0101", ["MSG-5001"])
     assert c.decision == Decision.APPROVE
-    assert c.total_approvable == Decimal("4885000")
+    assert c.total_approvable == Decimal("6265000")
 
 
 def test_other_employees_evidence_is_ignored(store):
     c = check_claim(store, "CLM-2026-0101", ["MSG-5004", "NOPE-1"])
-    assert c.ignored_evidence == ["MSG-5004", "NOPE-1"]
+    assert [(i.id, i.reason) for i in c.ignored_evidence] == [
+        ("MSG-5004", "belongs_to_other_employee"), ("NOPE-1", "unknown_id")]
     assert c.decision == Decision.NEEDS_INFO
 
 
@@ -40,20 +42,20 @@ def test_other_employees_evidence_is_ignored(store):
 def test_hotel_over_cap_with_signed_memo(store):
     c = check_claim(store, "CLM-2026-0102")
     assert item(c, "IT-2").status == ItemStatus.NEEDS_EVIDENCE
-    assert c.total_approvable == Decimal("5400000")  # capped hotel 2.4M is certain
+    assert c.total_approvable == Decimal("6990000")  # capped hotel 2.4M is certain
     assert c.total_pending == Decimal("900000")
     memos = store.find_approval_memo("EMP-002", "Jakarta", "2026-10-14")
     assert [m["id"] for m in memos] == ["MEMO-2026-041"]
     c = check_claim(store, "CLM-2026-0102", ["MEMO-2026-041"])
     assert c.decision == Decision.APPROVE
-    assert c.total_approvable == Decimal("6300000")
+    assert c.total_approvable == Decimal("7890000")
 
 
 def test_unsigned_memo_does_not_count(store):
-    # MEMO-2026-038 is unsigned and for another trip; claim 0101's hotel is within cap anyway,
-    # so use a synthetic check: the memo is ignored for claim 0102 (wrong employee).
     c = check_claim(store, "CLM-2026-0102", ["MEMO-2026-038"])
-    assert c.ignored_evidence == ["MEMO-2026-038"]
+    assert [i.reason for i in c.ignored_evidence] == ["belongs_to_other_employee"]
+    c = check_claim(store, "CLM-2026-0101", ["MEMO-2026-038"])
+    assert [i.reason for i in c.ignored_evidence] == ["memo_unsigned"]
     assert c.decision == Decision.NEEDS_INFO
 
 
@@ -79,13 +81,15 @@ def test_invalid_human_choice(store):
 def test_late_checkout_justified_by_calendar(store):
     c = check_claim(store, "CLM-2026-0104")
     assert item(c, "IT-3").status == ItemStatus.NEEDS_EVIDENCE
-    assert item(c, "IT-6").status == ItemStatus.REJECTED  # duplicate taxi
+    assert item(c, "IT-6").gaps == ["duplicate_suspected"]  # no receipt number: suspected, not rejected
     assert item(c, "IT-7").status == ItemStatus.REJECTED  # after the trip
     c = check_claim(store, "CLM-2026-0104", ["EVT-7004", "EVT-7005"])
     assert item(c, "IT-3").status == ItemStatus.OK
     assert item(c, "IT-3").evidence_used == ["EVT-7004"]
+    assert c.decision == Decision.NEEDS_INFO
+    c = check_claim(store, "CLM-2026-0104", ["EVT-7004"], {"IT-6": "reject"})
     assert c.decision == Decision.PARTIAL
-    assert c.total_approvable == Decimal("5700000")
+    assert c.total_approvable == Decimal("7190000")
 
 
 def test_travel_event_does_not_justify_late_checkout(store):
@@ -95,7 +99,7 @@ def test_travel_event_does_not_justify_late_checkout(store):
 
 def test_draft_decision_mentions_totals(store):
     text = draft_decision(store, check_claim(store, "CLM-2026-0101", ["MSG-5001"]))
-    assert "APPROVED" in text and "Rp4.885.000" in text and "MSG-5001" in text
+    assert "APPROVED" in text and "Rp6.265.000" in text and "MSG-5001" in text
 
 
 def test_demo_cli_runs(capsys):

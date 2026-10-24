@@ -43,9 +43,23 @@ flowchart LR
 | `check_claim(claim_id, evidence_ids, human_decisions)` | Deterministic rule check |
 | `draft_decision(...)` | Reviewer-ready decision note |
 
-Rules in `check_claim`: hotel nightly cap by city tier (or a signed memo), per diem per trip day,
-receipt and boarding pass required, expense dates within the trip, duplicate detection,
-and late check-out justified by a business meeting (capped at 50% of the nightly cap).
+Rules in `check_claim`:
+
+- hotel nightly cap by city tier (or a signed memo), and hotel nights inside the trip
+- per diem per trip day
+- receipt required; a receipt found in the inbox counts
+- boarding pass must match flight number, date and passenger name
+- expense dates within the trip
+- duplicates keyed on receipt number (no distinct receipt numbers means `duplicate_suspected`, not auto-reject)
+- late check-out justified by a business meeting in the same city that ends after the standard check-out
+  time, with the requested check-out at most 2 hours after the meeting (fee capped at 50% of the nightly cap)
+- claim-level warning when an outbound flight has no return flight
+
+Unresolved problems come back as **gap codes** (`receipt_missing`, `boarding_pass_missing`,
+`hotel_over_cap`, `hotel_nights_mismatch`, `late_checkout_unjustified`, `duplicate_suspected`,
+`return_flight_missing`). The skill maps each code to a tool. `human_decisions`
+(`approve_full` / `approve_capped` / `reject`) can settle any item, in any category.
+`ignored_evidence` lists IDs that did not count and why (`unknown_id`, `belongs_to_other_employee`, `memo_unsigned`).
 
 ## Demo scenarios
 
@@ -54,7 +68,7 @@ and late check-out justified by a business meeting (capped at 50% of the nightly
 | 1 | `CLM-2026-0101` | Flight has no boarding pass. Agent searches the inbox, finds `MSG-5001`, claim approved. |
 | 2a | `CLM-2026-0102` | Jakarta hotel over cap. Agent finds signed memo `MEMO-2026-041`, approved. |
 | 2b | `CLM-2026-0103` | Medan hotel over cap, no memo. Agent asks the reviewer; capped amount approved. |
-| 3 | `CLM-2026-0104` | Late check-out fee. Calendar shows a contract signing until 15:30, so the fee is justified. A duplicate taxi and a post-trip dinner are rejected. |
+| 3 | `CLM-2026-0104` | Late check-out fee. Calendar shows a contract signing until 15:30, so the fee is justified. A post-trip dinner is rejected and a suspected duplicate taxi goes to the reviewer. |
 
 Run them without WorkBuddy:
 
