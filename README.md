@@ -202,6 +202,38 @@ sudo apt-get install tesseract-ocr tesseract-ocr-ind poppler-utils   # Debian/Ub
 brew install tesseract tesseract-lang poppler                       # macOS
 ```
 
+A second OCR engine, [RapidOCR](https://github.com/RapidAI/RapidOCR) (PaddleOCR models on onnxruntime, CPU only,
+Apache-2.0), is optional. `REIMBURSE_EXTRACTOR` picks the extractor:
+
+| Value | What runs |
+|---|---|
+| `ocr` (default) | Tesseract only |
+| `dual` | Tesseract and RapidOCR on every photo. If they read a field differently (doc type, date, amount, merchant, flight number, nights, passenger), or only one of them reads it, the Tesseract value is kept but shown as low confidence, and the file goes to `needs_review` with reason `ocr_engine_disagreement` |
+| `rapidocr` | RapidOCR only |
+| `vision` | the vision extractor below |
+
+PDFs with a text layer are read by `pdftotext` in every mode. If RapidOCR is not installed, `dual` and `rapidocr`
+fall back to Tesseract. RapidOCR rebuilds lines from its word boxes and splits a date glued to a time
+(`03-10-202609:12`).
+
+```bash
+uv sync --group rapidocr                 # adds rapidocr + onnxruntime (models ship with the package)
+REIMBURSE_EXTRACTOR=dual uv run uvicorn --app-dir web reimburse_web.app:app --port 8000
+```
+
+Measured on the synthetic samples (`uv run python web/sample_uploads/measure_accuracy.py ocr rapidocr dual`,
+CPU, mean seconds per file after a warm-up file):
+
+| Extractor | Tuning set (7 files, 26 fields) | Held-out set (3 files, 12 fields) | Files flagged for review |
+|---|---|---|---|
+| Tesseract | 25/26, 1.22 s/file | 12/12, 0.67 s/file | n/a |
+| RapidOCR | 26/26, 0.48 s/file | 12/12, 0.41 s/file | n/a |
+| Dual | 25/26, 1.58 s/file | 12/12, 1.08 s/file | 1 (tuning: the blurry taxi merchant, the one Tesseract miss) |
+
+In dual mode the only flagged file is the one where Tesseract reads `TAKS! PELANGI`, so the disagreement check
+catches the single extraction error. The samples are clean, synthetic and few; RapidOCR's advantage is expected to
+matter more on skewed or faded photos, which these sets do not contain.
+
 An optional vision extractor calls any OpenAI-compatible chat completions API. It is off by default and the key
 is read from the environment only:
 
@@ -213,8 +245,8 @@ export VISION_API_KEY=...   # never commit this
 Synthetic sample uploads live in `web/sample_uploads/` (`make_samples.py` regenerates them with Pillow,
 `truth.json` holds the expected fields). `web/sample_uploads/heldout/` is a separate set of tricky layouts
 (TOTAL (3 item), cash larger than the total, 2-digit year, TOTAL DISKON last) not used to tune the parser.
-`uv run python web/sample_uploads/measure_accuracy.py` reports both: 25/26 fields on the tuning set (the miss is
-flagged low confidence) and 12/12 on the held-out set. Both sets are synthetic and small.
+`uv run python web/sample_uploads/measure_accuracy.py` reports both (Tesseract: 25/26 fields on the tuning set, the miss
+flagged low confidence, and 12/12 on the held-out set; see the table above for RapidOCR and dual). Both sets are synthetic and small.
 
 Known limits before any public deploy: shared in-memory state, no auth, local uploads (basic 5 MB / type
 limits only), and a self-declared field is only flagged, not verified.
