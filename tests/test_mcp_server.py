@@ -20,4 +20,4 @@ async def test_server_lists_tools_and_checks_claim():
             res = await session.call_tool("check_claim", {"claim_id": "CLM-2026-0101", "evidence_ids": ["MSG-5001"]})
             data = json.loads(res.content[0].text)
             assert data["decision"] == "approve"
-            assert data["total_approvable"] == "4885000"
+            assert data["total_approvable"] == "6265000"

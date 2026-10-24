@@ -27,7 +27,7 @@ def show_check(c) -> None:
     for r in c.items:
         for f in r.findings:
             if f.status.value != "ok":
-                say("  finding", f"{r.item_id} {f.rule}: {f.message}" + (f" -> hint: {f.hint}" if f.hint else ""))
+                say("  finding", f"{r.item_id} {f.rule}: {f.message}" + (f" -> gap: {f.gap}" if f.gap else ""))
 
 
 def boarding_pass() -> None:
@@ -69,7 +69,11 @@ def late_checkout() -> None:
     say("plan revised", "Late check-out unexplained -> insert step: get_calendar for 2026-10-21")
     events = store.get_calendar(emp, "2026-10-21", "2026-10-21")
     say("get_calendar", json.dumps([f"{e['id']} {e['start']}-{e['end']} {e['title']}" for e in events]))
-    c = check_claim(store, cid, [e["id"] for e in events]); show_check(c)
+    ev = [e["id"] for e in events]
+    c = check_claim(store, cid, ev); show_check(c)
+    say("ask human", "IT-6 looks like a duplicate taxi (no receipt number). Approve or reject?")
+    say("human", "reject")
+    c = check_claim(store, cid, ev, {"IT-6": "reject"}); show_check(c)
     print("\n" + draft_decision(store, c) + "\n")
 
 
