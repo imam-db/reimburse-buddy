@@ -36,6 +36,8 @@ app = FastAPI(title="reimburse-buddy web simulation")
 store = DataStore()
 # Reviewer working state per claim: evidence IDs attached so far and item decisions.
 REVIEW: dict[str, dict] = {}
+# Employee upload drafts (drop-first flow), keyed by draft ID.
+DRAFTS: dict[str, dict] = {}
 
 
 def review(cid: str) -> dict:
@@ -45,6 +47,7 @@ def review(cid: str) -> dict:
 def reset_all() -> None:
     store.reset()
     REVIEW.clear()
+    DRAFTS.clear()
 
 
 def run_check(cid: str):
@@ -62,7 +65,11 @@ CSS = """body{font-family:system-ui,sans-serif;max-width:1100px;margin:0 auto;pa
 nav a{margin-right:14px}table{border-collapse:collapse;width:100%;margin:8px 0}td,th{border-bottom:1px solid #ddd;
 padding:6px;text-align:left;vertical-align:top}th{background:#f4f4f6}.num{text-align:right}.tag{display:inline-block;
 padding:1px 6px;border-radius:8px;background:#eef;font-size:12px;margin:1px}.warn{background:#fff3cd}.bad{background:#f8d7da}
-.ok{background:#d1e7dd}.box{border:1px solid #ddd;border-radius:8px;padding:12px;margin:12px 0}pre{white-space:pre-wrap;
+.ok{background:#d1e7dd}.low{background:#fff3cd;border:1px solid #e0a800}.btn{display:inline-block;padding:6px 12px;
+border:1px solid #888;border-radius:6px;text-decoration:none;color:inherit}.drop{display:block;border:2px dashed #999;
+border-radius:10px;padding:30px;text-align:center;margin:10px 0}.drop.over{background:#eef}.cards{display:flex;flex-wrap:wrap;gap:12px}
+.card{border:1px solid #ccc;border-radius:8px;padding:10px;width:330px}.card label{display:block;font-size:13px;margin-top:4px}
+.err{color:#a00;font-size:13px}.box{border:1px solid #ddd;border-radius:8px;padding:12px;margin:12px 0}pre{white-space:pre-wrap;
 background:#f7f7f9;padding:10px;border-radius:6px}.note{color:#666;font-size:13px}button{cursor:pointer}"""
 
 
@@ -79,6 +86,16 @@ def e(x) -> str:
 
 def options(values, selected=None) -> str:
     return "".join(f'<option value="{e(v)}"{" selected" if v == selected else ""}>{e(label)}</option>' for v, label in values)
+
+
+def provenance_badges(item: dict) -> str:
+    prov = item.get("provenance") or {}
+    if not prov:
+        return ""
+    def badge(k, v):
+        cls = "warn" if v == "self_declared" else "ok"
+        return f"<span class='tag {cls}' title='{e(k)} came from {e(v)}'>{e(k)}: {e(v)}</span>"
+    return "<div>" + "".join(badge(k, v) for k, v in prov.items()) + "</div>"
 
 
 def status_tag(s: str) -> str:
@@ -99,7 +116,7 @@ def employee_page(emp: str = "EMP-001", msg: str = ""):
     me = store.get_employee(emp)
     claims = [c for c in store.claims if c["employee_id"] == emp]
     rows = "".join(
-        f"<tr><td>{e(c['id'])}</td><td>{e(c['purpose'])}</td><td>{e(c['trip']['destination'])} "
+        f"<tr><td><a href='/employee/claims/{e(c['id'])}'>{e(c['id'])}</a></td><td>{e(c['purpose'])}</td><td>{e(c['trip']['destination'])} "
         f"{e(c['trip']['start_date'])} &rarr; {e(c['trip']['end_date'])}</td>"
         f"<td class=num>{e(rupiah(sum(Decimal(i['amount']) for i in c['items'])))}</td><td>{status_tag(c['status'])}</td></tr>"
         for c in claims)
@@ -109,29 +126,14 @@ def employee_page(emp: str = "EMP-001", msg: str = ""):
     fwd = [m for m in store.inbox if m.get("owner_id") == emp]
     fwd_rows = "".join(f"<tr><td>{e(m['id'])}</td><td>{e(m['date'])}</td><td>{e(m['subject'])}</td>"
                        f"<td>{e(', '.join(a['name'] for a in m.get('attachments', [])))}</td></tr>" for m in fwd)
-    claim_opts = options([(c["id"], c["id"]) for c in claims])
     body = f"""
 <form method="get" action="/employee">Signed in as (simulated):
 <select name="emp" onchange="this.form.submit()">{options([(x['id'], x['id'] + ' ' + x['name']) for x in staff], emp)}</select></form>
 {f'<p class="tag ok">{e(msg)}</p>' if msg else ''}
 <h2>My claims</h2><table><tr><th>ID</th><th>Purpose</th><th>Trip</th><th class=num>Claimed</th><th>Status</th></tr>{rows}</table>
 <h2>Messages from finance</h2>{'<table><tr><th>ID</th><th>Claim</th><th>Subject</th><th>Body</th></tr>' + msgs + '</table>' if msgs else '<p class=note>No messages yet.</p>'}
-<div class="box"><h2>Submit a new claim</h2>
-<form method="post" action="/employee/claims"><input type="hidden" name="emp" value="{e(emp)}">
-Purpose <input name="purpose" size="40" required> Destination <input name="destination" value="Surabaya" required>
-<br>Trip <input type="date" name="start_date" required> &rarr; <input type="date" name="end_date" required>
-<p class="note">One item per line: category, date (YYYY-MM-DD), description, whole Rupiah amount (1350000 or 1.350.000),
-receipt yes/no, and for flights a flight number. Categories: {e(', '.join(store.policy['allowed_categories']))}.</p>
-<textarea name="items" rows="4" cols="100" required>taxi, 2026-10-20, Airport taxi, 180000, yes</textarea><br>
-<button type="submit">Submit claim</button></form></div>
-<div class="box"><h2>Forward evidence to {MAILBOX}</h2>
-<form method="post" action="/employee/forward" enctype="multipart/form-data"><input type="hidden" name="emp" value="{e(emp)}">
-Subject <input name="subject" size="50" required> Claim <select name="claim_id">{claim_opts}</select>
-<br>Attachment type <select name="att_type">{options([('receipt', 'receipt'), ('boarding_pass', 'boarding pass'), ('other', 'other')])}</select>
-Item ID <input name="item_id" size="6" placeholder="IT-5"> Flight <input name="flight" size="8" placeholder="QZ 7520">
-Date <input type="date" name="att_date"><br>Note <input name="body" size="80"><br>
-File <input type="file" name="file"> <button type="submit">Forward</button></form>
-<p class="note">Files are stored locally as synthetic attachments. Use synthetic files only.</p></div>
+<div class="box"><h2>New claim</h2><p>Drop all your receipts and boarding passes at once; we draft the items for you.</p>
+<p><a class="btn" href="/employee/new?emp={e(emp)}">Start a new claim</a></p></div>
 <h2>Forwarded to the reimburse mailbox</h2><table><tr><th>ID</th><th>Date</th><th>Subject</th><th>Attachments</th></tr>{fwd_rows}</table>
 <p class="note">Employee: {e(me['name'])} &middot; {e(me['email'])}</p>"""
     return page("Employee portal", body)
@@ -281,7 +283,7 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
                 dec += f"<div class=note>Reviewer: {e(it.human_decision)}</div>"
         item_rows += (f"<tr><td>{e(it.item_id)}</td><td>{e(it.category)}<div class=note>{e(src['description'])}</div></td>"
                       f"<td class=num>{e(rupiah(it.claimed))}</td><td class=num>{e(rupiah(it.approvable))}</td>"
-                      f"<td>{e(it.status.value)}</td><td>{finds}<div>{gaps}</div></td><td>{e(', '.join(it.evidence_used))}</td><td>{dec}</td></tr>")
+                      f"<td>{e(it.status.value)}</td><td>{provenance_badges(src)}{finds}<div>{gaps}</div></td><td>{e(', '.join(it.evidence_used))}</td><td>{dec}</td></tr>")
     ignored = "".join(f"<li>{e(i.id)}: <span class='tag bad'>{e(i.reason)}</span></li>" for i in c.ignored_evidence)
     warns = "".join(f"<li>{e(w.message)}</li>" for w in c.warnings)
 
@@ -367,6 +369,11 @@ def set_status(cid: str, status: str = Form(...), reviewer_confirmed: str = Form
                                 f"{c.decision.value}", status_code=303)
     store.update_claim_status(cid, status, f"Reviewer decision; rule engine approvable {rupiah(c.total_approvable)}")
     return RedirectResponse(f"/admin/claims/{cid}?msg=Status+set+to+{status}", status_code=303)
+
+
+from .upload_flow import router as upload_router  # noqa: E402  (needs the names above)
+
+app.include_router(upload_router)
 
 
 def main() -> None:
