@@ -8,6 +8,7 @@ from .data_store import DataStore
 from .decision import draft_decision as _draft
 from .models import to_jsonable
 from .rules import check_claim as _check
+from .triage import triage_claims as _triage
 
 mcp = FastMCP("reimburse-buddy")
 store = DataStore()
@@ -66,6 +67,13 @@ def check_claim(claim_id: str, evidence_ids: list[str] | None = None,
     Items with status needs_evidence list gap codes (e.g. boarding_pass_missing, hotel_over_cap,
     late_checkout_unjustified, duplicate_suspected). `ignored_evidence` explains IDs that did not count."""
     return to_jsonable(_check(store, claim_id, evidence_ids, human_decisions))
+
+
+@mcp.tool()
+def triage_claims(batch: str = "") -> dict:
+    """Check every submitted claim in a batch (e.g. "2026-W43"). Returns auto-cleared claims,
+    exceptions with their gap codes, and a time-saved estimate. Investigate only the exceptions."""
+    return _triage(store, batch)
 
 
 @mcp.tool()

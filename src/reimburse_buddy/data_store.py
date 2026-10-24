@@ -88,7 +88,9 @@ class DataStore:
         for m in self.inbox:
             if m["owner_id"] != employee_id:
                 continue
-            text = " ".join([m["subject"], m["body"], m["from"], json.dumps(m["attachments"])]).lower()
+            # Like a real mail search: subject, body, sender and attachment file names only.
+            names = [a.get("name", "") for a in m["attachments"]]
+            text = " ".join([m["subject"], m["body"], m["from"], *names]).lower()
             if all(t in text for t in terms):
                 out.append(m)
         return out

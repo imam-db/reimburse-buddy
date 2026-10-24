@@ -45,5 +45,9 @@
     "A late check-out fee is reimbursable only when a business meeting in the hotel's city ends after the standard check-out time and the requested check-out is at most 2 hours after the meeting ends, up to 50% of the nightly cap.",
     "Hotel nights must fall within the trip dates.",
     "A boarding pass must match the flight number, date and passenger name."
-  ]
+  ],
+  "triage": {
+    "manual_review_minutes_per_claim": "15",
+    "note": "Assumed average time a finance officer spends checking one claim by hand (synthetic estimate)."
+  }
 }
