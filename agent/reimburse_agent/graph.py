@@ -19,6 +19,8 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.types import interrupt
 
+from .compact import compact as _compact, tool_text
+
 SKILL_PATH = Path(__file__).resolve().parents[2] / "skills" / "claim-auditor" / "SKILL.md"
 
 ALWAYS_CONFIRM = {"update_claim_status", "approve_cleared_batch", "request_approval"}
@@ -51,8 +53,9 @@ class State(TypedDict):
     declined: dict[str, str]
 
 
-def build_graph(model, tools, system_prompt: str | None = None, checkpointer=None):
-    """model: any LangChain chat model with bind_tools. tools: LangChain tools (e.g. from MCP)."""
+def build_graph(model, tools, system_prompt: str | None = None, checkpointer=None, compact: bool = True):
+    """model: any LangChain chat model with bind_tools. tools: LangChain tools (e.g. from MCP).
+    compact: shrink tool outputs before the model sees them (see compact.py); False = raw."""
     system = SystemMessage(system_prompt if system_prompt is not None else load_system_prompt())
     by_name = {t.name: t for t in tools}
     bound = model.bind_tools(tools)
@@ -83,7 +86,10 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             else:
                 try:
                     res = await by_name[call["name"]].ainvoke(call["args"])
-                    content = res if isinstance(res, str) else json.dumps(res, default=str, ensure_ascii=False)
+                    if compact:
+                        content = _compact(tool_text(res))
+                    else:
+                        content = res if isinstance(res, str) else json.dumps(res, default=str, ensure_ascii=False)
                 except Exception as exc:  # surface tool errors to the model, don't crash the run
                     content = json.dumps({"error": str(exc)})
             out.append(ToolMessage(content=content, tool_call_id=call["id"], name=call["name"]))

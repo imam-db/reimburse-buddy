@@ -25,12 +25,13 @@ async def main() -> None:
     p.add_argument("--prompt", default="Review claim {claim} and draft the decision note.")
     p.add_argument("--auto-decline", action="store_true", help="decline every gated call without asking")
     p.add_argument("--max-steps", type=int, default=40)
+    p.add_argument("--raw", action="store_true", help="send raw tool outputs (disable compact mode)")
     a = p.parse_args()
 
     cfg = load_config()
     print(f"model: {cfg!r}")
     async with mcp_tools() as (_session, tools):
-        graph = build_graph(build_chat_model(cfg), tools, checkpointer=InMemorySaver())
+        graph = build_graph(build_chat_model(cfg), tools, checkpointer=InMemorySaver(), compact=not a.raw)
         conf = {"configurable": {"thread_id": str(uuid.uuid4())}, "recursion_limit": a.max_steps}
         payload: object = {"messages": [("user", a.prompt.format(claim=a.claim))], "declined": {}}
         tokens = {"input": 0, "output": 0}
