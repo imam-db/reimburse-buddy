@@ -314,6 +314,8 @@ def evidence_review_reasons(f: dict, item: dict, trip: dict, passenger: str, dup
         reasons.append("boarding_pass_mismatch")
     if dup:
         reasons.append("duplicate_file")
+    if f["extract"].get("disagreements"):
+        reasons.append("ocr_engine_disagreement")  # Tesseract and RapidOCR read this file differently
     return reasons
 
 
