@@ -246,7 +246,7 @@ def check_claim(
                                       "lc_ok", time=item.get("checkout_time"), ids=", ".join(ok), location=location))
             else:
                 gap("late_checkout", G.LATE_CHECKOUT_UNJUSTIFIED, "lc_missing", location=location, date=item["date"],
-                    std=lc["standard_checkout_time"], hours=lc["max_hours_after_meeting"], time=item.get("checkout_time"))
+                    std=lc["standard_checkout_time"], time=item.get("checkout_time"))
 
         # Combine
         choice = human_decisions.get(iid)

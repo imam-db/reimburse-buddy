@@ -49,5 +49,5 @@ def test_skill_has_no_rupiah_amounts_or_raw_numbers():
 
 
 def test_skill_scopes_messaging_rule():
-    assert "allowed at any time during the investigation" in SKILL
+    assert "Allowed without asking" in SKILL
     assert "reset_demo" in SKILL

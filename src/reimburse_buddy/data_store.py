@@ -96,8 +96,9 @@ class DataStore:
     def _compact(text: str) -> str:
         return re.sub(r"[^a-z0-9]", "", text.lower())
 
-    def search_inbox(self, employee_id: str, query: str = "", limit: int = 5) -> list[dict]:
-        """Ranked OR search over subject (weight 2), body, sender and attachment file names (weight 1);
+    def search_reimburse_mailbox(self, employee_id: str, query: str = "", limit: int = 5) -> list[dict]:
+        """Search the shared reimburse@ mailbox, limited to messages an employee forwarded or sent
+        about their own claims. No personal inbox is ever read. Ranked OR search over subject (weight 2), body, sender and attachment file names (weight 1);
         tokens containing digits (flight or invoice numbers) weigh 3x.
         Case-insensitive; "QZ7520" and "QZ 7520" match the same text. Returns short summaries."""
         tokens = [t for t in re.findall(r"[a-z0-9]+", query.lower()) if t not in self.STOPWORDS]
@@ -127,6 +128,8 @@ class DataStore:
                  "snippet": m["body"][:160], "attachments": [a.get("name", "") for a in m["attachments"]],
                  "score": score} for score, m in scored[:limit]]
 
+    search_inbox = search_reimburse_mailbox  # backwards-compatible alias
+
     def get_calendar(self, employee_id: str, date_from: str, date_to: str) -> list[dict]:
         return [e for e in self.calendar if e["owner_id"] == employee_id and date_from <= e["date"] <= date_to]
 
@@ -146,8 +149,8 @@ class DataStore:
     CLAIM_STATUSES = ("submitted", "on_hold", "approved", "partially_approved", "rejected")
 
     def send_message(self, to: str, body: str, subject: str = "", claim_id: str = "") -> dict:
-        """Put a message in the outbox. Matching scripted replies (data/replies.json) are
-        delivered at once into the employee's mailbox, so search_inbox can find them."""
+        """Put a message in the outbox. Matching scripted replies (data/replies.json) are the
+        employee's answer, delivered at once to the reimburse@ mailbox."""
         self.get_employee(to)
         msg = {"id": f"OUT-{len(self.outbox) + 1:03d}", "to": to, "subject": subject,
                "body": body, "claim_id": claim_id}

@@ -34,9 +34,9 @@ def boarding_pass() -> None:
     cid, emp = "CLM-2026-0101", "EMP-001"
     say("plan", "1) get_claim 2) check_claim 3) resolve gaps 4) draft_decision")
     c = check_claim(store, cid); show_check(c)
-    say("plan revised", "Boarding pass missing -> insert step: search_inbox for 'boarding pass'")
-    hits = store.search_inbox(emp, "boarding pass")
-    say("search_inbox", json.dumps([h["id"] + ": " + h["subject"] for h in hits]))
+    say("plan revised", "Boarding pass missing -> insert step: search_reimburse_mailbox for 'boarding pass'")
+    hits = store.search_reimburse_mailbox(emp, "boarding pass")
+    say("search_reimburse_mailbox", json.dumps([h["id"] + ": " + h["subject"] for h in hits]))
     ev = [h["id"] for h in hits]
     c = check_claim(store, cid, ev); show_check(c)
     print("\n" + draft_decision(store, c) + "\n")
@@ -75,8 +75,8 @@ def late_checkout() -> None:
     sent = store.send_message(emp, "Hi Sari, two taxis on 20 Oct for Rp120.000 each (IT-6). Was it a separate "
                               "ride? Please send the second receipt.", "Claim CLM-2026-0104: taxi IT-6", cid)
     say("send_message", json.dumps(sent))
-    hits = store.search_inbox(emp, "taxi receipt")
-    say("search_inbox", json.dumps([h["id"] + ": " + h["subject"] for h in hits]))
+    hits = store.search_reimburse_mailbox(emp, "taxi receipt")
+    say("search_reimburse_mailbox", json.dumps([h["id"] + ": " + h["subject"] for h in hits]))
     ev += [h["id"] for h in hits]
     c = check_claim(store, cid, ev); show_check(c)
     say("update_claim_status", json.dumps(store.update_claim_status(cid, "partially_approved", "IT-7 outside trip")))
@@ -91,12 +91,12 @@ def hero() -> None:
     ev: list[str] = []
     say("plan revised", "4 gaps -> 3a boarding pass, 3b hotel memo, 3c late check-out, 3d taxi receipt")
     # 3a: dead end, then an alternative query
-    hits = store.search_inbox(emp, "boarding pass")
-    say("search_inbox 'boarding pass'", json.dumps([h["id"] + ": " + h["subject"] for h in hits]))
+    hits = store.search_reimburse_mailbox(emp, "boarding pass")
+    say("search_reimburse_mailbox 'boarding pass'", json.dumps([h["id"] + ": " + h["subject"] for h in hits]))
     probe = check_claim(store, cid, [hits[0]["id"]])
     say("check_claim", f"top hit {hits[0]['id']} -> " + ", ".join(f"{i.id}: {i.reason}" for i in probe.ignored_evidence))
-    hits = store.search_inbox(emp, "QZ 7520")
-    say("search_inbox 'QZ 7520'", json.dumps([h["id"] + ": " + h["subject"] for h in hits]))
+    hits = store.search_reimburse_mailbox(emp, "QZ 7520")
+    say("search_reimburse_mailbox 'QZ 7520'", json.dumps([h["id"] + ": " + h["subject"] for h in hits]))
     ev += [h["id"] for h in hits]
     # 3b: memo found, but unsigned
     memos = store.find_approval_memo(emp, "Surabaya", "2026-10-02")
@@ -107,14 +107,14 @@ def hero() -> None:
     say("get_calendar", json.dumps([f"{e['id']} {e['start']}-{e['end']}" for e in cal]))
     ev += [e["id"] for e in cal]
     c = check_claim(store, cid, ev); show_check(c)
-    say("plan revised", "Calendar meeting ends 11:30, before check-out time -> check email for a reschedule")
-    hits = store.search_inbox(emp, "meeting moved")
-    say("search_inbox 'meeting moved'", json.dumps([h["id"] + ": " + h["subject"] for h in hits]))
+    say("plan revised", "Calendar meeting ends 11:30, before check-out time -> check the reimburse mailbox for a reschedule")
+    hits = store.search_reimburse_mailbox(emp, "meeting moved")
+    say("search_reimburse_mailbox 'meeting moved'", json.dumps([h["id"] + ": " + h["subject"] for h in hits]))
     ev += [h["id"] for h in hits]
     # 3d: ask the employee for the receipt
     say("send_message", json.dumps(store.send_message(emp, "Hi Rina, please send the taxi receipt for 3 Oct (IT-5).",
                                                       "Claim CLM-2026-0110: taxi receipt", cid)))
-    ev += [h["id"] for h in store.search_inbox(emp, "taxi receipt")]
+    ev += [h["id"] for h in store.search_reimburse_mailbox(emp, "taxi receipt")]
     c = check_claim(store, cid, ev); show_check(c)
     for i in c.ignored_evidence:
         say("ignored", f"{i.id}: {i.reason}")

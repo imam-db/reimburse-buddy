@@ -33,3 +33,23 @@ def triage_claims(store: DataStore, batch: str = "") -> dict:
                           + store.policy["triage"]["note"],
         },
     }
+
+
+def approve_cleared_batch(store: DataStore, batch_id: str, claim_ids, reviewer_confirmed: bool) -> dict:
+    """Bulk-approve cleared claims, guarded by an explicit reviewer confirmation."""
+    if not isinstance(claim_ids, list) or not all(isinstance(c, str) for c in claim_ids):
+        return {"ok": False, "error": 'claim_ids must be a list of strings, e.g. ["CLM-0001", "CLM-0002"].'}
+    if reviewer_confirmed is not True:
+        return {"ok": False, "error": "reviewer_confirmed is not true. Show the cleared list to the reviewer, "
+                                      "ask for confirmation, and call again only after they agree. Nothing changed."}
+    cleared = triage_claims(store, batch_id)["auto_cleared"]
+    if not cleared:
+        return {"ok": False, "error": f"No claims in batch {batch_id!r} are currently cleared. Nothing changed."}
+    missing, extra = sorted(set(cleared) - set(claim_ids)), sorted(set(claim_ids) - set(cleared))
+    if missing or extra or len(claim_ids) != len(set(claim_ids)):
+        return {"ok": False, "error": "claim_ids must exactly match the claims triage_claims currently clears. "
+                                      "Re-run triage_claims and confirm the new list with the reviewer. Nothing changed.",
+                "not_in_your_list": missing, "not_cleared": extra}
+    for cid in cleared:
+        store.update_claim_status(cid, "approved", f"Bulk-approved after reviewer confirmation (batch {batch_id})")
+    return {"ok": True, "approved": cleared, "count": len(cleared)}
