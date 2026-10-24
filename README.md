@@ -1,5 +1,7 @@
 # reimburse-buddy
 
+> The hackathon submission is the WorkBuddy skill + MCP server. `web/` is a separate simulation UI (no LLM) and is not part of the judged demo.
+
 An office agent that audits business-travel expense claims, built for the
 **Tencent Cloud Hackathon 2026 (Office Agent track)** on **Tencent WorkBuddy**.
 
@@ -137,10 +139,6 @@ skills/claim-auditor/SKILL.md
 tests/
 ```
 
-## License
-
-MIT
-
 ## Human in the loop
 
 The agent proposes, the reviewer confirms. `triage_claims` is read-only; cleared claims change status only
@@ -151,11 +149,17 @@ Gathering evidence and asking an employee for a missing document happen automati
 In a real deployment the evidence source is a dedicated reimburse@ mailbox that employees forward
 documents to, plus connectors for calendar, HR and ERP. The mock MCP tools here stand in for those.
 
-## Web simulation (portfolio version B, not part of the hackathon demo)
+## License
 
-`web/` holds a small two-sided FastAPI app that imports the same core (`data_store`, `rules`, `decision`,
-`triage`). It needs no LLM: the reviewer investigates and the rule engine computes every amount. A LangGraph
-agent will later plug in at `investigate()` and call the tools over MCP.
+MIT
+
+## Beyond the hackathon
+
+### Web simulation UI (`web/`)
+
+Not part of the judged demo. `web/` holds a small two-sided FastAPI app that imports the same core (`data_store`, `rules`, `decision`,
+`triage`). It needs no LLM: the reviewer investigates and the rule engine computes every amount. A LangGraph agent (the planned
+version B) will later plug in at `investigate()` and call the tools over MCP.
 
 - Employee portal (`/employee`): submit a claim, forward evidence to the reimburse@ mailbox (files are kept
   locally in `web/uploads/` as synthetic attachments), see claim status and messages from finance.
@@ -168,3 +172,6 @@ uv sync
 uv run uvicorn --app-dir web reimburse_web.app:app --port 8000
 # open http://127.0.0.1:8000/admin
 ```
+
+Known limits before any public deploy: shared in-memory state, no auth, local uploads (basic 5 MB / type
+limits only), and evidence metadata typed by the employee rather than extracted from the file.
