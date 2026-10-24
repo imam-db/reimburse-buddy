@@ -56,7 +56,7 @@ class Run:
         self.claim_id = claim_id
         self.events: list[dict] = []
         self.lock = threading.Lock()
-        self.answered: set[str] = set()  # tool_call_ids already answered (duplicates ignored)
+        self.answered: set[str] = set()  # approval_ids already answered (duplicates ignored)
         LOG_DIR.mkdir(parents=True, exist_ok=True)
         self.log_path = LOG_DIR / f"{self.id}.stderr.log"
         self._log = open(self.log_path, "w", encoding="utf-8")
@@ -87,30 +87,40 @@ class Run:
         with self.lock:
             return list(self.events)
 
+    CLOSES = ("answer_applied", "auto_declined", "final", "error")
+
+    @staticmethod
+    def _pending(events: list[dict]) -> dict | None:
+        """The latest interrupt not yet closed by answer_applied/auto_declined/final/error.
+        answer_rejected and step events don't hide it."""
+        for i in range(len(events) - 1, -1, -1):
+            ev = events[i]
+            if ev["type"] in Run.CLOSES:
+                return None
+            if ev["type"] == "interrupt":
+                return ev
+        return None
+
     @property
     def pending(self) -> dict | None:
-        ev = self.snapshot()
-        if ev and ev[-1]["type"] == "interrupt":
-            return ev[-1]
-        return None
+        return self._pending(self.snapshot())
 
     @property
     def done(self) -> bool:
         return any(e["type"] in ("final", "error") for e in self.snapshot())
 
-    def resume(self, tool_call_id: str, approved: bool, reason: str = "") -> bool:
-        """Answer the pending interrupt for tool_call_id. False if that call is not the one waiting
-        (stale page, second tab, double click) or was already answered; nothing is sent then."""
+    def resume(self, approval_id: str, approved: bool, reason: str = "") -> bool:
+        """Answer the pending interrupt identified by its worker-generated approval_id. False when
+        that interrupt is not the one waiting (stale page, second tab, double click) or was already
+        answered; nothing is sent then. The trace shows the decision only after the worker's
+        answer_applied acknowledgement."""
         with self.lock:  # check and write under one lock
-            ev = self.events
-            req = ev[-1] if ev and ev[-1]["type"] == "interrupt" else None
-            if req is None or req.get("tool_call_id") != tool_call_id or tool_call_id in self.answered:
+            req = self._pending(self.events)
+            if req is None or not approval_id or req.get("approval_id") != approval_id or approval_id in self.answered:
                 return False
-            self.answered.add(tool_call_id)
-            self.events.append({"type": "decision", "tool": req["tool"], "tool_call_id": tool_call_id,
-                                "approved": approved, "reason": reason})
+            self.answered.add(approval_id)
             try:
-                self.proc.stdin.write(json.dumps({"tool_call_id": tool_call_id, "approved": approved,
+                self.proc.stdin.write(json.dumps({"approval_id": approval_id, "approved": approved,
                                                   "reason": reason}) + "\n")
                 self.proc.stdin.flush()
             except (BrokenPipeError, ValueError):

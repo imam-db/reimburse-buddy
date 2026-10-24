@@ -66,13 +66,23 @@ def needs_confirmation(name: str, args: dict[str, Any], owner: str | None = None
     return True
 
 
-class State(TypedDict):
+MAX_GATED_CALLS = 10  # per run; past this, gated calls are declined without asking (approval fatigue)
+
+
+def call_signature(call: dict) -> str:
+    return json.dumps([call["name"], call.get("args", {})], sort_keys=True, default=str)
+
+
+class State(TypedDict, total=False):
     messages: Annotated[list[BaseMessage], add_messages]
     # tool_call_id -> reason, for calls the reviewer declined
     declined: dict[str, str]
+    gated_count: int  # interrupts shown so far in this run
+    declined_sigs: list[str]  # (name, args) of calls the reviewer declined
 
 
-def build_graph(model, tools, system_prompt: str | None = None, checkpointer=None, compact: bool = True):
+def build_graph(model, tools, system_prompt: str | None = None, checkpointer=None, compact: bool = True,
+                max_gated: int = MAX_GATED_CALLS):
     """model: any LangChain chat model with bind_tools. tools: LangChain tools (e.g. from MCP).
     compact: shrink tool outputs before the model sees them (see compact.py); False = raw."""
     system = SystemMessage(system_prompt if system_prompt is not None else load_system_prompt())
@@ -95,17 +105,31 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
     async def gate(state: State):
         last = state["messages"][-1]
         declined: dict[str, str] = {}
+        count = state.get("gated_count", 0)
+        sigs = list(state.get("declined_sigs", []))
         for call in last.tool_calls:
+            if call["name"] not in by_name:
+                continue  # unknown or hidden tool: run_tools returns an error, no prompt for the reviewer
             owner = await claim_owner(str(call["args"].get("claim_id") or "")) if call["name"] == "send_message" else None
-            if needs_confirmation(call["name"], call["args"], owner):
-                answer = interrupt({"tool": call["name"], "args": call["args"], "tool_call_id": call["id"]})
-                # The answer must name the call it approves; anything else counts as a decline.
-                ok = (isinstance(answer, dict) and answer.get("approved") is True
-                      and answer.get("tool_call_id") == call["id"])
-                if not ok:
-                    reason = (answer.get("reason") if isinstance(answer, dict) else "") or "no reason given"
-                    declined[call["id"]] = reason
-        return {"declined": declined}
+            if not needs_confirmation(call["name"], call["args"], owner):
+                continue
+            sig = call_signature(call)
+            if sig in sigs:
+                declined[call["id"]] = "identical call was already declined by the reviewer; not asking again"
+                continue
+            if count >= max_gated:
+                declined[call["id"]] = f"limit of {max_gated} approval requests per run reached"
+                continue
+            count += 1
+            answer = interrupt({"tool": call["name"], "args": call["args"], "tool_call_id": call["id"]})
+            # The answer must name the call it approves; anything else counts as a decline.
+            ok = (isinstance(answer, dict) and answer.get("approved") is True
+                  and answer.get("tool_call_id") == call["id"])
+            if not ok:
+                reason = (answer.get("reason") if isinstance(answer, dict) else "") or "no reason given"
+                declined[call["id"]] = reason
+                sigs.append(sig)
+        return {"declined": declined, "gated_count": count, "declined_sigs": sigs}
 
     async def run_tools(state: State):
         last = state["messages"][-1]

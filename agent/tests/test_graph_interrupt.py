@@ -142,10 +142,8 @@ async def test_reset_demo_not_offered_and_not_runnable():
         await g.ainvoke({"messages": [("user", "go")], "declined": {}}, conf)
         st = await g.aget_state(conf)
         assert "reset_demo" not in seen["names"]
-        assert st.interrupts  # gated first...
-        await g.ainvoke(Command(resume={"approved": True, "tool_call_id": "c1"}), conf)
-        st = await g.aget_state(conf)
-        assert "unknown tool reset_demo" in st.values["messages"][-2].content  # ...and never runs
+        assert not st.interrupts  # no pointless prompt for a tool that can't run
+        assert "unknown tool reset_demo" in st.values["messages"][-2].content
 
 
 async def test_injected_send_to_non_owner_is_gated():
@@ -176,3 +174,47 @@ def test_config_requires_env_and_hides_key():
         load_config({})
     cfg = load_config({"REIMBURSE_AGENT_MODEL": "m", "REIMBURSE_AGENT_API_KEY": "sk-secret"})
     assert "sk-secret" not in repr(cfg)
+
+
+async def _drive(script, answer, **kw):
+    """Run a graph, answering each interrupt with answer(value); return (interrupt values, final state)."""
+    async with mcp_tools() as (_s, tools):
+        g = build_graph(Scripted(messages=iter(script)), tools, checkpointer=InMemorySaver(), **kw)
+        conf = {"configurable": {"thread_id": str(uuid.uuid4())}}
+        seen = []
+        payload = {"messages": [("user", "go")], "declined": {}}
+        while True:
+            await g.ainvoke(payload, conf)
+            st = await g.aget_state(conf)
+            if not st.interrupts:
+                return seen, st
+            seen.append(st.interrupts[0].value)
+            payload = Command(resume=answer(seen[-1]))
+
+
+def _no(v):
+    return {"approved": False, "tool_call_id": v["tool_call_id"]}
+
+
+async def test_unknown_and_hidden_tools_error_without_prompt():
+    seen, st = await _drive([call("reset_demo", {}, 1), call("made_up_tool", {"x": 1}, 2), AIMessage(content="x")], _no)
+    assert seen == []
+    msgs = [m.content for m in st.values["messages"] if m.type == "tool"]
+    assert "unknown tool reset_demo" in msgs[0] and "unknown tool made_up_tool" in msgs[1]
+
+
+async def test_identical_repeat_of_declined_call_is_auto_declined():
+    w = {"claim_id": HERO, "status": "approved"}
+    seen, st = await _drive([call("update_claim_status", w, 1), call("update_claim_status", w, 2),
+                             call("update_claim_status", {**w, "status": "on_hold"}, 3), AIMessage(content="x")], _no)
+    assert [v["tool_call_id"] for v in seen] == ["c1", "c3"]  # c2 never reached the reviewer
+    tool_msgs = [m.content for m in st.values["messages"] if m.type == "tool"]
+    assert "already declined" in tool_msgs[1]
+
+
+async def test_gated_call_cap_per_run():
+    script = [call("update_claim_status", {"claim_id": HERO, "status": s}, i)
+              for i, s in enumerate(["on_hold", "approved", "rejected"], 1)] + [AIMessage(content="x")]
+    seen, st = await _drive(script, _no, max_gated=2)
+    assert len(seen) == 2
+    assert "limit of 2 approval requests" in [m.content for m in st.values["messages"] if m.type == "tool"][-1]
