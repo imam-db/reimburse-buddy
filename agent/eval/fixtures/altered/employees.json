@@ -1,0 +1,58 @@
+[
+  {
+    "id": "EMP-401",
+    "name": "Rina Wulandari",
+    "department": "Sales",
+    "grade": "staff",
+    "manager_id": "EMP-700",
+    "email": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "EMP-402",
+    "name": "Bagus Pratama",
+    "department": "Business Development",
+    "grade": "staff",
+    "manager_id": "EMP-700",
+    "email": "bagus.pratama@nusantara-niaga.example"
+  },
+  {
+    "id": "EMP-403",
+    "name": "Sari Kusumawati",
+    "department": "Operations",
+    "grade": "senior",
+    "manager_id": "EMP-701",
+    "email": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "EMP-404",
+    "name": "Yoga Firmansyah",
+    "department": "Sales",
+    "grade": "staff",
+    "manager_id": "EMP-700",
+    "email": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "EMP-405",
+    "name": "Putri Maharani",
+    "department": "Operations",
+    "grade": "staff",
+    "manager_id": "EMP-701",
+    "email": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "EMP-700",
+    "name": "Dewi Anggraini",
+    "department": "Sales",
+    "grade": "manager",
+    "manager_id": null,
+    "email": "dewi.anggraini@nusantara-niaga.example"
+  },
+  {
+    "id": "EMP-701",
+    "name": "Hendra Saputra",
+    "department": "Operations",
+    "grade": "manager",
+    "manager_id": null,
+    "email": "hendra.saputra@nusantara-niaga.example"
+  }
+]
