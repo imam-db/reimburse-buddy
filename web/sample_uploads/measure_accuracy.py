@@ -9,11 +9,11 @@ from reimburse_web.extract import get_extractor  # noqa: E402
 HERE = Path(__file__).parent
 
 
-def measure():
-    truth = json.loads((HERE / "truth.json").read_text())
+def measure(folder: Path = HERE):
+    truth = json.loads((folder / "truth.json").read_text())
     ex, hit, total, misses = get_extractor(), 0, 0, []
     for name, want in truth.items():
-        got = ex.extract(HERE / name).fields
+        got = ex.extract(folder / name).fields
         for k, v in want.items():
             total += 1
             g = got[k]
@@ -25,6 +25,7 @@ def measure():
 
 
 if __name__ == "__main__":
-    h, t, m = measure()
-    print(f"{h}/{t} fields correct ({h / t:.0%})")
-    print("\n".join(m))
+    for label, folder in (("tuning set", HERE), ("held-out set", HERE / "heldout")):
+        h, t, m = measure(folder)
+        print(f"{label}: {h}/{t} fields correct ({h / t:.0%})")
+        print("".join(f"  {x}\n" for x in m), end="")

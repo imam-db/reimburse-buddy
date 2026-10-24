@@ -55,7 +55,7 @@ def test_employee_submit_and_forward(client):
     assert web.triage_claims(web.store, web.BATCH)["claims"] == 10  # web claims use their own batch
     r = client.post("/employee/forward", data={"emp": "EMP-004", "subject": "Taxi receipt", "claim_id": "CLM-2026-W001",
                                                "att_type": "receipt", "item_id": "IT-1"},
-                    files={"file": ("taxi.txt", b"synthetic receipt", "text/plain")})
+                    files={"file": ("taxi.png", b"synthetic receipt", "image/png")})
     assert "MSG-W001" in r.text
     assert web.run_check("CLM-2026-W001").items[0].gaps == ["receipt_missing"]
     web.review("CLM-2026-W001")["evidence"].append("MSG-W001")

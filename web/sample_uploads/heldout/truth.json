@@ -1,0 +1,20 @@
+{
+  "meal_total_3_item_tunai.png": {
+    "doc_type": "meal_receipt",
+    "date": "2026-10-03",
+    "amount": 187450,
+    "merchant": "WARUNG KOPI SENJA"
+  },
+  "taxi_2digit_year_cash.jpg": {
+    "doc_type": "taxi_receipt",
+    "date": "2026-10-03",
+    "amount": 185000,
+    "merchant": "TAKSI LINTAS KOTA"
+  },
+  "meal_total_diskon_last.png": {
+    "doc_type": "meal_receipt",
+    "date": "2026-10-02",
+    "amount": 138600,
+    "merchant": "RESTORAN BUMI LAUT"
+  }
+}
