@@ -146,6 +146,12 @@ def check_claim(
             res.findings.append(F(rule, NEEDS, key, code, **params))
             res.gaps.append(code)
 
+        # Category must be on the policy's allowed list
+        if cat not in policy.get("allowed_categories", [cat]):
+            res.findings.append(F("category_allowed", ItemStatus.REJECTED, "category_not_allowed",
+                                  category=cat, allowed=", ".join(policy["allowed_categories"])))
+            rejected = True
+
         # Dates within trip
         if not (trip["start_date"] <= item["date"] <= trip["end_date"]):
             res.findings.append(F("dates_within_trip", ItemStatus.REJECTED, "date_outside",
@@ -184,6 +190,7 @@ def check_claim(
         if cat in policy["boarding_pass_required_for"] and not item.get("boarding_pass"):
             match = next((eid for eid, a in _attachments(evidence) if a.get("type") == "boarding_pass"
                           and a.get("date") == item["date"]
+                          and _norm(item.get("flight_no"))  # an empty flight number never matches
                           and _norm(a.get("flight")) == _norm(item.get("flight_no"))
                           and _norm(a.get("passenger")) == _norm(emp_name)), None)
             if match:

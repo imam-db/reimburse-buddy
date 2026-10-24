@@ -14,6 +14,8 @@ T = {
                      "Tanggal biaya {date} di luar periode perjalanan {start} s.d. {end}."),
     "receipt_found": ("Receipt found in {src}.", "Bukti pembayaran ditemukan di {src}."),
     "receipt_missing": ("Receipt missing.", "Bukti pembayaran tidak ada."),
+    "category_not_allowed": ("Category '{category}' is not allowed by the policy (allowed: {allowed}).",
+                             "Kategori '{category}' tidak diizinkan kebijakan (yang diizinkan: {allowed})."),
     "dup_same_receipt": ("Same receipt number {rno} as {other}.", "Nomor bukti {rno} sama dengan {other}."),
     "dup_suspected": ("Same category, date and amount as {other} and no distinct receipt number.",
                       "Kategori, tanggal dan nominal sama dengan {other}, tanpa nomor bukti yang berbeda."),

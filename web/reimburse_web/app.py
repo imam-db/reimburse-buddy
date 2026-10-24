@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 import re
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from html import escape
 from pathlib import Path
 
@@ -120,8 +120,8 @@ def employee_page(emp: str = "EMP-001", msg: str = ""):
 <form method="post" action="/employee/claims"><input type="hidden" name="emp" value="{e(emp)}">
 Purpose <input name="purpose" size="40" required> Destination <input name="destination" value="Surabaya" required>
 <br>Trip <input type="date" name="start_date" required> &rarr; <input type="date" name="end_date" required>
-<p class="note">One item per line: category, date (YYYY-MM-DD), description, amount in Rupiah, receipt yes/no.
-Categories: flight, hotel, per_diem, taxi, meal.</p>
+<p class="note">One item per line: category, date (YYYY-MM-DD), description, whole Rupiah amount (1350000 or 1.350.000),
+receipt yes/no, and for flights a flight number. Categories: {e(', '.join(store.policy['allowed_categories']))}.</p>
 <textarea name="items" rows="4" cols="100" required>taxi, 2026-10-20, Airport taxi, 180000, yes</textarea><br>
 <button type="submit">Submit claim</button></form></div>
 <div class="box"><h2>Forward evidence to {MAILBOX}</h2>
@@ -137,7 +137,21 @@ File <input type="file" name="file"> <button type="submit">Forward</button></for
     return page("Employee portal", body)
 
 
-ITEM_RE = re.compile(r"^\s*(\w+)\s*,\s*(\d{4}-\d{2}-\d{2})\s*,\s*([^,]+?)\s*,\s*([\d.]+)\s*,\s*(yes|no)\s*$", re.I)
+ITEM_RE = re.compile(r"^\s*(\w+)\s*,\s*(\d{4}-\d{2}-\d{2})\s*,\s*([^,]+?)\s*,\s*([^,]+?)\s*,\s*(yes|no)"
+                     r"(?:\s*,\s*([A-Za-z0-9 ]*?))?\s*$", re.I)
+AMOUNT_RE = re.compile(r"^(\d+|\d{1,3}(?:\.\d{3})+)$")  # 1350000 or 1.350.000; no decimals, no commas
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+ALLOWED_UPLOAD_EXT = {".pdf", ".png", ".jpg", ".jpeg", ".txt"}
+# Final statuses the reviewer may pick for each engine decision. Overrides go through logged item decisions.
+STATUS_FOR_DECISION = {"approve": ["approved", "on_hold"], "partial_approve": ["partially_approved", "on_hold"],
+                       "reject": ["rejected", "on_hold"], "needs_info": ["on_hold"]}
+
+
+def parse_amount(text: str) -> Decimal:
+    text = text.strip()
+    if not AMOUNT_RE.match(text):
+        raise ValueError(f"amount {text!r} must be whole Rupiah, e.g. 1350000 or 1.350.000 (no decimals)")
+    return Decimal(text.replace(".", ""))
 
 
 @app.post("/employee/claims")
@@ -149,13 +163,18 @@ def submit_claim(emp: str = Form(...), purpose: str = Form(...), destination: st
         m = ITEM_RE.match(line)
         if not m:
             raise HTTPException(400, f"Item line {n} must be: category, YYYY-MM-DD, description, amount, yes/no")
-        cat, d, desc, amt, rec = m.groups()
+        cat, d, desc, amt, rec, flight_no = m.groups()
         try:
-            amount = Decimal(amt.replace(".", ""))
-        except InvalidOperation:
-            raise HTTPException(400, f"Item line {n}: invalid amount")
+            amount = parse_amount(amt)
+        except ValueError as ex:
+            raise HTTPException(400, f"Item line {n}: {ex}")
+        flight_no = (flight_no or "").strip()
+        if cat.lower() == "flight" and not flight_no:
+            raise HTTPException(400, f"Item line {n}: flight items need a flight number as the 6th field, e.g. QZ 7520")
         it = {"id": f"IT-{n}", "category": cat.lower(), "date": d, "description": desc,
               "amount": str(amount), "receipt": rec.lower() == "yes"}
+        if flight_no:
+            it["flight_no"] = flight_no
         if it["category"] == "hotel":
             it["nights"] = max(1, (date.fromisoformat(end_date) - date.fromisoformat(start_date)).days)
         parsed.append(it)
@@ -178,8 +197,14 @@ async def forward_evidence(emp: str = Form(...), subject: str = Form(...), claim
     att = None
     if file is not None and file.filename:
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        ext = Path(file.filename).suffix.lower()
+        if ext not in ALLOWED_UPLOAD_EXT:
+            raise HTTPException(400, f"File type {ext or '(none)'} not allowed; use {', '.join(sorted(ALLOWED_UPLOAD_EXT))}")
+        data = await file.read(MAX_UPLOAD_BYTES + 1)
+        if len(data) > MAX_UPLOAD_BYTES:
+            raise HTTPException(413, "File is larger than 5 MB")
         safe = re.sub(r"[^A-Za-z0-9._-]", "_", Path(file.filename).name)[:80]
-        (UPLOAD_DIR / f"{mid}_{safe}").write_bytes(await file.read())
+        (UPLOAD_DIR / f"{mid}_{safe}").write_bytes(data)
         att = {"name": safe, "type": att_type, "stored_as": f"{mid}_{safe}"}
         if att_type == "receipt":
             att.update(claim_id=claim_id, item_id=item_id)
@@ -278,7 +303,7 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
     sent = [m for m in store.outbox if m.get("claim_id") == cid]
     sent_rows = "".join(f"<li>{e(m['id'])} to {e(m['to'])}: {e(m['subject'])}</li>" for m in sent)
     note = draft_decision(store, c, language="both")
-    suggested = {"approve": "approved", "partial_approve": "partially_approved", "reject": "rejected"}.get(c.decision.value, "on_hold")
+    allowed_status = STATUS_FOR_DECISION[c.decision.value]
     body = f"""<p><a href="/admin">&larr; Triage</a></p>{f'<p class="tag ok">{e(msg)}</p>' if msg else ''}
 <p>{e(emp)} {e(store.get_employee(emp)['name'])} &middot; {e(claim['purpose'])} &middot; {e(trip['destination'])}
 {e(trip['start_date'])} &rarr; {e(trip['end_date'])} &middot; status {status_tag(claim['status'])}</p>
@@ -296,9 +321,10 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
 <input name=subject size=40 value="Claim {e(cid)}: missing document"> <input name=body size=60 placeholder="Mohon kirim struk taksi tanggal 3 Okt (IT-5)." required>
 <button>Send</button></form>{f'<ul>{sent_rows}</ul>' if sent_rows else ''}</div>
 <div class="box"><h2>Decision note preview (EN + ID)</h2><pre>{e(note)}</pre>
-<form method=post action="/admin/claims/{e(cid)}/status">Final status <select name=status>{options([(s, s) for s in DataStore.CLAIM_STATUSES if s != 'submitted'], suggested)}</select>
+<form method=post action="/admin/claims/{e(cid)}/status">Final status <select name=status>{options([(s, s) for s in allowed_status])}</select>
 <label><input type=checkbox name=reviewer_confirmed value=true> I confirm this decision</label> <button>Apply status</button></form>
-<p class="note">Status changes only after you confirm. Notes are sent only by you.</p></div>"""
+<p class="note">Status options follow the engine decision ({e(c.decision.value)}). To override, record an item decision above.
+Status changes only after you confirm. Notes are sent only by you.</p></div>"""
     return page(f"Claim {cid}", body)
 
 
@@ -336,6 +362,9 @@ def set_status(cid: str, status: str = Form(...), reviewer_confirmed: str = Form
     if reviewer_confirmed != "true":
         return RedirectResponse(f"/admin/claims/{cid}?msg=Not+changed:+tick+the+confirmation+first", status_code=303)
     c = run_check(cid)
+    if status not in STATUS_FOR_DECISION[c.decision.value]:
+        return RedirectResponse(f"/admin/claims/{cid}?msg=Not+changed:+{status}+is+not+allowed+while+the+engine+says+"
+                                f"{c.decision.value}", status_code=303)
     store.update_claim_status(cid, status, f"Reviewer decision; rule engine approvable {rupiah(c.total_approvable)}")
     return RedirectResponse(f"/admin/claims/{cid}?msg=Status+set+to+{status}", status_code=303)
 

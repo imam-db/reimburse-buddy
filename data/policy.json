@@ -2,6 +2,14 @@
   "company": "PT Nusantara Niaga Digital (fictional)",
   "version": "2026.2",
   "currency": "IDR",
+  "allowed_categories": [
+    "flight",
+    "hotel",
+    "late_checkout",
+    "meal",
+    "per_diem",
+    "taxi"
+  ],
   "city_tiers": {
     "Jakarta": 1,
     "Surabaya": 1,
