@@ -150,3 +150,21 @@ Gathering evidence and asking an employee for a missing document happen automati
 
 In a real deployment the evidence source is a dedicated reimburse@ mailbox that employees forward
 documents to, plus connectors for calendar, HR and ERP. The mock MCP tools here stand in for those.
+
+## Web simulation (portfolio version B, not part of the hackathon demo)
+
+`web/` holds a small two-sided FastAPI app that imports the same core (`data_store`, `rules`, `decision`,
+`triage`). It needs no LLM: the reviewer investigates and the rule engine computes every amount. A LangGraph
+agent will later plug in at `investigate()` and call the tools over MCP.
+
+- Employee portal (`/employee`): submit a claim, forward evidence to the reimburse@ mailbox (files are kept
+  locally in `web/uploads/` as synthetic attachments), see claim status and messages from finance.
+- Finance admin (`/admin`): read-only triage, bulk approval only with an explicit confirmation, and a claim page
+  with findings, gap codes, ignored evidence, mailbox search, calendar, memos, item decisions, a bilingual note
+  preview, and a status change that needs the reviewer's tick. "Reset demo data" restores the seed data.
+
+```bash
+uv sync
+uv run uvicorn --app-dir web reimburse_web.app:app --port 8000
+# open http://127.0.0.1:8000/admin
+```

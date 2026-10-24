@@ -11,7 +11,8 @@ dependencies = ["mcp>=1.2,<2"]
 reimburse-buddy-mcp = "reimburse_buddy.server:main"
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", {include-group = "web"}, "httpx>=0.27"]
+web = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9"]
 
 [build-system]
 requires = ["hatchling"]
@@ -22,4 +23,5 @@ packages = ["src/reimburse_buddy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["web"]
 asyncio_mode = "auto"
