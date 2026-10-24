@@ -139,6 +139,10 @@ def check_claim(
         # Duplicates: same receipt number is a hard duplicate; same category/date/amount
         # without distinct receipt numbers is only suspected.
         rno = receipt_no[iid]
+        if rno and not item.get("receipt_no"):
+            src = receipts[(claim_id, iid)][0]
+            if src not in res.evidence_used:
+                res.evidence_used.append(src)
         key = (cat, item["date"], amount)
         if rno and rno in seen_receipts:
             res.findings.append(Finding("duplicate", ItemStatus.REJECTED,

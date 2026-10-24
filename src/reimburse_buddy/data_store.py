@@ -43,6 +43,24 @@ class DataStore:
     def memos(self) -> list[dict]:
         return self._load("memos")
 
+    @cached_property
+    def replies(self) -> list[dict]:
+        path = self.data_dir / "replies.json"
+        return self._load("replies") if path.exists() else []
+
+    # --- in-memory state for mock write tools (reset per server process) ----
+    @cached_property
+    def outbox(self) -> list[dict]:
+        return []
+
+    @cached_property
+    def approval_requests(self) -> list[dict]:
+        return []
+
+    @cached_property
+    def status_log(self) -> list[dict]:
+        return []
+
     # --- lookups -------------------------------------------------------
     def get_claim(self, claim_id: str) -> dict:
         for c in self.claims:
@@ -89,3 +107,47 @@ class DataStore:
                 continue
             out.append(m)
         return out
+
+    # --- mock write tools ---------------------------------------------
+    CLAIM_STATUSES = ("submitted", "on_hold", "approved", "partially_approved", "rejected")
+
+    def send_message(self, to: str, body: str, subject: str = "", claim_id: str = "") -> dict:
+        """Put a message in the outbox. Matching scripted replies (data/replies.json) are
+        delivered at once into the employee's mailbox, so search_inbox can find them."""
+        self.get_employee(to)
+        msg = {"id": f"OUT-{len(self.outbox) + 1:03d}", "to": to, "subject": subject,
+               "body": body, "claim_id": claim_id}
+        self.outbox.append(msg)
+        text = f"{subject} {body} {claim_id}".lower()
+        delivered = []
+        for r in self.replies:
+            if r.get("_delivered") or r["to"] != to:
+                continue
+            if r.get("claim_id") and r["claim_id"] != claim_id:
+                continue
+            if any(k.lower() in text for k in r["keywords_any"]):
+                r["_delivered"] = True
+                self.inbox.append(dict(r["reply"], in_reply_to=msg["id"]))
+                delivered.append(r["reply"]["id"])
+        return {"status": "sent", "message_id": msg["id"], "replies_received": len(delivered)}
+
+    def request_approval(self, manager_id: str, claim_id: str, item_id: str, reason: str = "") -> dict:
+        claim = self.get_claim(claim_id)
+        if item_id not in {i["id"] for i in claim["items"]}:
+            raise KeyError(f"Unknown item {item_id} in {claim_id}")
+        expected = self.get_employee(claim["employee_id"])["manager_id"]
+        if manager_id != expected:
+            raise ValueError(f"{manager_id} is not the manager of {claim['employee_id']} (expected {expected})")
+        req = {"id": f"APR-{len(self.approval_requests) + 1:03d}", "manager_id": manager_id,
+               "claim_id": claim_id, "item_id": item_id, "reason": reason, "status": "pending"}
+        self.approval_requests.append(req)
+        return req
+
+    def update_claim_status(self, claim_id: str, status: str, note: str = "") -> dict:
+        if status not in self.CLAIM_STATUSES:
+            raise ValueError(f"status must be one of {self.CLAIM_STATUSES}")
+        claim = self.get_claim(claim_id)
+        entry = {"claim_id": claim_id, "from": claim["status"], "to": status, "note": note}
+        claim["status"] = status
+        self.status_log.append(entry)
+        return entry

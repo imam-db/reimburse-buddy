@@ -42,6 +42,14 @@ flowchart LR
 | `find_approval_memo(employee_id, city, date)` | Hotel-cap exception memos |
 | `check_claim(claim_id, evidence_ids, human_decisions)` | Deterministic rule check |
 | `draft_decision(...)` | Reviewer-ready decision note |
+| `send_message(to, body, subject, claim_id)` | (Mock write) Email an employee; goes to the outbox |
+| `request_approval(manager_id, claim_id, item_id, reason)` | (Mock write) Ask the claimant's manager; returns a pending request |
+| `update_claim_status(claim_id, status, note)` | (Mock write) `on_hold`, `approved`, `partially_approved`, `rejected` |
+| `get_outbox()` | Everything the agent sent or changed this session |
+
+Write tools are mocks: state lives in memory for one server process. `send_message` is a
+closed loop: scripted replies in `data/replies.json` land in the employee's mailbox right away,
+so the agent can `search_inbox` and pass the reply's ID to `check_claim`.
 
 Rules in `check_claim`:
 
@@ -93,7 +101,7 @@ uv run reimburse-buddy-mcp   # starts the server on stdio (WorkBuddy normally do
 1. Copy `.workbuddy/mcp.json` into your project's `.workbuddy/` folder (or merge it into
    `~/.workbuddy/mcp.json`) and replace `/ABSOLUTE/PATH/TO/reimburse-buddy` with your clone path.
    On Windows use a path like `C:\\Users\\you\\reimburse-buddy`.
-2. Restart WorkBuddy and confirm the `reimburse-buddy` server shows its 8 tools.
+2. Restart WorkBuddy and confirm the `reimburse-buddy` server shows its 12 tools.
 3. Add the skill in `skills/claim-auditor/SKILL.md` to WorkBuddy's skills.
 4. Try: *"Review claim CLM-2026-0101."*
 

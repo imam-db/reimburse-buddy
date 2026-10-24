@@ -71,9 +71,15 @@ def late_checkout() -> None:
     say("get_calendar", json.dumps([f"{e['id']} {e['start']}-{e['end']} {e['title']}" for e in events]))
     ev = [e["id"] for e in events]
     c = check_claim(store, cid, ev); show_check(c)
-    say("ask human", "IT-6 looks like a duplicate taxi (no receipt number). Approve or reject?")
-    say("human", "reject")
-    c = check_claim(store, cid, ev, {"IT-6": "reject"}); show_check(c)
+    say("plan revised", "IT-6 duplicate_suspected -> insert step: ask Sari for the second taxi receipt")
+    sent = store.send_message(emp, "Hi Sari, two taxis on 20 Oct for Rp120.000 each (IT-6). Was it a separate "
+                              "ride? Please send the second receipt.", "Claim CLM-2026-0104: taxi IT-6", cid)
+    say("send_message", json.dumps(sent))
+    hits = store.search_inbox(emp, "taxi receipt")
+    say("search_inbox", json.dumps([h["id"] + ": " + h["subject"] for h in hits]))
+    ev += [h["id"] for h in hits]
+    c = check_claim(store, cid, ev); show_check(c)
+    say("update_claim_status", json.dumps(store.update_claim_status(cid, "partially_approved", "IT-7 outside trip")))
     print("\n" + draft_decision(store, c) + "\n")
 
 
