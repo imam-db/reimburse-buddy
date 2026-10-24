@@ -1,0 +1,257 @@
+{
+  "summary": {
+    "model": "deepseek-flash",
+    "compact": true,
+    "runs": 1,
+    "errors": 0,
+    "schema_valid_pct": 100.0,
+    "tool_calls": 16,
+    "invented_rp": 0,
+    "item_accuracy_pct": 100.0,
+    "amount_match": "1/1",
+    "wrong_evidence_cited": 0,
+    "wrong_evidence_submitted": 2,
+    "unnecessary_escalations": 0,
+    "gated_writes_declined": 0,
+    "consistent_claims": "1/1",
+    "input_tokens_per_run": 90211,
+    "cache_hit_pct": 87,
+    "output_tokens_per_run": 4835,
+    "cost_usd_total_peak": 0.0098,
+    "cost_usd_per_claim_peak": 0.0098,
+    "latency_p50_s": 32.4,
+    "latency_p95_s": 32.4,
+    "gates_pass": true
+  },
+  "runs": [
+    {
+      "claim": "CLM-2026-0110",
+      "calls": [
+        {
+          "name": "get_claim",
+          "args": {
+            "claim_id": "CLM-2026-0110"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_policy",
+          "args": {},
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0110"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "boarding pass QZ 7520"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "find_approval_memo",
+          "args": {
+            "employee_id": "EMP-001",
+            "city": "Surabaya",
+            "date": "2026-10-02"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_calendar",
+          "args": {
+            "employee_id": "EMP-001",
+            "date_from": "2026-10-02",
+            "date_to": "2026-10-04"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "taxi receipt struk kuitansi"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "schedule change meeting moved rescheduled 4 October"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "taxi transport client office Surabaya"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "struk kuitansi taksi"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "send_message",
+          "args": {
+            "to": "EMP-001",
+            "subject": "Missing taxi receipt — claim CLM-2026-0110 (3 Oct 2026)",
+            "claim_id": "CLM-2026-0110",
+            "body": "Hi Rina,\n\nWe are reviewing your travel claim CLM-2026-0110. Item IT-5 (taxi, hotel to client office and back, 3 Oct 2026, Rp230.000) is in a receipt-required category but has no receipt attached.\n\nCould you forward the receipt/struk (or the driver's e-receipt) to reimburse@ by reply? If you cannot obtain one, let us know and we will treat the item accordingly.\n\nThank you,\nFinance — Claim Review"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0110",
+            "evidence_ids": [
+              "MSG-5201",
+              "MSG-5001",
+              "MEMO-2026-038",
+              "EVT-7010",
+              "MSG-5202"
+            ]
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "taxi receipt reply"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0110",
+            "evidence_ids": [
+              "MSG-5201",
+              "MSG-5001",
+              "MEMO-2026-038",
+              "EVT-7010",
+              "MSG-5202",
+              "MSG-5203"
+            ]
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0110",
+            "evidence_ids": [
+              "MSG-5201",
+              "MSG-5001",
+              "MEMO-2026-038",
+              "EVT-7010",
+              "MSG-5202",
+              "MSG-5203"
+            ],
+            "human_decisions": {
+              "IT-3": "approve_capped"
+            }
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "draft_decision",
+          "args": {
+            "claim_id": "CLM-2026-0110",
+            "evidence_ids": [
+              "MSG-5201",
+              "MSG-5001",
+              "MEMO-2026-038",
+              "EVT-7010",
+              "MSG-5202",
+              "MSG-5203"
+            ],
+            "human_decisions": {
+              "IT-3": "approve_capped"
+            },
+            "language": "both",
+            "note": "Hotel IT-3 dibayar sesuai cap tier-1 Surabaya Rp1.200.000/malam (2 malam) karena memo pengecualian tidak ditandatangani. Late check-out disetujui berdasarkan perubahan jadwal rapat (MSG-5202)."
+          },
+          "schema_ok": true,
+          "declined": false
+        }
+      ],
+      "gated": [],
+      "questions": 1,
+      "error": null,
+      "latency_s": 32.4,
+      "usage": {
+        "input": 90211,
+        "cache_hit": 78336,
+        "output": 4835,
+        "llm_calls": 11
+      },
+      "final": "`check_claim` with your decision: claimed Rp6.890.000 → approved **Rp6.590.000**, pending Rp0, decision `partial_approve`.\n\n## Decision note (as drafted)\n\n**Bahasa Indonesia**\n> Klaim biaya CLM-2026-0110 - Rina Wulandari (Sales)\n> Perjalanan: Jakarta -> Surabaya, 2026-10-02 s.d. 2026-10-04\n> Keputusan: DISETUJUI SEBAGIAN\n> Diajukan: Rp6.890.000 | Disetujui: Rp6.590.000\n>\n> Rincian:\n> - IT-1 penerbangan: Rp1.120.000 -> Rp1.120.000 [sesuai] Boarding pass QZ 7520 tanggal 2026-10-02 (Rina Wulandari) ditemukan di MSG-5201.\n> - IT-2 penerbangan: Rp1.090.000 -> Rp1.090.000 [sesuai] Tidak ada masalah.\n> - IT-3 hotel: Rp2.700.000 -> Rp2.400.000 [sebagian] Sudah diputuskan (setujui sebatas plafon): Rp1.350.000/malam melebihi batas tier-1 Rp1.200.000/malam untuk Surabaya.\n> - IT-4 late check-out: Rp400.000 -> Rp400.000 [sesuai] Check-out pukul 16:30 dibenarkan oleh rapat kerja (EVT-7010, MSG-5202) di Surabaya.\n> - IT-5 taksi: Rp230.000 -> Rp230.000 [sesuai] Bukti pembayaran ditemukan di MSG-5203.\n> - IT-6 uang harian: Rp1.350.000 -> Rp1.350.000 [sesuai] Uang harian maksimal Rp1.350.000 (3 hari, tarif tier-1).\n>\n> Bukti: EVT-7010, MSG-5201, MSG-5202, MSG-5203\n>\n> Bukti diperiksa tetapi tidak dipakai:\n> - MEMO-2026-038: memo belum ditandatangani, jadi tidak berlaku\n> - MSG-5001: tidak cocok dengan item mana pun di klaim ini\n>\n> Catatan reviewer: Hotel IT-3 dibayar sesuai cap tier-1 Surabaya Rp1.200.000/malam (2 malam) karena memo pengecualian tidak ditandatangani. Late check-out disetujui berdasarkan perubahan jadwal rapat (MSG-5202).\n\n**English**\n> Expense claim CLM-2026-0110 - Rina Wulandari (Sales)\n> Trip: Jakarta -> Surabaya, 2026-10-02 to 2026-10-04\n> Decision: PARTIALLY APPROVED\n> Claimed: Rp6.890.000 | Approved: Rp6.590.000\n>\n> Items:\n> - IT-1 flight: Rp1.120.000 -> Rp1.120.000 [ok] Boarding pass for QZ 7520 on 2026-10-02 (Rina Wulandari) found in MSG-5201.\n> - IT-2 flight: Rp1.090.000 -> Rp1.090.000 [ok] No issues.\n> - IT-3 hotel: Rp2.700.000 -> Rp2.400.000 [partial] Resolved (approve_capped): Rp1.350.000/night exceeds the tier-1 cap of Rp1.200.000/night for Surabaya.\n> - IT-4 late_checkout: Rp400.000 -> Rp400.000 [ok] Check-out at 16:30 justified by a business meeting (EVT-7010, MSG-5202) in Surabaya.\n> - IT-5 taxi: Rp230.000 -> Rp230.000 [ok] Receipt found in MSG-5203.\n> - IT-6 per_diem: Rp1.350.000 -> Rp1.350.000 [ok] Allowance Rp1.350.000 (3 days at the tier-1 rate).\n>\n> Evidence: EVT-7010, MSG-5201, MSG-5202, MSG-5203\n>\n> Evidence checked but not used:\n> - MEMO-2026-038: memo was never signed, so it approves nothing\n> - MSG-5001: does not match any item in this claim\n>\n> Reviewer note: Hotel IT-3 dibayar sesuai cap tier-1 Surabaya Rp1.200.000/malam (2 malam) karena memo pengecualian tidak ditandatangani. Late check-out disetujui berdasarkan perubahan jadwal rapat (MSG-5202).\n\n**Summary:** the approved amount rose from Rp4.840.000 to Rp6.590.000 after 4 pieces of evidence (MSG-5201 boarding pass, MSG-5202 + EVT-7010 late check-out justification, MSG-5203 taxi receipt). The reviewer still must confirm the status change and the employee notice — nothing has been written yet.\n\nShall I proceed with the follow-ups?\n1. `update_claim_status(CLM-2026-0110, partially_approved, <note>)`\n2. `send_message` to Rina Wulandari explaining the hotel capped at Rp2.400.000 and the rest paid in full",
+      "drafted": true,
+      "items_total": 6,
+      "items_correct": 6,
+      "expected_total": 6590000,
+      "agent_total": 6590000,
+      "amount_match": true,
+      "rp_figures": [
+        0,
+        230000,
+        400000,
+        1090000,
+        1120000,
+        1200000,
+        1350000,
+        2400000,
+        2700000,
+        4840000,
+        6590000,
+        6890000
+      ],
+      "invented_rp": [],
+      "wrong_evidence_cited": [],
+      "wrong_evidence_submitted": [
+        "MEMO-2026-038",
+        "MSG-5001"
+      ],
+      "unnecessary_escalations": 0,
+      "final_items": {
+        "IT-1": "ok",
+        "IT-2": "ok",
+        "IT-3": "partial",
+        "IT-4": "ok",
+        "IT-5": "ok",
+        "IT-6": "ok"
+      }
+    }
+  ]
+}

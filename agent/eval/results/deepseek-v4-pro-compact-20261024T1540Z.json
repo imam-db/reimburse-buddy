@@ -1,0 +1,2162 @@
+{
+  "summary": {
+    "model": "deepseek-v4-pro",
+    "compact": true,
+    "runs": 15,
+    "errors": 0,
+    "schema_valid_pct": 100.0,
+    "tool_calls": 151,
+    "invented_rp": 0,
+    "item_accuracy_pct": 100.0,
+    "amount_match": "15/15",
+    "wrong_evidence_cited": 0,
+    "wrong_evidence_submitted": 8,
+    "unnecessary_escalations": 0,
+    "gated_writes_declined": 0,
+    "consistent_claims": "5/5",
+    "input_tokens_per_run": 55268,
+    "cache_hit_pct": 89,
+    "output_tokens_per_run": 4021,
+    "cost_usd_total_peak": 0.3903,
+    "cost_usd_per_claim_peak": 0.026,
+    "latency_p50_s": 39.7,
+    "latency_p95_s": 71.2,
+    "gates_pass": true
+  },
+  "runs": [
+    {
+      "claim": "CLM-2026-0110",
+      "calls": [
+        {
+          "name": "reset_demo",
+          "args": {},
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_claim",
+          "args": {
+            "claim_id": "CLM-2026-0110"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0110"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "boarding pass"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "taxi receipt struk kuitansi"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "find_approval_memo",
+          "args": {
+            "employee_id": "EMP-001",
+            "city": "Surabaya",
+            "date": "2026-10-02"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_calendar",
+          "args": {
+            "employee_id": "EMP-001",
+            "date_from": "2026-10-02",
+            "date_to": "2026-10-04"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "taxi"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "schedule change meeting late checkout"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "transport bluebird grab"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0110",
+            "evidence_ids": [
+              "MSG-5001",
+              "MSG-5201",
+              "MSG-5202",
+              "EVT-7010",
+              "MEMO-2026-038"
+            ]
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "send_message",
+          "args": {
+            "to": "EMP-001",
+            "subject": "Receipt needed: taxi hotel–client (claim CLM-2026-0110)",
+            "body": "Halo Rina, for your claim CLM-2026-0110 we are missing the receipt for the taxi (hotel to client office and back, 2026-10-03, Rp230.000). Please forward the receipt/struk to reimburse@ so we can finish the review. Terima kasih.",
+            "claim_id": "CLM-2026-0110"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "taxi receipt struk kuitansi"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0110",
+            "evidence_ids": [
+              "MSG-5001",
+              "MSG-5201",
+              "MSG-5202",
+              "MSG-5203",
+              "EVT-7010",
+              "MEMO-2026-038"
+            ]
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "draft_decision",
+          "args": {
+            "claim_id": "CLM-2026-0110",
+            "evidence_ids": [
+              "MSG-5001",
+              "MSG-5201",
+              "MSG-5202",
+              "MSG-5203",
+              "EVT-7010",
+              "MEMO-2026-038"
+            ],
+            "human_decisions": {
+              "IT-3": "approve_capped"
+            },
+            "language": "both"
+          },
+          "schema_ok": true,
+          "declined": false
+        }
+      ],
+      "gated": [],
+      "questions": 1,
+      "error": null,
+      "latency_s": 74.6,
+      "usage": {
+        "input": 89186,
+        "cache_hit": 75648,
+        "output": 7586,
+        "llm_calls": 12
+      },
+      "final": "Here is the decision note (presented as-is from `draft_decision`):\n\n---\n\n**Bahasa Indonesia**\n\nKlaim biaya CLM-2026-0110 - Rina Wulandari (Sales)\nPerjalanan: Jakarta -> Surabaya, 2026-10-02 s.d. 2026-10-04\nKeputusan: **DISETUJUI SEBAGIAN**\nDiajukan: Rp6.890.000 | Disetujui: Rp6.590.000\n\nRincian:\n- IT-1 penerbangan: Rp1.120.000 -> Rp1.120.000 [sesuai] Boarding pass QZ 7520 tanggal 2026-10-02 (Rina Wulandari) ditemukan di MSG-5201.\n- IT-2 penerbangan: Rp1.090.000 -> Rp1.090.000 [sesuai] Tidak ada masalah.\n- IT-3 hotel: Rp2.700.000 -> Rp2.400.000 [sebagian] Sudah diputuskan (setujui sebatas plafon): Rp1.350.000/malam melebihi batas tier-1 Rp1.200.000/malam untuk Surabaya.\n- IT-4 late check-out: Rp400.000 -> Rp400.000 [sesuai] Check-out pukul 16:30 dibenarkan oleh rapat kerja (EVT-7010, MSG-5202) di Surabaya.\n- IT-5 taksi: Rp230.000 -> Rp230.000 [sesuai] Bukti pembayaran ditemukan di MSG-5203.\n- IT-6 uang harian: Rp1.350.000 -> Rp1.350.000 [sesuai] Uang harian maksimal Rp1.350.000 (3 hari, tarif tier-1).\n\nBukti: EVT-7010, MSG-5201, MSG-5202, MSG-5203\n\nBukti diperiksa tetapi tidak dipakai:\n- MEMO-2026-038: memo belum ditandatangani, jadi tidak berlaku\n- MSG-5001: tidak cocok dengan item mana pun di klaim ini\n\n---\n\n**English**\n\nExpense claim CLM-2026-0110 - Rina Wulandari (Sales)\nTrip: Jakarta -> Surabaya, 2026-10-02 to 2026-10-04\nDecision: **PARTIALLY APPROVED**\nClaimed: Rp6.890.000 | Approved: Rp6.590.000\n\nItems:\n- IT-1 flight: Rp1.120.000 -> Rp1.120.000 [ok] Boarding pass for QZ 7520 on 2026-10-02 (Rina Wulandari) found in MSG-5201.\n- IT-2 flight: Rp1.090.000 -> Rp1.090.000 [ok] No issues.\n- IT-3 hotel: Rp2.700.000 -> Rp2.400.000 [partial] Resolved (approve_capped): Rp1.350.000/night exceeds the tier-1 cap of Rp1.200.000/night for Surabaya.\n- IT-4 late_checkout: Rp400.000 -> Rp400.000 [ok] Check-out at 16:30 justified by a business meeting (EVT-7010, MSG-5202) in Surabaya.\n- IT-5 taxi: Rp230.000 -> Rp230.000 [ok] Receipt found in MSG-5203.\n- IT-6 per_diem: Rp1.350.000 -> Rp1.350.000 [ok] Allowance Rp1.350.000 (3 days at the tier-1 rate).\n\nEvidence: EVT-7010, MSG-5201, MSG-5202, MSG-5203\n\nEvidence checked but not used:\n- MEMO-2026-038: memo was never signed, so it approves nothing\n- MSG-5001: does not match any item in this claim\n\n---\n\n**Summary:**\n- What the investigation changed: the approved amount rose from **Rp4.840.000** (initial check with no evidence) to **Rp6.590.000** after 3 pieces of evidence closed gaps (boarding pass `MSG-5201`, schedule-change email `MSG-5202`, taxi receipt `MSG-5203`). The only reduction is the Rp300.000 hotel over-cap, which you capped.\n- What you still need to do: confirm a follow-up action (below).\n\n**Proposed follow-up actions** (I'll run only after your go-ahead):\n1. `update_claim_status(CLM-2026-0110, \"partially_approved\", ...)`\n2. `send_message(EMP-001, ...)` — a short note explaining what was paid and why (hotel capped at Rp2.400.000 due to tier-1 cap).\n3. `get_outbox()` — show what was sent and changed.\n\nWhich actions would you like me to take?",
+      "drafted": true,
+      "items_total": 6,
+      "items_correct": 6,
+      "expected_total": 6590000,
+      "agent_total": 6590000,
+      "amount_match": true,
+      "rp_figures": [
+        230000,
+        300000,
+        400000,
+        1090000,
+        1120000,
+        1200000,
+        1350000,
+        2400000,
+        2700000,
+        4840000,
+        6590000,
+        6890000
+      ],
+      "invented_rp": [],
+      "wrong_evidence_cited": [],
+      "wrong_evidence_submitted": [
+        "MEMO-2026-038",
+        "MSG-5001"
+      ],
+      "unnecessary_escalations": 0,
+      "final_items": {
+        "IT-1": "ok",
+        "IT-2": "ok",
+        "IT-3": "partial",
+        "IT-4": "ok",
+        "IT-5": "ok",
+        "IT-6": "ok"
+      }
+    },
+    {
+      "claim": "CLM-2026-0104",
+      "calls": [
+        {
+          "name": "reset_demo",
+          "args": {},
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_claim",
+          "args": {
+            "claim_id": "CLM-2026-0104"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0104"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_calendar",
+          "args": {
+            "employee_id": "EMP-003",
+            "date_from": "2026-10-19",
+            "date_to": "2026-10-21"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-003",
+            "query": "taxi receipt"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-003",
+            "query": "taxi"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-003",
+            "query": "struk kuitansi TX"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0104",
+            "evidence_ids": [
+              "EVT-7003",
+              "EVT-7004",
+              "EVT-7005"
+            ]
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-003"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "send_message",
+          "args": {
+            "to": "sari.kusumawati@nusantara-niaga.example",
+            "claim_id": "CLM-2026-0104",
+            "subject": "Re: CLM-2026-0104 — second taxi receipt (2026-10-20)",
+            "body": "Hi Sari, your claim lists two taxi rides to the vendor site on 2026-10-20 (Rp120.000 each) but only one receipt number (TX-90021). Please confirm whether these were two separate rides and forward the second receipt to reimburse@ if you have it. Thank you."
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "send_message",
+          "args": {
+            "to": "EMP-003",
+            "claim_id": "CLM-2026-0104",
+            "subject": "Re: CLM-2026-0104 — second taxi receipt (2026-10-20)",
+            "body": "Hi Sari, your claim lists two taxi rides to the vendor site on 2026-10-20 (Rp120.000 each) but only one receipt number (TX-90021). Please confirm whether these were two separate rides and forward the second receipt to reimburse@ if you have it. Thank you."
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-003",
+            "query": "taxi"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0104",
+            "evidence_ids": [
+              "EVT-7003",
+              "EVT-7004",
+              "EVT-7005",
+              "MSG-5004",
+              "MSG-5101"
+            ]
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "draft_decision",
+          "args": {
+            "claim_id": "CLM-2026-0104",
+            "evidence_ids": [
+              "EVT-7003",
+              "EVT-7004",
+              "EVT-7005",
+              "MSG-5004",
+              "MSG-5101"
+            ],
+            "language": "both"
+          },
+          "schema_ok": true,
+          "declined": false
+        }
+      ],
+      "gated": [],
+      "questions": 0,
+      "error": null,
+      "latency_s": 49.2,
+      "usage": {
+        "input": 84183,
+        "cache_hit": 76160,
+        "output": 4532,
+        "llm_calls": 12
+      },
+      "final": "## Decision note — CLM-2026-0104\n\n**Klaim biaya CLM-2026-0104 - Sari Kusumawati (Operations)**  \nPerjalanan: Jakarta -> Denpasar, 2026-10-19 s.d. 2026-10-21  \nKeputusan: **DISETUJUI SEBAGIAN**  \nDiajukan: Rp7.520.000 | Disetujui: Rp7.310.000\n\nRincian:\n- IT-1 penerbangan: Rp1.580.000 → Rp1.580.000 [sesuai]\n- IT-8 penerbangan: Rp1.490.000 → Rp1.490.000 [sesuai]\n- IT-2 hotel: Rp2.200.000 → Rp2.200.000 [sesuai] Rp1.100.000/malam dalam batas Rp1.200.000\n- IT-3 late check-out: Rp450.000 → Rp450.000 [sesuai] Check-out 17:00 dibenarkan rapat kerja (EVT-7004) di Denpasar\n- IT-4 uang harian: Rp1.350.000 → Rp1.350.000 [sesuai]\n- IT-5 taksi: Rp120.000 → Rp120.000 [sesuai]\n- IT-6 taksi: Rp120.000 → Rp120.000 [sesuai]\n- IT-7 makan: Rp210.000 → Rp0 [ditolak] Tanggal 2026-10-23 di luar periode perjalanan 2026-10-19 s.d. 2026-10-21\n\nBukti: EVT-7004, MSG-5101\n\nBukti diperiksa tapi tidak dipakai:\n- EVT-7003: tidak cocok dengan item mana pun\n- EVT-7005: tidak cocok dengan item mana pun\n- MSG-5004: tidak cocok dengan item mana pun\n\n---\n\n**Expense claim CLM-2026-0104 - Sari Kusumawati (Operations)**  \nTrip: Jakarta -> Denpasar, 2026-10-19 to 2026-10-21  \nDecision: **PARTIALLY APPROVED**  \nClaimed: Rp7.520.000 | Approved: Rp7.310.000\n\nItems:\n- IT-1 flight: Rp1.580.000 → Rp1.580.000 [ok]\n- IT-8 flight: Rp1.490.000 → Rp1.490.000 [ok]\n- IT-2 hotel: Rp2.200.000 → Rp2.200.000 [ok]\n- IT-3 late_checkout: Rp450.000 → Rp450.000 [ok]\n- IT-4 per_diem: Rp1.350.000 → Rp1.350.000 [ok]\n- IT-5 taxi: Rp120.000 → Rp120.000 [ok]\n- IT-6 taxi: Rp120.000 → Rp120.000 [ok]\n- IT-7 meal: Rp210.000 → Rp0 [rejected]\n\nEvidence: EVT-7004, MSG-5101\n\nEvidence checked but not used:\n- EVT-7003: does not match any item in this claim\n- EVT-7005: does not match any item in this claim\n- MSG-5004: does not match any item in this claim\n\n---\n\n**What my investigation changed:** the approvable amount rose from **Rp6.740.000** (initial check) to **Rp7.310.000** after two pieces of evidence — the calendar meeting (EVT-7004) justified the Rp450.000 late checkout, and the employee's reply (MSG-5101) confirmed the second Rp120.000 taxi was a separate ride.\n\n**What you still need to do:** no judgment calls are open. IT-7 (meal, Rp210.000) is rejected under `dates_within_trip` and that is final. If you agree with the decision, I can proceed with:\n\n1. `update_claim_status` → `partially_approved`\n2. `send_message` to Sari explaining what was paid and why IT-7 was rejected\n3. `get_outbox` to show the record\n\nSay \"yes\" and I'll run them.",
+      "drafted": true,
+      "items_total": 8,
+      "items_correct": 8,
+      "expected_total": 7310000,
+      "agent_total": 7310000,
+      "amount_match": true,
+      "rp_figures": [
+        0,
+        120000,
+        210000,
+        450000,
+        1100000,
+        1200000,
+        1350000,
+        1490000,
+        1580000,
+        2200000,
+        6740000,
+        7310000,
+        7520000
+      ],
+      "invented_rp": [],
+      "wrong_evidence_cited": [],
+      "wrong_evidence_submitted": [
+        "EVT-7005"
+      ],
+      "unnecessary_escalations": 0,
+      "final_items": {
+        "IT-1": "ok",
+        "IT-8": "ok",
+        "IT-2": "ok",
+        "IT-3": "ok",
+        "IT-4": "ok",
+        "IT-5": "ok",
+        "IT-6": "ok",
+        "IT-7": "rejected"
+      }
+    },
+    {
+      "claim": "CLM-2026-0101",
+      "calls": [
+        {
+          "name": "reset_demo",
+          "args": {},
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_claim",
+          "args": {
+            "claim_id": "CLM-2026-0101"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_policy",
+          "args": {},
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0101"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "boarding pass GA 312"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "GA 312"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0101",
+            "evidence_ids": [
+              "MSG-5001"
+            ]
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "draft_decision",
+          "args": {
+            "claim_id": "CLM-2026-0101",
+            "evidence_ids": [
+              "MSG-5001"
+            ],
+            "language": "both"
+          },
+          "schema_ok": true,
+          "declined": false
+        }
+      ],
+      "gated": [],
+      "questions": 0,
+      "error": null,
+      "latency_s": 25.1,
+      "usage": {
+        "input": 37527,
+        "cache_hit": 30592,
+        "output": 2514,
+        "llm_calls": 6
+      },
+      "final": "Here is the decision note (as-is from `draft_decision`):\n\n---\n\n**Klaim biaya CLM-2026-0101 - Rina Wulandari (Sales)**\nPerjalanan: Jakarta -> Surabaya, 2026-10-12 s.d. 2026-10-14\nKeputusan: **DISETUJUI**\nDiajukan: Rp6.265.000 | Disetujui: Rp6.265.000\n\nRincian:\n- IT-1 penerbangan: Rp1.450.000 -> Rp1.450.000 [sesuai] Boarding pass GA 312 tanggal 2026-10-12 (Rina Wulandari) ditemukan di MSG-5001.\n- IT-2 hotel: Rp1.900.000 -> Rp1.900.000 [sesuai] Rp950.000/malam masih dalam batas Rp1.200.000.\n- IT-3 uang harian: Rp1.350.000 -> Rp1.350.000 [sesuai] Uang harian maksimal Rp1.350.000 (3 hari, tarif tier-1).\n- IT-4 taksi: Rp185.000 -> Rp185.000 [sesuai] Tidak ada masalah.\n- IT-5 penerbangan: Rp1.380.000 -> Rp1.380.000 [sesuai] Tidak ada masalah.\n\nBukti: MSG-5001\n\n---\n\n**Expense claim CLM-2026-0101 - Rina Wulandari (Sales)**\nTrip: Jakarta -> Surabaya, 2026-10-12 to 2026-10-14\nDecision: **APPROVED**\nClaimed: Rp6.265.000 | Approved: Rp6.265.000\n\nItems:\n- IT-1 flight: Rp1.450.000 -> Rp1.450.000 [ok] Boarding pass for GA 312 on 2026-10-12 (Rina Wulandari) found in MSG-5001.\n- IT-2 hotel: Rp1.900.000 -> Rp1.900.000 [ok] Rp950.000/night is within the cap of Rp1.200.000.\n- IT-3 per_diem: Rp1.350.000 -> Rp1.350.000 [ok] Allowance Rp1.350.000 (3 days at the tier-1 rate).\n- IT-4 taxi: Rp185.000 -> Rp185.000 [ok] No issues.\n- IT-5 flight: Rp1.380.000 -> Rp1.380.000 [ok] No issues.\n\nEvidence: MSG-5001\n\n---\n\n**Summary:** My investigation changed the approvable amount from **Rp4.815.000** to **Rp6.265.000** after adding 1 piece of evidence (the GA 312 boarding pass, MSG-5001). Nothing remains for you to judge — every item is now within policy.\n\n**Follow-up actions** (I'll run these only after you confirm):\n1. `update_claim_status(CLM-2026-0101, approved)` — mark the claim as approved.\n2. `send_message` to Rina — a short note explaining the approval.\n3. `get_outbox()` — show what was sent/changed.\n\nShall I mark this claim as **approved** (and send the employee a note)?",
+      "drafted": true,
+      "items_total": 5,
+      "items_correct": 5,
+      "expected_total": 6265000,
+      "agent_total": 6265000,
+      "amount_match": true,
+      "rp_figures": [
+        185000,
+        950000,
+        1200000,
+        1350000,
+        1380000,
+        1450000,
+        1900000,
+        4815000,
+        6265000
+      ],
+      "invented_rp": [],
+      "wrong_evidence_cited": [],
+      "wrong_evidence_submitted": [],
+      "unnecessary_escalations": 0,
+      "final_items": {
+        "IT-1": "ok",
+        "IT-2": "ok",
+        "IT-3": "ok",
+        "IT-4": "ok",
+        "IT-5": "ok"
+      }
+    },
+    {
+      "claim": "CLM-2026-0103",
+      "calls": [
+        {
+          "name": "reset_demo",
+          "args": {},
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_claim",
+          "args": {
+            "claim_id": "CLM-2026-0103"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0103"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "find_approval_memo",
+          "args": {
+            "employee_id": "EMP-002",
+            "city": "Medan",
+            "date": "2026-10-20"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-002",
+            "query": "Hotel Deli Permai approval memo"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-002",
+            "query": "hotel Medan"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "find_approval_memo",
+          "args": {
+            "employee_id": "EMP-002"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0103",
+            "evidence_ids": [
+              "MSG-5003",
+              "MEMO-2026-041"
+            ]
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "draft_decision",
+          "args": {
+            "claim_id": "CLM-2026-0103",
+            "evidence_ids": [
+              "MSG-5003",
+              "MEMO-2026-041"
+            ],
+            "human_decisions": {
+              "IT-1": "approve_capped"
+            },
+            "language": "both"
+          },
+          "schema_ok": true,
+          "declined": false
+        }
+      ],
+      "gated": [],
+      "questions": 1,
+      "error": null,
+      "latency_s": 40.7,
+      "usage": {
+        "input": 48096,
+        "cache_hit": 40064,
+        "output": 3891,
+        "llm_calls": 9
+      },
+      "final": "Here is the decision note for CLM-2026-0103.\n\n---\n\n## Decision note\n\n**Klaim biaya CLM-2026-0103 - Bagus Pratama (Business Development)**\nPerjalanan: Makassar → Medan, 2026-10-20 s.d. 2026-10-21\nKeputusan: **DISETUJUI SEBAGIAN**\nDiajukan: Rp1.750.000 | Disetujui: Rp1.500.000\n\nRincian:\n- **IT-1 hotel:** Rp1.050.000 → Rp800.000 [sebagian] — Sudah diputuskan (setujui sebatas plafon): Rp1.050.000/malam melebihi batas tier-2 Rp800.000/malam untuk Medan.\n- **IT-2 uang harian:** Rp700.000 → Rp700.000 [sesuai] — Uang harian maksimal Rp700.000 (2 hari, tarif tier-2).\n\nBukti diperiksa tetapi tidak dipakai:\n- MSG-5003: tidak cocok dengan item mana pun di klaim ini\n- MEMO-2026-041: tidak cocok dengan item mana pun di klaim ini\n\n---\n\n**Expense claim CLM-2026-0103 - Bagus Pratama (Business Development)**\nTrip: Makassar → Medan, 2026-10-20 to 2026-10-21\nDecision: **PARTIALLY APPROVED**\nClaimed: Rp1.750.000 | Approved: Rp1.500.000\n\nItems:\n- **IT-1 hotel:** Rp1.050.000 → Rp800.000 [partial] — Resolved (approve_capped): Rp1.050.000/night exceeds the tier-2 cap of Rp800.000/night for Medan.\n- **IT-2 per_diem:** Rp700.000 → Rp700.000 [ok] — Allowance Rp700.000 (2 days at the tier-2 rate).\n\nEvidence checked but not used:\n- MSG-5003: does not match any item in this claim\n- MEMO-2026-041: does not match any item in this claim\n\n---\n\n## Summary\n\n- **What changed:** No evidence altered the figures — the one gap (`hotel_over_cap` on IT-1) could not be closed because the only found memo (MEMO-2026-041) is a signed hotel-cap exception for *Jakarta* (2026-10-14→16), not Medan. Your `approve_capped` decision reduced the approved amount from the claimed Rp1.750.000 to **Rp1.500.000** (the Rp250.000 over-cap amount on the hotel is withheld).\n- **What you still need to do:** confirm the follow-up actions below if you want them executed.\n\n## Proposed follow-up actions (I'll run these only after you agree)\n\n1. `update_claim_status(\"CLM-2026-0103\", \"partially_approved\", ...)` — set the claim's final status.\n2. `send_message` to Bagus Pratama explaining the partial approval (hotel capped at Rp800.000).\n3. `get_outbox()` — show what was sent and changed.\n\nShall I proceed with these?",
+      "drafted": true,
+      "items_total": 2,
+      "items_correct": 2,
+      "expected_total": 1500000,
+      "agent_total": 1500000,
+      "amount_match": true,
+      "rp_figures": [
+        250000,
+        700000,
+        800000,
+        1050000,
+        1500000,
+        1750000
+      ],
+      "invented_rp": [],
+      "wrong_evidence_cited": [],
+      "wrong_evidence_submitted": [],
+      "unnecessary_escalations": 0,
+      "final_items": {
+        "IT-1": "partial",
+        "IT-2": "ok"
+      }
+    },
+    {
+      "claim": "CLM-2026-0111",
+      "calls": [
+        {
+          "name": "reset_demo",
+          "args": {},
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_claim",
+          "args": {
+            "claim_id": "CLM-2026-0111"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0111"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "draft_decision",
+          "args": {
+            "claim_id": "CLM-2026-0111",
+            "language": "both"
+          },
+          "schema_ok": true,
+          "declined": false
+        }
+      ],
+      "gated": [],
+      "questions": 0,
+      "error": null,
+      "latency_s": 17.5,
+      "usage": {
+        "input": 22522,
+        "cache_hit": 17280,
+        "output": 1365,
+        "llm_calls": 5
+      },
+      "final": "Here is the decision note for **CLM-2026-0111**:\n\n---\n\n**Klaim biaya CLM-2026-0111 - Yoga Firmansyah (Sales)**\nPerjalanan: Jakarta -> Yogyakarta, 2026-10-19 s.d. 2026-10-20\nKeputusan: **DISETUJUI**\nDiajukan: Rp3.530.000 | Disetujui: Rp3.530.000\n\nRincian:\n- IT-1 penerbangan: Rp1.100.000 -> Rp1.100.000 [sesuai] Tidak ada masalah.\n- IT-2 penerbangan: Rp1.080.000 -> Rp1.080.000 [sesuai] Tidak ada masalah.\n- IT-3 hotel: Rp650.000 -> Rp650.000 [sesuai] Rp650.000/malam masih dalam batas Rp800.000.\n- IT-4 uang harian: Rp700.000 -> Rp700.000 [sesuai] Uang harian maksimal Rp700.000 (2 hari, tarif tier-2).\n\n---\n\n**Expense claim CLM-2026-0111 - Yoga Firmansyah (Sales)**\nTrip: Jakarta -> Yogyakarta, 2026-10-19 to 2026-10-20\nDecision: **APPROVED**\nClaimed: Rp3.530.000 | Approved: Rp3.530.000\n\nItems:\n- IT-1 flight: Rp1.100.000 -> Rp1.100.000 [ok] No issues.\n- IT-2 flight: Rp1.080.000 -> Rp1.080.000 [ok] No issues.\n- IT-3 hotel: Rp650.000 -> Rp650.000 [ok] Rp650.000/night is within the cap of Rp800.000.\n- IT-4 per_diem: Rp700.000 -> Rp700.000 [ok] Allowance Rp700.000 (2 days at the tier-2 rate).\n\n---\n\n**Summary:** This claim required no evidence search — the initial `check_claim` returned every item as `ok` with no gap codes, so the investigation changed nothing (approved amount remained Rp3.530.000 with 0 pieces of evidence needed). Nothing is left for you to resolve; the only remaining step is your approval to set the final status.\n\n**Proposed follow-up actions** (I'll run these only after you confirm):\n- `update_claim_status(CLM-2026-0111, approved, ...)` to finalize.\n- Optionally `send_message` to the employee confirming what was paid.\n\nWould you like me to mark this claim as **approved**?",
+      "drafted": true,
+      "items_total": 4,
+      "items_correct": 4,
+      "expected_total": 3530000,
+      "agent_total": 3530000,
+      "amount_match": true,
+      "rp_figures": [
+        650000,
+        700000,
+        800000,
+        1080000,
+        1100000,
+        3530000
+      ],
+      "invented_rp": [],
+      "wrong_evidence_cited": [],
+      "wrong_evidence_submitted": [],
+      "unnecessary_escalations": 0,
+      "final_items": {
+        "IT-1": "ok",
+        "IT-2": "ok",
+        "IT-3": "ok",
+        "IT-4": "ok"
+      }
+    },
+    {
+      "claim": "CLM-2026-0110",
+      "calls": [
+        {
+          "name": "reset_demo",
+          "args": {},
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_claim",
+          "args": {
+            "claim_id": "CLM-2026-0110"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0110"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "boarding pass QZ 7520"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "find_approval_memo",
+          "args": {
+            "employee_id": "EMP-001",
+            "city": "Surabaya",
+            "date": "2026-10-02"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_calendar",
+          "args": {
+            "employee_id": "EMP-001",
+            "date_from": "2026-10-04",
+            "date_to": "2026-10-04"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "taxi receipt struk kuitansi"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "taxi"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "schedule change meeting Surabaya"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "Bluebird transport perjalanan"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "send_message",
+          "args": {
+            "to": "rina.wulandari@nusantara-niaga.example",
+            "subject": "Taxi receipt needed for CLM-2026-0110",
+            "body": "Halo Rina, untuk klaim CLM-2026-0110 kami membutuhkan struk/kuitansi taksi (Rp230.000, 3 Okt 2026, hotel ke kantor klien dan kembali). Mohon diteruskan ke reimburse@ ya. Terima kasih.",
+            "claim_id": "CLM-2026-0110"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "send_message",
+          "args": {
+            "claim_id": "CLM-2026-0110",
+            "to": "EMP-001",
+            "subject": "Taxi receipt needed for CLM-2026-0110",
+            "body": "Halo Rina, untuk klaim CLM-2026-0110 kami membutuhkan struk/kuitansi taksi (Rp230.000, 3 Okt 2026, hotel ke kantor klien dan kembali). Mohon diteruskan ke reimburse@ ya. Terima kasih."
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "taxi receipt"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0110",
+            "evidence_ids": [
+              "MSG-5201",
+              "MSG-5202",
+              "EVT-7010"
+            ]
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0110",
+            "evidence_ids": [
+              "MSG-5201",
+              "MSG-5202",
+              "EVT-7010",
+              "MSG-5203"
+            ]
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "draft_decision",
+          "args": {
+            "claim_id": "CLM-2026-0110",
+            "evidence_ids": [
+              "MSG-5201",
+              "MSG-5202",
+              "EVT-7010",
+              "MSG-5203"
+            ],
+            "human_decisions": {
+              "IT-3": "approve_capped"
+            },
+            "language": "both"
+          },
+          "schema_ok": true,
+          "declined": false
+        }
+      ],
+      "gated": [],
+      "questions": 1,
+      "error": null,
+      "latency_s": 57.6,
+      "usage": {
+        "input": 85682,
+        "cache_hit": 75776,
+        "output": 5948,
+        "llm_calls": 11
+      },
+      "final": "The decision note is drafted. Here it is as-is:\n\n---\n\n**Klaim biaya CLM-2026-0110 - Rina Wulandari (Sales)**\nPerjalanan: Jakarta -> Surabaya, 2026-10-02 s.d. 2026-10-04\n**Keputusan: DISETUJUI SEBAGIAN**\nDiajukan: Rp6.890.000 | Disetujui: Rp6.590.000\n\nRincian:\n- IT-1 penerbangan: Rp1.120.000 -> Rp1.120.000 [sesuai] Boarding pass QZ 7520 tanggal 2026-10-02 (Rina Wulandari) ditemukan di MSG-5201.\n- IT-2 penerbangan: Rp1.090.000 -> Rp1.090.000 [sesuai] Tidak ada masalah.\n- IT-3 hotel: Rp2.700.000 -> Rp2.400.000 [sebagian] Sudah diputuskan (setujui sebatas plafon): Rp1.350.000/malam melebihi batas tier-1 Rp1.200.000/malam untuk Surabaya.\n- IT-4 late check-out: Rp400.000 -> Rp400.000 [sesuai] Check-out pukul 16:30 dibenarkan oleh rapat kerja (EVT-7010, MSG-5202) di Surabaya.\n- IT-5 taksi: Rp230.000 -> Rp230.000 [sesuai] Bukti pembayaran ditemukan di MSG-5203.\n- IT-6 uang harian: Rp1.350.000 -> Rp1.350.000 [sesuai] Uang harian maksimal Rp1.350.000 (3 hari, tarif tier-1).\n\nBukti: EVT-7010, MSG-5201, MSG-5202, MSG-5203\n\n---\n\n**Expense claim CLM-2026-0110 - Rina Wulandari (Sales)**\nTrip: Jakarta -> Surabaya, 2026-10-02 to 2026-10-04\n**Decision: PARTIALLY APPROVED**\nClaimed: Rp6.890.000 | Approved: Rp6.590.000\n\nItems:\n- IT-1 flight: Rp1.120.000 -> Rp1.120.000 [ok] Boarding pass for QZ 7520 on 2026-10-02 (Rina Wulandari) found in MSG-5201.\n- IT-2 flight: Rp1.090.000 -> Rp1.090.000 [ok] No issues.\n- IT-3 hotel: Rp2.700.000 -> Rp2.400.000 [partial] Resolved (approve_capped): Rp1.350.000/night exceeds the tier-1 cap of Rp1.200.000/night for Surabaya.\n- IT-4 late_checkout: Rp400.000 -> Rp400.000 [ok] Check-out at 16:30 justified by a business meeting (EVT-7010, MSG-5202) in Surabaya.\n- IT-5 taxi: Rp230.000 -> Rp230.000 [ok] Receipt found in MSG-5203.\n- IT-6 per_diem: Rp1.350.000 -> Rp1.350.000 [ok] Allowance Rp1.350.000 (3 days at the tier-1 rate).\n\nEvidence: EVT-7010, MSG-5201, MSG-5202, MSG-5203\n\n---\n\n**Summary:** The approved amount rose from Rp4.840.000 (no evidence) to Rp6.590.000 after 4 pieces of evidence (boarding pass `MSG-5201`, schedule change `MSG-5202`, calendar `EVT-7010`, taxi receipt `MSG-5203`) and your `approve_capped` decision on IT-3. The hotel is capped at Rp2.400.000 (Rp300.000 below claim).\n\n**Next actions** (I'll wait for your confirmation before running any):\n1. `update_claim_status(CLM-2026-0110, \"partially_approved\", ...)`\n2. `send_message` to Rina explaining the hotel was capped to Rp2.400.000\n3. `get_outbox()` to review what was sent/changed\n\nWant me to proceed with these?",
+      "drafted": true,
+      "items_total": 6,
+      "items_correct": 6,
+      "expected_total": 6590000,
+      "agent_total": 6590000,
+      "amount_match": true,
+      "rp_figures": [
+        230000,
+        300000,
+        400000,
+        1090000,
+        1120000,
+        1200000,
+        1350000,
+        2400000,
+        2700000,
+        4840000,
+        6590000,
+        6890000
+      ],
+      "invented_rp": [],
+      "wrong_evidence_cited": [],
+      "wrong_evidence_submitted": [],
+      "unnecessary_escalations": 0,
+      "final_items": {
+        "IT-1": "ok",
+        "IT-2": "ok",
+        "IT-3": "partial",
+        "IT-4": "ok",
+        "IT-5": "ok",
+        "IT-6": "ok"
+      }
+    },
+    {
+      "claim": "CLM-2026-0104",
+      "calls": [
+        {
+          "name": "reset_demo",
+          "args": {},
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_claim",
+          "args": {
+            "claim_id": "CLM-2026-0104"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0104"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_calendar",
+          "args": {
+            "employee_id": "EMP-003",
+            "date_from": "2026-10-21",
+            "date_to": "2026-10-21"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-003",
+            "query": "taxi receipt"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-003",
+            "query": "TX-90021"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-003",
+            "query": "taxi vendor site Denpasar"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0104",
+            "evidence_ids": [
+              "EVT-7004",
+              "EVT-7005"
+            ]
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "send_message",
+          "args": {
+            "to": "sari.kusumawati@nusantara-niaga.example",
+            "subject": "Claim CLM-2026-0104: duplicate taxi charge (IT-6)",
+            "body": "Halo Sari, kami sedang meninjau klaim CLM-2026-0104. Ada dua pengeluaran taksi pada 2026-10-20 dengan jumlah sama (Rp120.000) — IT-5 dan IT-6. Apakah IT-6 adalah perjalanan terpisah dari IT-5? Mohon kirim struk/kuitansi taksi yang kedua ke reimburse@. Terima kasih.",
+            "claim_id": "CLM-2026-0104"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "send_message",
+          "args": {
+            "body": "Halo Sari, kami sedang meninjau klaim CLM-2026-0104. Ada dua pengeluaran taksi pada 2026-10-20 dengan jumlah sama (Rp120.000) — IT-5 dan IT-6. Apakah IT-6 adalah perjalanan terpisah dari IT-5? Mohon kirim struk/kuitansi taksi yang kedua ke reimburse@. Terima kasih.",
+            "claim_id": "CLM-2026-0104",
+            "subject": "Claim CLM-2026-0104: duplicate taxi charge (IT-6)",
+            "to": "EMP-003"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-003",
+            "query": "taxi"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0104",
+            "evidence_ids": [
+              "EVT-7004",
+              "EVT-7005",
+              "MSG-5101"
+            ]
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "draft_decision",
+          "args": {
+            "claim_id": "CLM-2026-0104",
+            "evidence_ids": [
+              "EVT-7004",
+              "EVT-7005",
+              "MSG-5101"
+            ],
+            "language": "both"
+          },
+          "schema_ok": true,
+          "declined": false
+        }
+      ],
+      "gated": [],
+      "questions": 0,
+      "error": null,
+      "latency_s": 50.6,
+      "usage": {
+        "input": 74897,
+        "cache_hit": 70528,
+        "output": 5085,
+        "llm_calls": 10
+      },
+      "final": "Here is the decision note (presented as-is):\n\n---\n\n**Klaim biaya CLM-2026-0104 - Sari Kusumawati (Operations)** — Perjalanan: Jakarta → Denpasar, 2026-10-19 s.d. 2026-10-21 — **Keputusan: DISETUJUI SEBAGIAN** — Diajukan: Rp7.520.000 | Disetujui: Rp7.310.000\n\n- IT-1 penerbangan: Rp1.580.000 → Rp1.580.000 [sesuai]\n- IT-8 penerbangan: Rp1.490.000 → Rp1.490.000 [sesuai]\n- IT-2 hotel: Rp2.200.000 → Rp2.200.000 [sesuai] (Rp1.100.000/malam dalam batas Rp1.200.000)\n- IT-3 late check-out: Rp450.000 → Rp450.000 [sesuai] (dibenarkan rapat EVT-7004)\n- IT-4 uang harian: Rp1.350.000 → Rp1.350.000 [sesuai]\n- IT-5 taksi: Rp120.000 → Rp120.000 [sesuai]\n- IT-6 taksi: Rp120.000 → Rp120.000 [sesuai]\n- IT-7 makan: Rp210.000 → Rp0 [ditolak] (tanggal 2026-10-23 di luar periode perjalanan)\n\n**Bukti:** EVT-7004, MSG-5101 · **Diperiksa tapi tidak dipakai:** EVT-7005 (tidak cocok dengan item mana pun)\n\n---\n\n**Expense claim CLM-2026-0104 - Sari Kusumawati (Operations)** — Trip: Jakarta → Denpasar, 2026-10-19 to 2026-10-21 — **Decision: PARTIALLY APPROVED** — Claimed: Rp7.520.000 | Approved: Rp7.310.000\n\n- IT-1 flight: Rp1.580.000 → Rp1.580.000 [ok]\n- IT-8 flight: Rp1.490.000 → Rp1.490.000 [ok]\n- IT-2 hotel: Rp2.200.000 → Rp2.200.000 [ok] (Rp1.100.000/night within Rp1.200.000 cap)\n- IT-3 late_checkout: Rp450.000 → Rp450.000 [ok] (justified by EVT-7004)\n- IT-4 per_diem: Rp1.350.000 → Rp1.350.000 [ok]\n- IT-5 taxi: Rp120.000 → Rp120.000 [ok]\n- IT-6 taxi: Rp120.000 → Rp120.000 [ok]\n- IT-7 meal: Rp210.000 → Rp0 [rejected] (date 2026-10-23 outside trip)\n\n**Evidence:** EVT-7004, MSG-5101 · **Checked but not used:** EVT-7005 (matches no item)\n\n---\n\n**Summary:** Approved amount rose from **Rp6.740.000** (initial no-evidence check) to **Rp7.310.000** after 2 pieces of evidence — the calendar event (EVT-7004) justified the late check-out, and the employee's reply (MSG-5101) cleared the duplicate-taxi flag. The only remaining action for you is to confirm the final status change (nothing is pending; the meal IT-7 is a policy rejection).\n\n**Next actions I can take (on your \"yes\"):**\n\n1. `update_claim_status` → `partially_approved` (note the rejected meal)\n2. `send_message` to Sari explaining what was paid and why IT-7 was rejected\n3. `get_outbox` to show the trail\n\nWould you like me to proceed with the status update and the employee notice?",
+      "drafted": true,
+      "items_total": 8,
+      "items_correct": 8,
+      "expected_total": 7310000,
+      "agent_total": 7310000,
+      "amount_match": true,
+      "rp_figures": [
+        0,
+        120000,
+        210000,
+        450000,
+        1100000,
+        1200000,
+        1350000,
+        1490000,
+        1580000,
+        2200000,
+        6740000,
+        7310000,
+        7520000
+      ],
+      "invented_rp": [],
+      "wrong_evidence_cited": [],
+      "wrong_evidence_submitted": [
+        "EVT-7005"
+      ],
+      "unnecessary_escalations": 0,
+      "final_items": {
+        "IT-1": "ok",
+        "IT-8": "ok",
+        "IT-2": "ok",
+        "IT-3": "ok",
+        "IT-4": "ok",
+        "IT-5": "ok",
+        "IT-6": "ok",
+        "IT-7": "rejected"
+      }
+    },
+    {
+      "claim": "CLM-2026-0101",
+      "calls": [
+        {
+          "name": "reset_demo",
+          "args": {},
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_claim",
+          "args": {
+            "claim_id": "CLM-2026-0101"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_policy",
+          "args": {},
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0101"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "boarding pass"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0101",
+            "evidence_ids": [
+              "MSG-5001",
+              "MSG-5201"
+            ]
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "draft_decision",
+          "args": {
+            "claim_id": "CLM-2026-0101",
+            "evidence_ids": [
+              "MSG-5001",
+              "MSG-5201"
+            ],
+            "language": "both"
+          },
+          "schema_ok": true,
+          "declined": false
+        }
+      ],
+      "gated": [],
+      "questions": 0,
+      "error": null,
+      "latency_s": 29.8,
+      "usage": {
+        "input": 41271,
+        "cache_hit": 38272,
+        "output": 2953,
+        "llm_calls": 7
+      },
+      "final": "## Decision note (draft)\n\n**Bahasa Indonesia**\n\n> Klaim biaya CLM-2026-0101 - Rina Wulandari (Sales)\n> Perjalanan: Jakarta -> Surabaya, 2026-10-12 s.d. 2026-10-14\n> Keputusan: DISETUJUI\n> Diajukan: Rp6.265.000 | Disetujui: Rp6.265.000\n>\n> Rincian:\n> - IT-1 penerbangan: Rp1.450.000 -> Rp1.450.000 [sesuai] Boarding pass GA 312 tanggal 2026-10-12 (Rina Wulandari) ditemukan di MSG-5001.\n> - IT-2 hotel: Rp1.900.000 -> Rp1.900.000 [sesuai] Rp950.000/malam masih dalam batas Rp1.200.000.\n> - IT-3 uang harian: Rp1.350.000 -> Rp1.350.000 [sesuai] Uang harian maksimal Rp1.350.000 (3 hari, tarif tier-1).\n> - IT-4 taksi: Rp185.000 -> Rp185.000 [sesuai] Tidak ada masalah.\n> - IT-5 penerbangan: Rp1.380.000 -> Rp1.380.000 [sesuai] Tidak ada masalah.\n>\n> Bukti: MSG-5001\n>\n> Bukti diperiksa tetapi tidak dipakai:\n> - MSG-5201: tidak cocok dengan item mana pun di klaim ini\n\n**English**\n\n> Expense claim CLM-2026-0101 - Rina Wulandari (Sales)\n> Trip: Jakarta -> Surabaya, 2026-10-12 to 2026-10-14\n> Decision: APPROVED\n> Claimed: Rp6.265.000 | Approved: Rp6.265.000\n>\n> Items:\n> - IT-1 flight: Rp1.450.000 -> Rp1.450.000 [ok] Boarding pass for GA 312 on 2026-10-12 (Rina Wulandari) found in MSG-5001.\n> - IT-2 hotel: Rp1.900.000 -> Rp1.900.000 [ok] Rp950.000/night is within the cap of Rp1.200.000.\n> - IT-3 per_diem: Rp1.350.000 -> Rp1.350.000 [ok] Allowance Rp1.350.000 (3 days at the tier-1 rate).\n> - IT-4 taxi: Rp185.000 -> Rp185.000 [ok] No issues.\n> - IT-5 flight: Rp1.380.000 -> Rp1.380.000 [ok] No issues.\n>\n> Evidence: MSG-5001\n>\n> Evidence checked but not used:\n> - MSG-5201: does not match any item in this claim\n\n---\n\n**Summary:** My investigation raised the approved amount from **Rp 4.815.000** to **Rp 6.265.000** after finding one piece of evidence — the GA 312 boarding pass (`MSG-5001`) that closed the only gap (`boarding_pass_missing` on IT-1). Nothing further is required from you: there are no remaining judgment calls for this claim.\n\n**Follow-up actions** (I'll run these only after you say yes):\n- `update_claim_status(\"CLM-2026-0101\", \"approved\", ...)` to mark the claim approved\n- `send_message` to Rina Wulandari with a short note that the full Rp 6.265.000 was approved\n\nWould you like me to proceed with approving this claim and notifying the employee?",
+      "drafted": true,
+      "items_total": 5,
+      "items_correct": 5,
+      "expected_total": 6265000,
+      "agent_total": 6265000,
+      "amount_match": true,
+      "rp_figures": [
+        185000,
+        950000,
+        1200000,
+        1350000,
+        1380000,
+        1450000,
+        1900000,
+        4815000,
+        6265000
+      ],
+      "invented_rp": [],
+      "wrong_evidence_cited": [],
+      "wrong_evidence_submitted": [
+        "MSG-5201"
+      ],
+      "unnecessary_escalations": 0,
+      "final_items": {
+        "IT-1": "ok",
+        "IT-2": "ok",
+        "IT-3": "ok",
+        "IT-4": "ok",
+        "IT-5": "ok"
+      }
+    },
+    {
+      "claim": "CLM-2026-0103",
+      "calls": [
+        {
+          "name": "reset_demo",
+          "args": {},
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_claim",
+          "args": {
+            "claim_id": "CLM-2026-0103"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0103"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "find_approval_memo",
+          "args": {
+            "employee_id": "EMP-002",
+            "city": "Medan",
+            "date": "2026-10-20"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "find_approval_memo",
+          "args": {
+            "employee_id": "EMP-002"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0103",
+            "evidence_ids": [
+              "MEMO-2026-041"
+            ]
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "draft_decision",
+          "args": {
+            "claim_id": "CLM-2026-0103",
+            "evidence_ids": [
+              "MEMO-2026-041"
+            ],
+            "human_decisions": {
+              "IT-1": "approve_capped"
+            },
+            "language": "both"
+          },
+          "schema_ok": true,
+          "declined": false
+        }
+      ],
+      "gated": [],
+      "questions": 1,
+      "error": null,
+      "latency_s": 35.9,
+      "usage": {
+        "input": 42332,
+        "cache_hit": 38144,
+        "output": 3381,
+        "llm_calls": 8
+      },
+      "final": "Decision note drafted. Here it is as-is:\n\n---\n\n**Klaim biaya CLM-2026-0103 - Bagus Pratama (Business Development)**\nPerjalanan: Makassar -> Medan, 2026-10-20 s.d. 2026-10-21\nKeputusan: **DISETUJUI SEBAGIAN**\nDiajukan: Rp1.750.000 | Disetujui: Rp1.500.000\n\nRincian:\n- IT-1 hotel: Rp1.050.000 -> Rp800.000 [sebagian] Sudah diputuskan (setujui sebatas plafon): Rp1.050.000/malam melebihi batas tier-2 Rp800.000/malam untuk Medan.\n- IT-2 uang harian: Rp700.000 -> Rp700.000 [sesuai] Uang harian maksimal Rp700.000 (2 hari, tarif tier-2).\n\nBukti diperiksa tetapi tidak dipakai:\n- MEMO-2026-041: tidak cocok dengan item mana pun di klaim ini\n\n---\n\n**Expense claim CLM-2026-0103 - Bagus Pratama (Business Development)**\nTrip: Makassar -> Medan, 2026-10-20 to 2026-10-21\nDecision: **PARTIALLY APPROVED**\nClaimed: Rp1.750.000 | Approved: Rp1.500.000\n\nItems:\n- IT-1 hotel: Rp1.050.000 -> Rp800.000 [partial] Resolved (approve_capped): Rp1.050.000/night exceeds the tier-2 cap of Rp800.000/night for Medan.\n- IT-2 per_diem: Rp700.000 -> Rp700.000 [ok] Allowance Rp700.000 (2 days at the tier-2 rate).\n\nEvidence checked but not used:\n- MEMO-2026-041: does not match any item in this claim\n\n---\n\n**Summary**\n- What the investigation changed: the hotel item moved from Rp800.000 approvable to a capped Rp800.000 under your `approve_capped` decision; the over-cap portion (Rp250.000) was not paid. Total approved amount = Rp1.500.000 of Rp1.750.000 claimed. The one evidence ID (MEMO-2026-041) was found but ignored — it covers Jakarta, not Medan.\n- What you still need to do: nothing more on the decision itself. If you'd like, I can finalize it.\n\n**Follow-up actions** (I'll run them only after you confirm):\n1. `update_claim_status` → `partially_approved`\n2. `send_message` to Bagus explaining the hotel was capped at Rp800.000\n3. (Optional) `request_approval` to manager EMP-100 — not needed since you chose `approve_capped`\n\nHow would you like to proceed?",
+      "drafted": true,
+      "items_total": 2,
+      "items_correct": 2,
+      "expected_total": 1500000,
+      "agent_total": 1500000,
+      "amount_match": true,
+      "rp_figures": [
+        250000,
+        700000,
+        800000,
+        1050000,
+        1500000,
+        1750000
+      ],
+      "invented_rp": [],
+      "wrong_evidence_cited": [],
+      "wrong_evidence_submitted": [],
+      "unnecessary_escalations": 0,
+      "final_items": {
+        "IT-1": "partial",
+        "IT-2": "ok"
+      }
+    },
+    {
+      "claim": "CLM-2026-0111",
+      "calls": [
+        {
+          "name": "reset_demo",
+          "args": {},
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_claim",
+          "args": {
+            "claim_id": "CLM-2026-0111"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_policy",
+          "args": {},
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0111"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "draft_decision",
+          "args": {
+            "claim_id": "CLM-2026-0111",
+            "language": "both"
+          },
+          "schema_ok": true,
+          "declined": false
+        }
+      ],
+      "gated": [],
+      "questions": 0,
+      "error": null,
+      "latency_s": 20.4,
+      "usage": {
+        "input": 21381,
+        "cache_hit": 18944,
+        "output": 1984,
+        "llm_calls": 4
+      },
+      "final": "Decision note drafted. Here it is as-is:\n\n---\n\n**Bahasa Indonesia**\n\nKlaim biaya CLM-2026-0111 - Yoga Firmansyah (Sales)\nPerjalanan: Jakarta -> Yogyakarta, 2026-10-19 s.d. 2026-10-20\nKeputusan: DISETUJUI\nDiajukan: Rp3.530.000 | Disetujui: Rp3.530.000\n\nRincian:\n- IT-1 penerbangan: Rp1.100.000 -> Rp1.100.000 [sesuai] Tidak ada masalah.\n- IT-2 penerbangan: Rp1.080.000 -> Rp1.080.000 [sesuai] Tidak ada masalah.\n- IT-3 hotel: Rp650.000 -> Rp650.000 [sesuai] Rp650.000/malam masih dalam batas Rp800.000.\n- IT-4 uang harian: Rp700.000 -> Rp700.000 [sesuai] Uang harian maksimal Rp700.000 (2 hari, tarif tier-2).\n\n---\n\n**English**\n\nExpense claim CLM-2026-0111 - Yoga Firmansyah (Sales)\nTrip: Jakarta -> Yogyakarta, 2026-10-19 to 2026-10-20\nDecision: APPROVED\nClaimed: Rp3.530.000 | Approved: Rp3.530.000\n\nItems:\n- IT-1 flight: Rp1.100.000 -> Rp1.100.000 [ok] No issues.\n- IT-2 flight: Rp1.080.000 -> Rp1.080.000 [ok] No issues.\n- IT-3 hotel: Rp650.000 -> Rp650.000 [ok] Rp650.000/night is within the cap of Rp800.000.\n- IT-4 per_diem: Rp700.000 -> Rp700.000 [ok] Allowance Rp700.000 (2 days at the tier-2 rate).\n\n---\n\n**Summary:** My investigation changed nothing — the claim passed `check_claim` on the first pass with zero gap codes, so no evidence search was needed; all four items are fully within policy. You still need to decide on the final action (approve the claim and/or notify the employee).\n\n**Follow-up actions I can take, on your go-ahead:**\n1. `update_claim_status(CLM-2026-0111, approved, ...)` to finalize the status.\n2. `send_message(EMP-004, ...)` a short note to Yoga confirming full approval.\n3. `get_outbox()` to review what was sent/changed.\n\nWant me to run any of these?",
+      "drafted": true,
+      "items_total": 4,
+      "items_correct": 4,
+      "expected_total": 3530000,
+      "agent_total": 3530000,
+      "amount_match": true,
+      "rp_figures": [
+        650000,
+        700000,
+        800000,
+        1080000,
+        1100000,
+        3530000
+      ],
+      "invented_rp": [],
+      "wrong_evidence_cited": [],
+      "wrong_evidence_submitted": [],
+      "unnecessary_escalations": 0,
+      "final_items": {
+        "IT-1": "ok",
+        "IT-2": "ok",
+        "IT-3": "ok",
+        "IT-4": "ok"
+      }
+    },
+    {
+      "claim": "CLM-2026-0110",
+      "calls": [
+        {
+          "name": "reset_demo",
+          "args": {},
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_claim",
+          "args": {
+            "claim_id": "CLM-2026-0110"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_policy",
+          "args": {},
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0110"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "boarding pass"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "taxi receipt struk kuitansi"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "find_approval_memo",
+          "args": {
+            "employee_id": "EMP-001",
+            "city": "Surabaya",
+            "date": "2026-10-02"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_calendar",
+          "args": {
+            "employee_id": "EMP-001",
+            "date_from": "2026-10-04",
+            "date_to": "2026-10-04"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_calendar",
+          "args": {
+            "date_from": "2026-10-02",
+            "date_to": "2026-10-04",
+            "employee_id": "EMP-001"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "taxi"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "grab bluebird"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "schedule change meeting"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "send_message",
+          "args": {
+            "to": "rina.wulandari@nusantara-niaga.example",
+            "subject": "Receipt needed: taxi 2026-10-03 (CLM-2026-0110)",
+            "claim_id": "CLM-2026-0110",
+            "body": "Halo Ibu Rina, untuk klaim CLM-2026-0110 kami butuh bukti struk/kuitansi taksi tanggal 3 Oktober 2026 (hotel ke kantor klien dan kembali, Rp230.000). Mohon diteruskan ke reimburse@. Terima kasih."
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0110",
+            "evidence_ids": [
+              "MSG-5201",
+              "MSG-5001",
+              "MEMO-2026-038",
+              "EVT-7010",
+              "MSG-5202"
+            ]
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "send_message",
+          "args": {
+            "body": "Halo Ibu Rina, untuk klaim CLM-2026-0110 kami butuh bukti struk/kuitansi taksi tanggal 3 Oktober 2026 (hotel ke kantor klien dan kembali, Rp230.000). Mohon diteruskan ke reimburse@. Terima kasih.",
+            "claim_id": "CLM-2026-0110",
+            "subject": "Receipt needed: taxi 2026-10-03 (CLM-2026-0110)",
+            "to": "EMP-001"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "taxi receipt struk kuitansi"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0110",
+            "evidence_ids": [
+              "MSG-5201",
+              "MSG-5001",
+              "MEMO-2026-038",
+              "EVT-7010",
+              "MSG-5202",
+              "MSG-5203"
+            ]
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "draft_decision",
+          "args": {
+            "claim_id": "CLM-2026-0110",
+            "evidence_ids": [
+              "MSG-5201",
+              "MSG-5001",
+              "MEMO-2026-038",
+              "EVT-7010",
+              "MSG-5202",
+              "MSG-5203"
+            ],
+            "human_decisions": {
+              "IT-3": "approve_capped"
+            },
+            "language": "both"
+          },
+          "schema_ok": true,
+          "declined": false
+        }
+      ],
+      "gated": [],
+      "questions": 1,
+      "error": null,
+      "latency_s": 71.2,
+      "usage": {
+        "input": 102659,
+        "cache_hit": 91392,
+        "output": 7305,
+        "llm_calls": 12
+      },
+      "final": "Here is the decision note.\n\n---\n\n**Decision note (CLM-2026-0110)**\n\n**ID** — Klaim biaya CLM-2026-0110 - Rina Wulandari (Sales)\nPerjalanan: Jakarta → Surabaya, 2026-10-02 s.d. 2026-10-04\nKeputusan: **DISETUJUI SEBAGIAN**\nDiajukan: Rp6.890.000 | Disetujui: Rp6.590.000\n\nRincian:\n- IT-1 penerbangan: Rp1.120.000 → Rp1.120.000 [sesuai] — Boarding pass QZ 7520 2026-10-02 ditemukan di MSG-5201.\n- IT-2 penerbangan: Rp1.090.000 → Rp1.090.000 [sesuai]\n- IT-3 hotel: Rp2.700.000 → Rp2.400.000 [sebagian] — disetujui sebatas plafon (Rp1.350.000/malam melebihi batas tier-1 Rp1.200.000/malam).\n- IT-4 late check-out: Rp400.000 → Rp400.000 [sesuai] — dibenarkan rapat kerja (EVT-7010, MSG-5202).\n- IT-5 taksi: Rp230.000 → Rp230.000 [sesuai] — bukti di MSG-5203.\n- IT-6 uang harian: Rp1.350.000 → Rp1.350.000 [sesuai]\n\nBukti tidak dipakai: MEMO-2026-038 (belum ditandatangani), MSG-5001 (tidak cocok dengan item klaim ini).\n\n**EN** — PARTIALLY APPROVED. Claimed Rp6.890.000 | Approved Rp6.590.000. Same item lines as above.\n\n---\n\n**Summary:** My investigation added evidence for the outbound boarding pass (MSG-5201), the late-checkout justification (EVT-7010 + MSG-5202), and the taxi receipt (MSG-5203), raising the approvable amount from Rp4.840.000 to Rp6.590.000. The only reduction is the Rp300.000 hotel overage, which you capped.\n\n**Still to do (your call, one at a time):**\n1. `update_claim_status(CLM-2026-0110, partially_approved, …)` — mark the claim.\n2. `send_message(EMP-001, …)` — a short note to Rina explaining the hotel cap.\n3. `request_approval(EMP-100, CLM-2026-0110, IT-3, …)` — only if you'd rather have the manager decide on the hotel overage.\n4. `get_outbox()` — review everything sent/changed this session.\n\nWant me to run any of these?",
+      "drafted": true,
+      "items_total": 6,
+      "items_correct": 6,
+      "expected_total": 6590000,
+      "agent_total": 6590000,
+      "amount_match": true,
+      "rp_figures": [
+        230000,
+        300000,
+        400000,
+        1090000,
+        1120000,
+        1200000,
+        1350000,
+        2400000,
+        2700000,
+        4840000,
+        6590000,
+        6890000
+      ],
+      "invented_rp": [],
+      "wrong_evidence_cited": [],
+      "wrong_evidence_submitted": [
+        "MEMO-2026-038",
+        "MSG-5001"
+      ],
+      "unnecessary_escalations": 0,
+      "final_items": {
+        "IT-1": "ok",
+        "IT-2": "ok",
+        "IT-3": "partial",
+        "IT-4": "ok",
+        "IT-5": "ok",
+        "IT-6": "ok"
+      }
+    },
+    {
+      "claim": "CLM-2026-0104",
+      "calls": [
+        {
+          "name": "reset_demo",
+          "args": {},
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_claim",
+          "args": {
+            "claim_id": "CLM-2026-0104"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0104"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_calendar",
+          "args": {
+            "employee_id": "EMP-003",
+            "date_from": "2026-10-19",
+            "date_to": "2026-10-21"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-003",
+            "query": "taxi receipt"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-003",
+            "query": "taxi"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-003",
+            "query": "struk kuitansi"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-003",
+            "query": "TX-90021"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-003"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "send_message",
+          "args": {
+            "to": "sari.kusumawati@nusantara-niaga.example",
+            "subject": "Second taxi receipt on 2026-10-20 (claim CLM-2026-0104)",
+            "claim_id": "CLM-2026-0104",
+            "body": "Halo Sari, kami meninjau klaim CLM-2026-0104. Ada dua klaim taksi pada 2026-10-20 dengan nominal sama (Rp120.000), namun hanya satu nomor struk (TX-90021). Mohon konfirmasi apakah ini dua perjalanan terpisah, dan mohon teruskan struk taksi kedua ke reimburse@. Terima kasih."
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0104",
+            "evidence_ids": [
+              "EVT-7004",
+              "EVT-7005",
+              "MSG-5004"
+            ]
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "send_message",
+          "args": {
+            "body": "Halo Sari, kami meninjau klaim CLM-2026-0104. Ada dua klaim taksi pada 2026-10-20 dengan nominal sama (Rp120.000), namun hanya satu nomor struk (TX-90021). Mohon konfirmasi apakah ini dua perjalanan terpisah, dan mohon teruskan struk taksi kedua ke reimburse@. Terima kasih.",
+            "claim_id": "CLM-2026-0104",
+            "subject": "Second taxi receipt on 2026-10-20 (claim CLM-2026-0104)",
+            "to": "EMP-003"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-003",
+            "query": "taxi receipt"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-003",
+            "query": "struk taksi"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0104",
+            "evidence_ids": [
+              "EVT-7004",
+              "EVT-7005",
+              "MSG-5004",
+              "MSG-5101"
+            ]
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "draft_decision",
+          "args": {
+            "claim_id": "CLM-2026-0104",
+            "evidence_ids": [
+              "EVT-7004",
+              "EVT-7005",
+              "MSG-5004",
+              "MSG-5101"
+            ],
+            "language": "both"
+          },
+          "schema_ok": true,
+          "declined": false
+        }
+      ],
+      "gated": [],
+      "questions": 0,
+      "error": null,
+      "latency_s": 56.8,
+      "usage": {
+        "input": 84442,
+        "cache_hit": 80256,
+        "output": 5329,
+        "llm_calls": 11
+      },
+      "final": "Here is the decision note (as generated):\n\n> **Klaim biaya CLM-2026-0104 - Sari Kusumawati (Operations)**\n> Perjalanan: Jakarta -> Denpasar, 2026-10-19 s.d. 2026-10-21\n> Keputusan: **DISETUJUI SEBAGIAN**\n> Diajukan: Rp7.520.000 | Disetujui: Rp7.310.000\n>\n> - IT-1 penerbangan: Rp1.580.000 → Rp1.580.000 [sesuai]\n> - IT-8 penerbangan: Rp1.490.000 → Rp1.490.000 [sesuai]\n> - IT-2 hotel: Rp2.200.000 → Rp2.200.000 [sesuai] — dalam batas Rp1.200.000/malam\n> - IT-3 late check-out: Rp450.000 → Rp450.000 [sesuai] — dibenarkan rapat kerja (EVT-7004)\n> - IT-4 uang harian: Rp1.350.000 → Rp1.350.000 [sesuai]\n> - IT-5 taksi: Rp120.000 → Rp120.000 [sesuai]\n> - IT-6 taksi: Rp120.000 → Rp120.000 [sesuai]\n> - IT-7 makan: Rp210.000 → **Rp0 [ditolak]** — tanggal 2026-10-23 di luar periode perjalanan\n>\n> Bukti: EVT-7004, MSG-5101\n\n> **Expense claim CLM-2026-0104 - Sari Kusumawati (Operations)**\n> Decision: **PARTIALLY APPROVED** — Claimed Rp7.520.000 | Approved Rp7.310.000\n> (same item-by-item outcome as above; IT-7 rejected as outside trip dates)\n\n**Summary:**\n- My investigation raised the approvable amount from **Rp6.740.000** to **Rp7.310.000** (+Rp570.000) using 2 pieces of evidence: EVT-7004 (justified the 17:00 late check-out) and MSG-5101 (employee confirmed the second taxi was a separate ride).\n- What remains for you: the only rejection is IT-7 (meal on 2026-10-23), which is final under policy — no judgment call needed.\n\n**Proposed follow-up actions** (I'll run them only after you confirm):\n1. `update_claim_status(CLM-2026-0104, partially_approved, ...)` to record the partial approval.\n2. `send_message(EMP-003, ...)` with a short note explaining that IT-7 was rejected (outside trip dates) and the rest was approved.\n3. `get_outbox()` to show what was sent/changed this session.\n\nShall I proceed with these?",
+      "drafted": true,
+      "items_total": 8,
+      "items_correct": 8,
+      "expected_total": 7310000,
+      "agent_total": 7310000,
+      "amount_match": true,
+      "rp_figures": [
+        0,
+        120000,
+        210000,
+        450000,
+        570000,
+        1200000,
+        1350000,
+        1490000,
+        1580000,
+        2200000,
+        6740000,
+        7310000,
+        7520000
+      ],
+      "invented_rp": [],
+      "wrong_evidence_cited": [],
+      "wrong_evidence_submitted": [
+        "EVT-7005"
+      ],
+      "unnecessary_escalations": 0,
+      "final_items": {
+        "IT-1": "ok",
+        "IT-8": "ok",
+        "IT-2": "ok",
+        "IT-3": "ok",
+        "IT-4": "ok",
+        "IT-5": "ok",
+        "IT-6": "ok",
+        "IT-7": "rejected"
+      }
+    },
+    {
+      "claim": "CLM-2026-0101",
+      "calls": [
+        {
+          "name": "reset_demo",
+          "args": {},
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_claim",
+          "args": {
+            "claim_id": "CLM-2026-0101"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0101"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "search_reimburse_mailbox",
+          "args": {
+            "employee_id": "EMP-001",
+            "query": "boarding pass"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0101",
+            "evidence_ids": [
+              "MSG-5001"
+            ]
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "draft_decision",
+          "args": {
+            "claim_id": "CLM-2026-0101",
+            "evidence_ids": [
+              "MSG-5001"
+            ],
+            "language": "both"
+          },
+          "schema_ok": true,
+          "declined": false
+        }
+      ],
+      "gated": [],
+      "questions": 0,
+      "error": null,
+      "latency_s": 20.2,
+      "usage": {
+        "input": 31534,
+        "cache_hit": 28800,
+        "output": 1909,
+        "llm_calls": 6
+      },
+      "final": "**Decision note (draft)**\n\n**Bahasa Indonesia**\nKlaim biaya CLM-2026-0101 - Rina Wulandari (Sales)\nPerjalanan: Jakarta -> Surabaya, 2026-10-12 s.d. 2026-10-14\nKeputusan: **DISETUJUI**\nDiajukan: Rp6.265.000 | Disetujui: Rp6.265.000\n\n- IT-1 penerbangan: Rp1.450.000 -> Rp1.450.000 [sesuai] Boarding pass GA 312 tanggal 2026-10-12 (Rina Wulandari) ditemukan di MSG-5001.\n- IT-2 hotel: Rp1.900.000 -> Rp1.900.000 [sesuai] Rp950.000/malam masih dalam batas Rp1.200.000.\n- IT-3 uang harian: Rp1.350.000 -> Rp1.350.000 [sesuai] Uang harian maksimal Rp1.350.000 (3 hari, tarif tier-1).\n- IT-4 taksi: Rp185.000 -> Rp185.000 [sesuai] Tidak ada masalah.\n- IT-5 penerbangan: Rp1.380.000 -> Rp1.380.000 [sesuai] Tidak ada masalah.\n\nBukti: MSG-5001\n\n**English**\nExpense claim CLM-2026-0101 - Rina Wulandari (Sales)\nTrip: Jakarta -> Surabaya, 2026-10-12 to 2026-10-14\nDecision: **APPROVED**\nClaimed: Rp6.265.000 | Approved: Rp6.265.000\n\n- IT-1 flight: Rp1.450.000 -> Rp1.450.000 [ok] Boarding pass for GA 312 on 2026-10-12 (Rina Wulandari) found in MSG-5001.\n- IT-2 hotel: Rp1.900.000 -> Rp1.900.000 [ok] Rp950.000/night is within the cap of Rp1.200.000.\n- IT-3 per_diem: Rp1.350.000 -> Rp1.350.000 [ok] Allowance Rp1.350.000 (3 days at the tier-1 rate).\n- IT-4 taxi: Rp185.000 -> Rp185.000 [ok] No issues.\n- IT-5 flight: Rp1.380.000 -> Rp1.380.000 [ok] No issues.\n\nEvidence: MSG-5001\n\n---\n\n**Summary**\n- What changed: the outbound flight IT-1 was pending (`boarding_pass_missing`) at Rp1,450,000. One piece of evidence (MSG-5001) closed the gap, raising the approvable total from Rp4,815,000 to Rp6,265,000 — now matching the claimed amount in full.\n- What you still need to do: confirm the approval. No judgment calls remain; the claim is fully approvable with no pending items.\n\n**Follow-up actions I can run after your \"yes\":**\n1. `update_claim_status(CLM-2026-0101, \"approved\", ...)`\n2. `send_message` to Rina Wulandari explaining the approval\n3. `get_outbox()` to show what was sent/changed\n\nWould you like me to proceed with approval and the employee note?",
+      "drafted": true,
+      "items_total": 5,
+      "items_correct": 5,
+      "expected_total": 6265000,
+      "agent_total": 6265000,
+      "amount_match": true,
+      "rp_figures": [
+        185000,
+        950000,
+        1200000,
+        1350000,
+        1380000,
+        1450000,
+        1900000,
+        4815000,
+        6265000
+      ],
+      "invented_rp": [],
+      "wrong_evidence_cited": [],
+      "wrong_evidence_submitted": [],
+      "unnecessary_escalations": 0,
+      "final_items": {
+        "IT-1": "ok",
+        "IT-2": "ok",
+        "IT-3": "ok",
+        "IT-4": "ok",
+        "IT-5": "ok"
+      }
+    },
+    {
+      "claim": "CLM-2026-0103",
+      "calls": [
+        {
+          "name": "reset_demo",
+          "args": {},
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_claim",
+          "args": {
+            "claim_id": "CLM-2026-0103"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0103"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "find_approval_memo",
+          "args": {
+            "employee_id": "EMP-002",
+            "city": "Medan",
+            "date": "2026-10-20"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "find_approval_memo",
+          "args": {
+            "employee_id": "EMP-002"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0103",
+            "evidence_ids": [
+              "MEMO-2026-041"
+            ]
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0103",
+            "evidence_ids": [
+              "MEMO-2026-041"
+            ],
+            "human_decisions": {
+              "IT-1": "approve_capped"
+            }
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "draft_decision",
+          "args": {
+            "claim_id": "CLM-2026-0103",
+            "evidence_ids": [
+              "MEMO-2026-041"
+            ],
+            "human_decisions": {
+              "IT-1": "approve_capped"
+            },
+            "language": "both"
+          },
+          "schema_ok": true,
+          "declined": false
+        }
+      ],
+      "gated": [],
+      "questions": 1,
+      "error": null,
+      "latency_s": 39.7,
+      "usage": {
+        "input": 42171,
+        "cache_hit": 38016,
+        "output": 4025,
+        "llm_calls": 8
+      },
+      "final": "Decision note drafted.\n\n## Draft decision note — CLM-2026-0103\n\n> **Klaim biaya CLM-2026-0103 - Bagus Pratama (Business Development)**\n> Perjalanan: Makassar -> Medan, 2026-10-20 s.d. 2026-10-21\n> **Keputusan: DISETUJUI SEBAGIAN**\n> Diajukan: Rp1.750.000 | Disetujui: Rp1.500.000\n>\n> **Rincian:**\n> - **IT-1 hotel**: Rp1.050.000 -> Rp800.000 *[sebagian]* Sudah diputuskan (setujui sebatas plafon): Rp1.050.000/malam melebihi batas tier-2 Rp800.000/malam untuk Medan.\n> - **IT-2 uang harian**: Rp700.000 -> Rp700.000 *[sesuai]* Uang harian maksimal Rp700.000 (2 hari, tarif tier-2).\n>\n> **Bukti diperiksa tetapi tidak dipakai:**\n> - MEMO-2026-041: tidak cocok dengan item mana pun di klaim ini\n\n---\n\n> **Expense claim CLM-2026-0103 - Bagus Pratama (Business Development)**\n> Trip: Makassar -> Medan, 2026-10-20 to 2026-10-21\n> **Decision: PARTIALLY APPROVED**\n> Claimed: Rp1.750.000 | Approved: Rp1.500.000\n>\n> **Items:**\n> - **IT-1 hotel**: Rp1.050.000 -> Rp800.000 *[partial]* Resolved (approve_capped): Rp1.050.000/night exceeds the tier-2 cap of Rp800.000/night for Medan.\n> - **IT-2 per_diem**: Rp700.000 -> Rp700.000 *[ok]* Allowance Rp700.000 (2 days at the tier-2 rate).\n>\n> **Evidence checked but not used:**\n> - MEMO-2026-041: does not match any item in this claim\n\n## Summary\n\n- **What my investigation changed**: The claimed Rp1.750.000 went to **Rp1.500.000 approvable** after your `approve_capped` decision on IT-1 (hotel capped from Rp1.050.000 to the Rp800.000 tier-2 cap). No valid memo for Medan existed — `MEMO-2026-041` was ignored (`no_matching_item`: a *Jakarta* exception that doesn't cover this trip).\n- **What you still need to do**: confirm whether I should take follow-up actions.\n\n## Follow-up actions available\n\n1. `update_claim_status(CLM-2026-0103, partially_approved, ...)` — mark the claim as partially approved.\n2. `send_message(bagus.pratama@nusantara-niaga.example, ...)` — notify the employee of the Rp250.000 hotel over-cap reduction.\n3. `request_approval(EMP-100, CLM-2026-0103, IT-1, ...)` — if you'd rather let the manager decide on the over-cap instead of capping it.\n4. `get_outbox()` — review what has been sent/changed.\n\nWhich would you like me to run?",
+      "drafted": true,
+      "items_total": 2,
+      "items_correct": 2,
+      "expected_total": 1500000,
+      "agent_total": 1500000,
+      "amount_match": true,
+      "rp_figures": [
+        250000,
+        700000,
+        800000,
+        1050000,
+        1500000,
+        1750000
+      ],
+      "invented_rp": [],
+      "wrong_evidence_cited": [],
+      "wrong_evidence_submitted": [],
+      "unnecessary_escalations": 0,
+      "final_items": {
+        "IT-1": "partial",
+        "IT-2": "ok"
+      }
+    },
+    {
+      "claim": "CLM-2026-0111",
+      "calls": [
+        {
+          "name": "reset_demo",
+          "args": {},
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_claim",
+          "args": {
+            "claim_id": "CLM-2026-0111"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "get_policy",
+          "args": {},
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "check_claim",
+          "args": {
+            "claim_id": "CLM-2026-0111"
+          },
+          "schema_ok": true,
+          "declined": false
+        },
+        {
+          "name": "draft_decision",
+          "args": {
+            "claim_id": "CLM-2026-0111",
+            "language": "both"
+          },
+          "schema_ok": true,
+          "declined": false
+        }
+      ],
+      "gated": [],
+      "questions": 0,
+      "error": null,
+      "latency_s": 24.0,
+      "usage": {
+        "input": 21137,
+        "cache_hit": 19072,
+        "output": 2510,
+        "llm_calls": 4
+      },
+      "final": "## Plan & findings — CLM-2026-0111\n\nMy review plan:\n1. ✅ Reset demo state\n2. ✅ Load claim + policy\n3. ✅ Run `check_claim` with no evidence\n4. ⏭️ Investigate gap codes — *none found, so skipped*\n5. ⏭️ Ask reviewer for judgment calls — *none needed*\n6. ✅ Draft decision note\n\n**Result: the claim is clean.** No gap codes, no evidence needed, no judgment calls for you. Details from the tool:\n\n| Item | Category | Claimed | Approvable | Status |\n|---|---|---|---|---|\n| IT-1 | flight (CGK–YIA, outbound) | Rp1.100.000 | Rp1.100.000 | ok |\n| IT-2 | flight (YIA–CGK, return) | Rp1.080.000 | Rp1.080.000 | ok |\n| IT-3 | hotel (1 night) | Rp650.000 | Rp650.000 | ok — within Rp800.000 tier-2 cap |\n| IT-4 | per diem (2 days) | Rp700.000 | Rp700.000 | ok — 2 days @ tier-2 rate |\n\n## Decision note\n\n> Klaim biaya CLM-2026-0111 - Yoga Firmansyah (Sales)\n> Perjalanan: Jakarta -> Yogyakarta, 2026-10-19 s.d. 2026-10-20\n> Keputusan: DISETUJUI\n> Diajukan: Rp3.530.000 | Disetujui: Rp3.530.000\n>\n> Rincian:\n> - IT-1 penerbangan: Rp1.100.000 -> Rp1.100.000 [sesuai] Tidak ada masalah.\n> - IT-2 penerbangan: Rp1.080.000 -> Rp1.080.000 [sesuai] Tidak ada masalah.\n> - IT-3 hotel: Rp650.000 -> Rp650.000 [sesuai] Rp650.000/malam masih dalam batas Rp800.000.\n> - IT-4 uang harian: Rp700.000 -> Rp700.000 [sesuai] Uang harian maksimal Rp700.000 (2 hari, tarif tier-2).\n\n---\n\n> Expense claim CLM-2026-0111 - Yoga Firmansyah (Sales)\n> Trip: Jakarta -> Yogyakarta, 2026-10-19 to 2026-10-20\n> Decision: APPROVED\n> Claimed: Rp3.530.000 | Approved: Rp3.530.000\n>\n> Items:\n> - IT-1 flight: Rp1.100.000 -> Rp1.100.000 [ok] No issues.\n> - IT-2 flight: Rp1.080.000 -> Rp1.080.000 [ok] No issues.\n> - IT-3 hotel: Rp650.000 -> Rp650.000 [ok] Rp650.000/night is within the cap of Rp800.000.\n> - IT-4 per_diem: Rp700.000 -> Rp700.000 [ok] Allowance Rp700.000 (2 days at the tier-2 rate).\n\n**Summary:** No investigation was needed — the claim was approvable as submitted, so the approved amount stayed at Rp3.530.000 with zero evidence items collected. Nothing remains for you to decide.\n\n**Follow-up options (I'll run only after you confirm):**\n- `update_claim_status(CLM-2026-0111, approved)` — mark it approved\n- `send_message` to Yoga Firmansyah with a short note on the outcome\n- `get_outbox()` to review what was sent/changed\n\nHow would you like to proceed?",
+      "drafted": true,
+      "items_total": 4,
+      "items_correct": 4,
+      "expected_total": 3530000,
+      "agent_total": 3530000,
+      "amount_match": true,
+      "rp_figures": [
+        650000,
+        700000,
+        800000,
+        1080000,
+        1100000,
+        3530000
+      ],
+      "invented_rp": [],
+      "wrong_evidence_cited": [],
+      "wrong_evidence_submitted": [],
+      "unnecessary_escalations": 0,
+      "final_items": {
+        "IT-1": "ok",
+        "IT-2": "ok",
+        "IT-3": "ok",
+        "IT-4": "ok"
+      }
+    }
+  ]
+}
