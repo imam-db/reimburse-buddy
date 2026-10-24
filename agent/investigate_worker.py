@@ -11,7 +11,14 @@ stdout events (one JSON object per line):
     {"type": "interrupt", "tool": ..., "args": {...}, "tool_call_id": ...}   -> waits for one stdin line
     {"type": "final", "note": ..., "tokens": {...}}
     {"type": "error", "code": "no_key" | "token_limit" | "exception", "message": ...}
-stdin (only after an interrupt): {"approved": true} or {"approved": false, "reason": "..."}
+    {"type": "answer_rejected", "tool_call_id": ..., "reason": "mismatch" | "malformed"}
+    {"type": "auto_declined", "tool_call_id": ...}   approval deadline passed
+stdin: {"tool_call_id": <id from the interrupt>, "approved": true|false, "reason": "..."}
+       or {"cancel": true} at any time. An answer whose tool_call_id is not the pending one
+       (late duplicate, other tab, stale page) is rejected and never applied to another call.
+
+Deadlines: --run-deadline seconds for the whole run (default 600, error code "deadline"),
+--approval-deadline seconds per pending approval (default 900, then auto-decline).
 
 Model: REIMBURSE_AGENT_MODEL (default deepseek-flash), REIMBURSE_AGENT_BASE_URL (default
 https://api.deepseek.com), key from REIMBURSE_AGENT_API_KEY or DEEPSEEK_API_KEY. The key is
@@ -31,6 +38,7 @@ from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
+from reimburse_agent.config import build_chat_model, load_config
 from reimburse_agent.graph import build_graph
 from reimburse_agent.mcp_client import mcp_tools
 
@@ -53,6 +61,16 @@ def api_key() -> str:
     return (os.environ.get("REIMBURSE_AGENT_API_KEY") or os.environ.get("DEEPSEEK_API_KEY") or "").strip()
 
 
+def model_env() -> dict[str, str]:
+    """Worker defaults on top of the env: DeepSeek flash, DEEPSEEK_API_KEY accepted as the key."""
+    env = dict(os.environ)
+    env.setdefault("REIMBURSE_AGENT_MODEL", DEFAULT_MODEL)
+    env["REIMBURSE_AGENT_MODEL"] = env["REIMBURSE_AGENT_MODEL"] or DEFAULT_MODEL
+    env["REIMBURSE_AGENT_BASE_URL"] = env.get("REIMBURSE_AGENT_BASE_URL") or DEFAULT_BASE_URL
+    env["REIMBURSE_AGENT_API_KEY"] = api_key()
+    return env
+
+
 def make_model(fake_script: str | None):
     if fake_script:
         from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
@@ -67,20 +85,102 @@ def make_model(fake_script: str | None):
             {"name": c["name"], "args": c.get("args", {}), "id": c.get("id", f"call{i}-{j}")}
             for j, c in enumerate(m.get("tool_calls", []))]) for i, m in enumerate(script)]
         return Scripted(messages=iter(msgs)), "fake-scripted"
-    from langchain_openai import ChatOpenAI
+    cfg = load_config(model_env())
+    return build_chat_model(cfg), cfg.model
 
-    name = os.environ.get("REIMBURSE_AGENT_MODEL") or DEFAULT_MODEL
-    return ChatOpenAI(model=name, api_key=api_key(), temperature=0,
-                      base_url=os.environ.get("REIMBURSE_AGENT_BASE_URL") or DEFAULT_BASE_URL), name
+
+class Cancelled(Exception):
+    pass
+
+
+class Stdin:
+    """stdin lines as an asyncio queue (a reader thread), so waits can time out."""
+
+    def __init__(self):
+        import threading
+
+        self.loop = asyncio.get_running_loop()
+        self.q: asyncio.Queue = asyncio.Queue()
+        self.held: list = []
+        threading.Thread(target=self._pump, daemon=True).start()
+
+    def _pump(self):
+        for line in sys.stdin:
+            self.loop.call_soon_threadsafe(self.q.put_nowait, line)
+        self.loop.call_soon_threadsafe(self.q.put_nowait, None)
+
+    def drain_cancel(self) -> None:
+        """Between steps: honour a cancel at once; keep other lines for answer_for, which applies
+        only the one matching the pending call and rejects the rest."""
+        while not self.q.empty():
+            line = self.q.get_nowait()
+            if line is not None and parse(line).get("cancel"):
+                raise Cancelled()
+            self.held.append(line)
+
+    async def _next(self, timeout: float):
+        if self.held:
+            return self.held.pop(0)
+        return await asyncio.wait_for(self.q.get(), timeout)
+
+    async def answer_for(self, call_id: str, timeout: float) -> dict | None:
+        loop = asyncio.get_running_loop()
+        end = loop.time() + timeout
+        while True:
+            left = end - loop.time()
+            if left <= 0:
+                return None
+            try:
+                line = await self._next(left)
+            except asyncio.TimeoutError:
+                return None
+            if line is None:  # web side closed the pipe
+                raise Cancelled()
+            ans = parse(line)
+            if ans.get("cancel"):
+                raise Cancelled()
+            if ans.get("tool_call_id") == call_id and isinstance(ans.get("approved"), bool):
+                return ans
+            emit({"type": "answer_rejected", "tool_call_id": ans.get("tool_call_id"),
+                  "reason": "mismatch" if ans else "malformed"})
+
+
+def parse(line: str | None) -> dict:
+    try:
+        v = json.loads(line) if line and line.strip() else {}
+    except json.JSONDecodeError:
+        return {}
+    return v if isinstance(v, dict) else {}
+
+
+def _find(exc: BaseException, kind) -> bool:
+    """The MCP client's TaskGroup wraps our exceptions in ExceptionGroups."""
+    if isinstance(exc, kind):
+        return True
+    return isinstance(exc, BaseExceptionGroup) and any(_find(e, kind) for e in exc.exceptions)
 
 
 async def run(a) -> int:
+    try:
+        return await asyncio.wait_for(_run(a), a.run_deadline)
+    except BaseException as exc:  # noqa: BLE001 - re-raised below unless it is ours
+        if _find(exc, Cancelled):
+            emit({"type": "error", "code": "cancelled", "message": "Cancelled by the reviewer."})
+            return 5
+        if not _find(exc, asyncio.TimeoutError):
+            raise
+        emit({"type": "error", "code": "deadline", "message": f"Stopped: run took longer than {a.run_deadline}s."})
+        return 4
+
+
+async def _run(a) -> int:
     if not a.fake_script and not api_key():
         emit({"type": "error", "code": "no_key",
               "message": "No model key configured. Set DEEPSEEK_API_KEY (or REIMBURSE_AGENT_API_KEY)."})
         return 2
     model, name = make_model(a.fake_script)
     emit({"type": "start", "model": name, "compact": True, "claim": a.claim})
+    stdin = Stdin()
     tokens = {"input": 0, "output": 0}
     pending: dict[str, dict] = {}
     n = 0
@@ -90,6 +190,7 @@ async def run(a) -> int:
         payload: object = {"messages": [("user", a.prompt.format(claim=a.claim))], "declined": {}}
         while True:
             async for ev in graph.astream(payload, conf, stream_mode="updates"):
+                stdin.drain_cancel()
                 for node, upd in ev.items():
                     if node == "__interrupt__" or not isinstance(upd, dict):
                         continue
@@ -115,13 +216,12 @@ async def run(a) -> int:
                 break
             req = state.interrupts[0].value
             emit({"type": "interrupt", **req})
-            line = sys.stdin.readline()
-            try:
-                ans = json.loads(line) if line.strip() else {}
-            except json.JSONDecodeError:
-                ans = {}
-            approved = bool(ans.get("approved"))
-            payload = Command(resume={"approved": approved,
+            ans = await stdin.answer_for(req["tool_call_id"], a.approval_deadline)
+            if ans is None:
+                emit({"type": "auto_declined", "tool_call_id": req["tool_call_id"]})
+                ans = {"approved": False, "reason": f"no answer within {a.approval_deadline}s; auto-declined"}
+            approved = ans["approved"] is True
+            payload = Command(resume={"approved": approved, "tool_call_id": req["tool_call_id"],
                                       "reason": "" if approved else (ans.get("reason") or "reviewer declined")})
         emit({"type": "final", "note": str(state.values["messages"][-1].content), "tokens": tokens})
     return 0
@@ -133,6 +233,9 @@ def main() -> None:
     p.add_argument("--prompt", default="Review claim {claim} and draft the decision note.")
     p.add_argument("--max-steps", type=int, default=60)
     p.add_argument("--max-tokens", type=int, default=int(os.environ.get("REIMBURSE_AGENT_MAX_TOKENS", "250000")))
+    p.add_argument("--run-deadline", type=float, default=float(os.environ.get("REIMBURSE_AGENT_RUN_DEADLINE", "600")))
+    p.add_argument("--approval-deadline", type=float,
+                   default=float(os.environ.get("REIMBURSE_AGENT_APPROVAL_DEADLINE", "900")))
     p.add_argument("--fake-script")
     a = p.parse_args()
     try:

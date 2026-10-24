@@ -11,10 +11,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from reimburse_web import app as web
-from reimburse_web.agent_bridge import Investigator
+from reimburse_web.agent_bridge import Investigator, redact
 
 HERO = "CLM-2026-0110"
-pytestmark = pytest.mark.skipif(shutil.which("uv") is None, reason="uv not installed")
+pytestmark = [pytest.mark.agent, pytest.mark.skipif(shutil.which("uv") is None, reason="uv not installed")]
 
 
 @pytest.fixture
@@ -81,7 +81,7 @@ def test_interrupt_approve_runs_write(client, monkeypatch, tmp_path):
     html = wait_page(client, rid, "id=pending")
     assert "update_claim_status" in html and "awaiting approval" in html
     assert "<code>update_claim_status</code></td>" not in html  # not executed yet
-    client.post(f"/admin/investigations/{rid}/resume", data={"approved": "true"})
+    client.post(f"/admin/investigations/{rid}/resume", data={"approved": "true", "tool_call_id": "w1"})
     html = wait_page(client, rid, "id=final")
     assert "Reviewer approved" in html
     step = re.search(r"<code>get_outbox</code>.*?</tr>", html, re.S).group(0)
@@ -93,7 +93,7 @@ def test_interrupt_decline_never_writes(client, monkeypatch, tmp_path):
         {"tool_calls": [{"name": "get_outbox", "args": {}, "id": "o1"}]}, {"content": "left unchanged"}])
     rid = start(client)
     wait_page(client, rid, "id=pending")
-    client.post(f"/admin/investigations/{rid}/resume", data={"approved": "false", "reason": "not yet"})
+    client.post(f"/admin/investigations/{rid}/resume", data={"approved": "false", "reason": "not yet", "tool_call_id": "w1"})
     html = wait_page(client, rid, "id=final")
     assert "Reviewer declined" in html and "reviewer_declined" in html and "class='tag bad'>declined" in html
     step = re.search(r"<code>get_outbox</code>.*?</tr>", html, re.S).group(0)
@@ -107,3 +107,50 @@ def test_rate_guard(client, monkeypatch, tmp_path):
     wait_page(client, rid, "id=final")
     r = client.post(f"/admin/claims/{HERO}/investigate")
     assert "id=rate-limited" in r.text
+
+
+def test_pending_form_carries_tool_call_id_and_honest_text(client, monkeypatch, tmp_path):
+    use_script(monkeypatch, tmp_path, [WRITE, {"content": "x"}])
+    rid = start(client)
+    html = wait_page(client, rid, "id=pending")
+    assert 'name=tool_call_id value="w1"' in html
+    assert "Nothing is written until you click Approve" not in html
+    client.post(f"/admin/investigations/{rid}/cancel")
+
+
+def test_mismatched_and_duplicate_answers_ignored(client, monkeypatch, tmp_path):
+    second = {"tool_calls": [{"name": "update_claim_status", "args": {"claim_id": HERO, "status": "approved"}, "id": "w2"}]}
+    use_script(monkeypatch, tmp_path, [WRITE, second,
+        {"tool_calls": [{"name": "get_outbox", "args": {}, "id": "o1"}]}, {"content": "done"}])
+    rid = start(client)
+    run = web.INVESTIGATOR.runs[rid]
+    wait_page(client, rid, "id=pending")
+    assert not run.resume("w2", True)  # wrong id: not sent
+    assert not run.resume("", True)
+    assert run.resume("w1", False, "no")
+    assert not run.resume("w1", True)  # double click / second tab: ignored
+    html = wait_page(client, rid, 'value="w2"')  # second write now pending, not auto-approved by the duplicate
+    assert "approved" in html
+    client.post(f"/admin/investigations/{rid}/resume", data={"approved": "false", "tool_call_id": "w2"})
+    html = wait_page(client, rid, "id=final")
+    step = re.search(r"<code>get_outbox</code>.*?</tr>", html, re.S).group(0)
+    assert "on_hold" not in step and "&quot;approved&quot;" not in step and '"to":"approved"' not in step
+
+
+def test_cancel_kills_run(client, monkeypatch, tmp_path):
+    use_script(monkeypatch, tmp_path, [WRITE, {"content": "x"}])
+    rid = start(client)
+    wait_page(client, rid, "id=pending")
+    assert "id=cancel" in client.get(f"/admin/investigations/{rid}").text
+    client.post(f"/admin/investigations/{rid}/cancel")
+    run = web.INVESTIGATOR.runs[rid]
+    assert run.proc.poll() is not None and run.done
+    assert "Cancelled by the reviewer" in client.get(f"/admin/investigations/{rid}").text
+    # a new run can start right away
+    assert client.post(f"/admin/claims/{HERO}/investigate", follow_redirects=False).status_code == 303
+
+
+def test_redact(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-abcdef1234567890")
+    out = redact("auth failed for sk-abcdef1234567890; Authorization: Bearer xyz123")
+    assert "sk-abcdef1234567890" not in out and "xyz123" not in out
