@@ -156,7 +156,8 @@ ITEM_RE = re.compile(r"^\s*(\w+)\s*,\s*(\d{4}-\d{2}-\d{2})\s*,\s*([^,]+?)\s*,\s*
                      r"(?:\s*,\s*([A-Za-z0-9 ]*?))?\s*$", re.I)
 AMOUNT_RE = re.compile(r"^(\d+|\d{1,3}(?:\.\d{3})+)$")  # 1350000 or 1.350.000; no decimals, no commas
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
-ALLOWED_UPLOAD_EXT = {".pdf", ".png", ".jpg", ".jpeg", ".txt"}
+# No .txt: a text file is typed by the sender, so it can never be evidence read from a document.
+ALLOWED_UPLOAD_EXT = {".pdf", ".png", ".jpg", ".jpeg"}
 # Final statuses the reviewer may pick for each engine decision. Overrides go through logged item decisions.
 STATUS_FOR_DECISION = {"approve": ["approved", "on_hold"], "partial_approve": ["partially_approved", "on_hold"],
                        "reject": ["rejected", "on_hold"], "needs_info": ["on_hold"]}

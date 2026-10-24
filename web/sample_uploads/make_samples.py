@@ -60,6 +60,39 @@ SAMPLES = {
 }
 
 
+# Held-out set: tricky layouts NOT used to tune the parser. Measure separately.
+HELDOUT = {
+    "meal_total_3_item_tunai.png": (
+        "WARUNG KOPI SENJA",
+        ["Jl. Fiktif 9, Surabaya", "Tgl 03/10/2026 19:05", "Kopi susu 2x        56.000", "Roti bakar          42.000",
+         "Mie goreng          65.000", "SUBTOTAL           163.000", "PPN 10%             16.300", "SERVICE 5%           8.150",
+         "TOTAL (3 item)     187.450", "TUNAI              200.000", "KEMBALI             12.550"],
+        {"doc_type": "meal_receipt", "date": "2026-10-03", "amount": 187450, "merchant": "WARUNG KOPI SENJA"}),
+    "taxi_2digit_year_cash.jpg": (
+        "TAKSI LINTAS KOTA",
+        ["No. 88213", "03/10/26  21:40", "Bandara Juanda - Hotel", "Argo         Rp 185.000",
+         "TOTAL        Rp 185.000", "TUNAI        Rp 300.000", "KEMBALI      Rp 115.000"],
+        {"doc_type": "taxi_receipt", "date": "2026-10-03", "amount": 185000, "merchant": "TAKSI LINTAS KOTA"}),
+    "meal_total_diskon_last.png": (
+        "RESTORAN BUMI LAUT",
+        ["Jl. Contoh 21, Surabaya", "Tanggal 02/10/26", "Ikan bakar         120.000", "Nasi 2x             20.000",
+         "SUBTOTAL           140.000", "DISKON              14.000", "PPN                 12.600", "TOTAL              138.600",
+         "TOTAL DISKON        14.000", "TOTAL PPN           12.600"],
+        {"doc_type": "meal_receipt", "date": "2026-10-02", "amount": 138600, "merchant": "RESTORAN BUMI LAUT"}),
+}
+
+
+def make_heldout() -> None:
+    out = OUT / "heldout"
+    out.mkdir(exist_ok=True)
+    truth = {}
+    for name, (title, lines, t) in HELDOUT.items():
+        img = receipt(lines, title, size=(760, 1100))
+        img.save(out / name, quality=90) if name.endswith(".jpg") else img.save(out / name)
+        truth[name] = t
+    (out / "truth.json").write_text(json.dumps(truth, indent=2) + "\n")
+
+
 def main() -> None:
     truth = {}
     for name, (title, lines, t) in SAMPLES.items():
@@ -94,3 +127,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    make_heldout()

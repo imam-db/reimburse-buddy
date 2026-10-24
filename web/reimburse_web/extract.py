@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Protocol
 
 DOC_TYPES = ("hotel_receipt", "taxi_receipt", "meal_receipt", "flight_receipt", "boarding_pass", "other")
-FIELDS = ("doc_type", "date", "amount", "merchant", "flight_no", "nights")
+FIELDS = ("doc_type", "date", "amount", "merchant", "flight_no", "nights", "passenger")
 LOW_CONFIDENCE = 0.6
 MONTHS = {"jan": 1, "feb": 2, "mar": 3, "apr": 4, "mei": 5, "may": 5, "jun": 6, "jul": 7, "agu": 8, "agt": 8,
           "aug": 8, "sep": 9, "okt": 10, "oct": 10, "nov": 11, "des": 12, "dec": 12}
@@ -28,7 +28,13 @@ AIRLINES = {"garuda": "GA", "citilink": "QG", "lion": "JT", "batik": "ID", "aira
             "super air jet": "IU", "pelita": "IP", "sriwijaya": "SJ", "nam air": "IN", "wings": "IW"}
 FLIGHT_RE = re.compile(r"\b(GA|QG|JT|ID|QZ|IU|IP|SJ|IN|IW)\s?-?(\d{2,4})\b")
 NUM = r"(\d{1,3}(?:[.,] ?\d{3})+|\d{4,9})(?:[.,]00)?"  # OCR often inserts a space after the dot
-TOTAL_RE = re.compile(r"\b(GRAND\s*TOTAL|TOTAL|JUMLAH|TOTAL\s*BAYAR|AMOUNT\s*DUE)\b[^\d\n]*" + NUM, re.I)
+NUM_RE = re.compile(NUM)
+# Labelled amount lines. Order matters: "TOTAL PPN" / "TOTAL DISKON" are tax/discount lines, not the total.
+LABELS = [("subtotal", r"SUB\s*-?\s*TOTAL"), ("tax", r"(TOTAL\s+)?(PPN|PAJAK|TAX|PB1)"),
+          ("service", r"(SERVICE|SERVIS|SVC)(\s*CHARGE)?"), ("discount", r"(TOTAL\s+)?(DISKON|DISCOUNT|POTONGAN)"),
+          ("cash", r"TUNAI|CASH|BAYAR\s+TUNAI|DIBAYAR"), ("change", r"KEMBALI(AN)?|CHANGE"),
+          ("total", r"GRAND\s*TOTAL|TOTAL\s*BAYAR|TOTAL|JUMLAH|AMOUNT\s*DUE")]
+LABEL_RES = [(k, re.compile(r"^\s*(" + p + r")\b", re.I)) for k, p in LABELS]
 RP_RE = re.compile(r"\bRp\.?\s?" + NUM, re.I)
 
 
@@ -66,7 +72,8 @@ def to_int(num: str) -> int:
 
 def parse_date(text: str) -> tuple[str, int] | None:
     """Return (ISO date, char offset) of the first date in text."""
-    pats = [(r"\b(\d{1,2})[/\-.](\d{1,2})[/\-.](20\d\d)\b", "dmy"), (r"\b(20\d\d)-(\d{2})-(\d{2})\b", "ymd"),
+    pats = [(r"\b(\d{1,2})[/\-.](\d{1,2})[/\-.](20\d\d)\b", "dmy"),
+            (r"\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d\d)\b(?![/\-.]?\d)", "dmy2"), (r"\b(20\d\d)-(\d{2})-(\d{2})\b", "ymd"),
             (r"\b(\d{1,2})\s+([A-Za-z]{3})[a-z]*\.?\s+(20\d\d)\b", "dMy")]
     best = None
     for p, kind in pats:
@@ -75,6 +82,8 @@ def parse_date(text: str) -> tuple[str, int] | None:
             try:
                 if kind == "dmy":
                     d, mo, y = int(a), int(b), int(c)
+                elif kind == "dmy2":  # thermal receipts print 03/10/26
+                    d, mo, y = int(a), int(b), 2000 + int(c)
                 elif kind == "ymd":
                     y, mo, d = int(a), int(b), int(c)
                 else:
@@ -85,6 +94,53 @@ def parse_date(text: str) -> tuple[str, int] | None:
                 best = (f"{y:04d}-{mo:02d}-{d:02d}", m.start())
             break
     return best
+
+
+def amount_candidates(text: str) -> list[tuple[str, int, int]]:
+    """(label, value, char offset) for each labelled money line; the value is the line's last amount."""
+    out, pos = [], 0
+    for ln in text.splitlines(keepends=True):
+        nums = list(NUM_RE.finditer(ln))
+        if nums:
+            for label, rx in LABEL_RES:
+                if rx.search(ln):
+                    out.append((label, to_int(nums[-1].group(1)), pos + nums[-1].start()))
+                    break
+        pos += len(ln)
+    return out
+
+
+def select_amount(text: str) -> tuple[int, int, float] | None:
+    """Pick the receipt total by arithmetic consistency: (value, offset, confidence factor).
+
+    TUNAI/CASH, KEMBALI, DISKON and TOTAL PPN/DISKON lines are never the total. A TOTAL is consistent when
+    subtotal + tax + service - discount == total, or cash - change == total. Factor 1.0 = consistent,
+    0.9 = a lone TOTAL with nothing to check against, 0.4 = no consistent candidate (low confidence).
+    """
+    c = amount_candidates(text)
+    get = lambda k: [v for lab, v, _ in c if lab == k]  # noqa: E731
+    totals = [(v, off) for lab, v, off in c if lab == "total"]
+    sub, tax, svc, disc, cash, chg = (get(k) for k in ("subtotal", "tax", "service", "discount", "cash", "change"))
+    checks = []
+    if sub:
+        checks.append(sub[-1] + sum(tax) + sum(svc) - sum(disc))
+    if cash and chg:
+        checks.append(cash[-1] - chg[-1])
+    for v, off in reversed(totals):
+        if v in checks:
+            return v, off, 1.0
+    if totals:
+        v, off = totals[-1]
+        return v, off, (0.9 if not checks else 0.4)
+    if checks:  # no TOTAL label: derived from the arithmetic
+        off = next(o for lab, _, o in c if lab in ("subtotal", "cash"))
+        return checks[0], off, 0.7
+    excluded = {o for lab, _, o in c if lab in ("cash", "change", "discount", "tax")}
+    rps = [(to_int(x.group(1)), x.start(1)) for x in RP_RE.finditer(text) if x.start(1) not in excluded]
+    if rps:
+        v, off = max(rps)
+        return v, off, 0.5
+    return None
 
 
 def guess_type(t: str) -> str:
@@ -126,14 +182,11 @@ def parse_text(text: str, line_conf: dict[int, float] | None = None, source: str
         dr.fields["date"] = Field(found[0], conf_at(m.start()), source)
     elif (found := parse_date(text)):
         dr.fields["date"] = Field(found[0], conf_at(found[1], 0.8), source)
-    # amount: TOTAL/JUMLAH line wins, else the largest Rp amount (lower confidence)
-    totals = list(TOTAL_RE.finditer(text))
-    if totals:
-        t = totals[-1]
-        dr.fields["amount"] = Field(to_int(t.group(2)), conf_at(t.start()), source)
-    elif (rps := [(to_int(x.group(1)), x.start()) for x in RP_RE.finditer(text)]):
-        v, off = max(rps)
-        dr.fields["amount"] = Field(v, conf_at(off, 0.5), source)
+    # amount: labelled candidates checked by arithmetic (see select_amount)
+    if (am := select_amount(text)):
+        dr.fields["amount"] = Field(am[0], conf_at(am[1], am[2]), source)
+    if (pm := re.search(r"(passenger|penumpang|nama|name)\s*:?\s*([A-Z][A-Z .'-]{2,40})", text, re.I)):
+        dr.fields["passenger"] = Field(pm.group(2).strip().upper(), conf_at(pm.start()), source)
     # flight number, or airline name as a weak hint
     if (fm := FLIGHT_RE.search(text.upper())):
         dr.fields["flight_no"] = Field(f"{fm.group(1)} {fm.group(2)}", conf_at(fm.start()), source)
@@ -152,6 +205,11 @@ def parse_text(text: str, line_conf: dict[int, float] | None = None, source: str
                 dr.fields["nights"] = Field(n, min(conf_at(ci.start()), conf_at(co.start())), source)
         elif (nm := re.search(r"(\d{1,2})\s*(malam|nights?)", text, re.I)):
             dr.fields["nights"] = Field(int(nm.group(1)), conf_at(nm.start(), 0.7), source)
+    if dt == "other" and not any(dr.fields[k].value for k in ("date", "amount", "flight_no")):
+        # Text-like noise with no receipt field at all: treat as unreadable, not as a half-filled card.
+        dr.error = "No receipt fields found; fill in the card by hand."
+        dr.fields = {k: Field() for k in FIELDS}
+        dr.fields["doc_type"] = Field("other", 0.0, "none")
     return dr
 
 
@@ -165,11 +223,11 @@ class TesseractExtractor:
     def available(self) -> bool:
         return shutil.which("tesseract") is not None
 
-    def _ocr_image(self, img) -> tuple[str, dict[int, float]]:
+    def _ocr_image(self, img, psm: int = 3) -> tuple[str, dict[int, float]]:
         import pytesseract
         langs = set(pytesseract.get_languages(config=""))
         lang = "+".join(x for x in self.lang.split("+") if x in langs) or "eng"
-        data = pytesseract.image_to_data(img, lang=lang, output_type=pytesseract.Output.DICT)
+        data = pytesseract.image_to_data(img, lang=lang, config=f"--psm {psm}", output_type=pytesseract.Output.DICT)
         rows: dict[tuple, list] = {}
         for i, w in enumerate(data["text"]):
             if w.strip():
@@ -204,13 +262,20 @@ class TesseractExtractor:
                 img = img.convert("L")
                 if img.width < 1000:
                     img = img.resize((img.width * 2, img.height * 2))
-                text, conf = self._ocr_image(img)
-            return parse_text(text, conf, "ocr")
+                # psm 3 (auto layout) can split a label from its right-aligned amount; psm 6 (one block) keeps
+                # them on one line but suffers more on noisy photos. Parse both and keep the better-supported one.
+                drafts = [parse_text(*self._ocr_image(img, psm), "ocr") for psm in (3, 6)]
+            return max(drafts, key=_support)
         except Exception as ex:  # unreadable or OCR missing: empty card for manual input
             d = Draft()
             d.error = f"Could not read this file ({type(ex).__name__}); fill in the card by hand."
             d.fields["doc_type"] = Field("other", 0.0, "none")
             return d
+
+
+def _support(d: Draft) -> float:
+    """Sum of confidences of the filled fields: how much of the receipt the parse explains."""
+    return sum(f.confidence for f in d.fields.values() if f.value not in (None, ""))
 
 
 # --- Vision (optional) -------------------------------------------------------------
