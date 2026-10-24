@@ -1,0 +1,276 @@
+"""Pluggable document extraction for the drop-first upload flow.
+
+An extractor turns one uploaded file into draft fields, each with a value, a confidence (0-1) and a source.
+Default: Tesseract OCR plus heuristics for Indonesian receipts. Optional: a vision model behind an
+OpenAI-compatible API (set REIMBURSE_EXTRACTOR=vision, VISION_API_BASE, VISION_MODEL, VISION_API_KEY).
+Anything unreadable comes back as an empty draft for manual input. Nothing here decides money:
+the rule engine still computes every approved amount.
+"""
+
+from __future__ import annotations
+
+import base64
+import json
+import os
+import re
+import shutil
+import subprocess
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from typing import Protocol
+
+DOC_TYPES = ("hotel_receipt", "taxi_receipt", "meal_receipt", "flight_receipt", "boarding_pass", "other")
+FIELDS = ("doc_type", "date", "amount", "merchant", "flight_no", "nights")
+LOW_CONFIDENCE = 0.6
+MONTHS = {"jan": 1, "feb": 2, "mar": 3, "apr": 4, "mei": 5, "may": 5, "jun": 6, "jul": 7, "agu": 8, "agt": 8,
+          "aug": 8, "sep": 9, "okt": 10, "oct": 10, "nov": 11, "des": 12, "dec": 12}
+AIRLINES = {"garuda": "GA", "citilink": "QG", "lion": "JT", "batik": "ID", "airasia": "QZ", "nusa air": "QZ",
+            "super air jet": "IU", "pelita": "IP", "sriwijaya": "SJ", "nam air": "IN", "wings": "IW"}
+FLIGHT_RE = re.compile(r"\b(GA|QG|JT|ID|QZ|IU|IP|SJ|IN|IW)\s?-?(\d{2,4})\b")
+NUM = r"(\d{1,3}(?:[.,] ?\d{3})+|\d{4,9})(?:[.,]00)?"  # OCR often inserts a space after the dot
+TOTAL_RE = re.compile(r"\b(GRAND\s*TOTAL|TOTAL|JUMLAH|TOTAL\s*BAYAR|AMOUNT\s*DUE)\b[^\d\n]*" + NUM, re.I)
+RP_RE = re.compile(r"\bRp\.?\s?" + NUM, re.I)
+
+
+@dataclass
+class Field:
+    value: str | int | None = None
+    confidence: float = 0.0
+    source: str = "none"  # ocr | vision | pdf_text | self_declared | none
+
+    @property
+    def low(self) -> bool:
+        return self.value not in (None, "") and self.confidence < LOW_CONFIDENCE
+
+
+@dataclass
+class Draft:
+    fields: dict[str, Field] = field(default_factory=lambda: {k: Field() for k in FIELDS})
+    text: str = ""
+    error: str = ""
+
+    def to_json(self) -> dict:
+        return {"fields": {k: asdict(v) for k, v in self.fields.items()}, "text": self.text, "error": self.error}
+
+
+class Extractor(Protocol):
+    name: str
+
+    def extract(self, path: Path) -> Draft: ...
+
+
+# --- heuristics ----------------------------------------------------------------
+def to_int(num: str) -> int:
+    return int(re.sub(r"[.,\s]", "", num))
+
+
+def parse_date(text: str) -> tuple[str, int] | None:
+    """Return (ISO date, char offset) of the first date in text."""
+    pats = [(r"\b(\d{1,2})[/\-.](\d{1,2})[/\-.](20\d\d)\b", "dmy"), (r"\b(20\d\d)-(\d{2})-(\d{2})\b", "ymd"),
+            (r"\b(\d{1,2})\s+([A-Za-z]{3})[a-z]*\.?\s+(20\d\d)\b", "dMy")]
+    best = None
+    for p, kind in pats:
+        for m in re.finditer(p, text):
+            a, b, c = m.groups()
+            try:
+                if kind == "dmy":
+                    d, mo, y = int(a), int(b), int(c)
+                elif kind == "ymd":
+                    y, mo, d = int(a), int(b), int(c)
+                else:
+                    d, mo, y = int(a), MONTHS[b.lower()[:3]], int(c)
+            except KeyError:
+                continue
+            if 1 <= mo <= 12 and 1 <= d <= 31 and (best is None or m.start() < best[1]):
+                best = (f"{y:04d}-{mo:02d}-{d:02d}", m.start())
+            break
+    return best
+
+
+def guess_type(t: str) -> str:
+    t = t.lower()
+    if "boarding" in t:
+        return "boarding_pass"
+    if "e-ticket" in t or "eticket" in t or "booking ref" in t or ("fare" in t and FLIGHT_RE.search(t.upper())):
+        return "flight_receipt"
+    if any(k in t for k in ("taksi", "taxi", "argo", "taks!")):  # before hotel: taxi slips name hotels as pickup
+        return "taxi_receipt"
+    if any(k in t for k in ("check-out", "check out", "hotel", "malam", "room", "kamar")):
+        return "hotel_receipt"
+    if any(k in t for k in ("rumah makan", "restoran", "restaurant", "cafe", "warung", "nasi", "makan")):
+        return "meal_receipt"
+    return "other"
+
+
+def parse_text(text: str, line_conf: dict[int, float] | None = None, source: str = "ocr") -> Draft:
+    """Heuristic field parser for receipt text. line_conf maps line index -> OCR confidence 0-1."""
+    dr = Draft(text=text)
+    lines = text.splitlines()
+    lc = line_conf or {}
+
+    def conf_at(offset: int, factor: float = 1.0) -> float:
+        idx = text.count("\n", 0, offset)
+        return round(min(1.0, lc.get(idx, 0.95)) * factor, 2)
+
+    words = re.findall(r"[A-Za-z]{3,}", text)
+    if len(words) < 3:
+        dr.error = "No readable text found; fill in the card by hand."
+        dr.fields["doc_type"] = Field("other", 0.0, "none")
+        return dr
+    dt = guess_type(text)
+    dr.fields["doc_type"] = Field(dt, 0.9 if dt != "other" else 0.3, source)
+    # date: prefer the line after a check-in / tanggal / date / departure label
+    m = re.search(r"(check[\s-]?in|tanggal|tgl|tgt|date|departure)[^\n]*", text, re.I)
+    found = parse_date(m.group(0)) if m else None
+    if found:
+        dr.fields["date"] = Field(found[0], conf_at(m.start()), source)
+    elif (found := parse_date(text)):
+        dr.fields["date"] = Field(found[0], conf_at(found[1], 0.8), source)
+    # amount: TOTAL/JUMLAH line wins, else the largest Rp amount (lower confidence)
+    totals = list(TOTAL_RE.finditer(text))
+    if totals:
+        t = totals[-1]
+        dr.fields["amount"] = Field(to_int(t.group(2)), conf_at(t.start()), source)
+    elif (rps := [(to_int(x.group(1)), x.start()) for x in RP_RE.finditer(text)]):
+        v, off = max(rps)
+        dr.fields["amount"] = Field(v, conf_at(off, 0.5), source)
+    # flight number, or airline name as a weak hint
+    if (fm := FLIGHT_RE.search(text.upper())):
+        dr.fields["flight_no"] = Field(f"{fm.group(1)} {fm.group(2)}", conf_at(fm.start()), source)
+    # merchant: first non-empty line
+    first = next(((i, ln.strip()) for i, ln in enumerate(lines) if ln.strip()), None)
+    if first and dt != "boarding_pass":
+        dr.fields["merchant"] = Field(first[1], round(lc.get(first[0], 0.95) * 0.9, 2), source)
+    # hotel nights from check-in / check-out
+    if dt == "hotel_receipt":
+        ci = re.search(r"check[\s-]?in[^\n]*", text, re.I)
+        co = re.search(r"check[\s-]?out[^\n]*", text, re.I)
+        if ci and co and (a := parse_date(ci.group(0))) and (b := parse_date(co.group(0))):
+            from datetime import date
+            n = (date.fromisoformat(b[0]) - date.fromisoformat(a[0])).days
+            if 0 < n < 60:
+                dr.fields["nights"] = Field(n, min(conf_at(ci.start()), conf_at(co.start())), source)
+        elif (nm := re.search(r"(\d{1,2})\s*(malam|nights?)", text, re.I)):
+            dr.fields["nights"] = Field(int(nm.group(1)), conf_at(nm.start(), 0.7), source)
+    return dr
+
+
+# --- Tesseract ------------------------------------------------------------------
+class TesseractExtractor:
+    name = "ocr"
+
+    def __init__(self, lang: str | None = None):
+        self.lang = lang or os.environ.get("TESSERACT_LANG", "ind+eng")
+
+    def available(self) -> bool:
+        return shutil.which("tesseract") is not None
+
+    def _ocr_image(self, img) -> tuple[str, dict[int, float]]:
+        import pytesseract
+        langs = set(pytesseract.get_languages(config=""))
+        lang = "+".join(x for x in self.lang.split("+") if x in langs) or "eng"
+        data = pytesseract.image_to_data(img, lang=lang, output_type=pytesseract.Output.DICT)
+        rows: dict[tuple, list] = {}
+        for i, w in enumerate(data["text"]):
+            if w.strip():
+                rows.setdefault((data["block_num"][i], data["par_num"][i], data["line_num"][i]), []).append(
+                    (w, float(data["conf"][i])))
+        lines, conf = [], {}
+        for n, key in enumerate(sorted(rows)):
+            ws = rows[key]
+            lines.append(" ".join(w for w, _ in ws))
+            conf[n] = sum(c for _, c in ws) / len(ws) / 100
+        return "\n".join(lines), conf
+
+    def extract(self, path: Path) -> Draft:
+        try:
+            if path.suffix.lower() == ".pdf":
+                if shutil.which("pdftotext"):
+                    txt = subprocess.run(["pdftotext", "-layout", str(path), "-"], capture_output=True, text=True,
+                                         timeout=30).stdout
+                    if len(re.findall(r"[A-Za-z]{3,}", txt)) >= 3:
+                        return parse_text(txt, None, "pdf_text")
+                from pdf2image import convert_from_path
+                pages = convert_from_path(str(path), dpi=200, first_page=1, last_page=2)
+                parts = [self._ocr_image(p) for p in pages]
+                text, conf, off = "", {}, 0
+                for t, c in parts:
+                    conf.update({k + off: v for k, v in c.items()})
+                    off += t.count("\n") + 1
+                    text += t + "\n"
+                return parse_text(text, conf, "ocr")
+            from PIL import Image
+            with Image.open(path) as img:
+                img = img.convert("L")
+                if img.width < 1000:
+                    img = img.resize((img.width * 2, img.height * 2))
+                text, conf = self._ocr_image(img)
+            return parse_text(text, conf, "ocr")
+        except Exception as ex:  # unreadable or OCR missing: empty card for manual input
+            d = Draft()
+            d.error = f"Could not read this file ({type(ex).__name__}); fill in the card by hand."
+            d.fields["doc_type"] = Field("other", 0.0, "none")
+            return d
+
+
+# --- Vision (optional) -------------------------------------------------------------
+VISION_PROMPT = ("Extract fields from this Indonesian travel receipt or boarding pass. Reply with JSON only: "
+                 '{"doc_type": one of ' + json.dumps(list(DOC_TYPES)) + ', "date": "YYYY-MM-DD" (check-in date for '
+                 'hotels), "amount": whole Rupiah integer or null, "merchant": string or null, "flight_no": like '
+                 '"QZ 7520" or null, "nights": integer or null, "confidence": {field: 0-1}}')
+
+
+class VisionExtractor:
+    """OpenAI-compatible chat-completions vision call. Configured only through environment variables."""
+
+    name = "vision"
+
+    def __init__(self):
+        self.base = os.environ.get("VISION_API_BASE", "").rstrip("/")
+        self.model = os.environ.get("VISION_MODEL", "")
+        self.key = os.environ.get("VISION_API_KEY", "")
+
+    def available(self) -> bool:
+        return bool(self.base and self.model and self.key)
+
+    def extract(self, path: Path) -> Draft:
+        import urllib.request
+        try:
+            if path.suffix.lower() == ".pdf":
+                from pdf2image import convert_from_path
+                import io
+                buf = io.BytesIO()
+                convert_from_path(str(path), dpi=150, first_page=1, last_page=1)[0].save(buf, "PNG")
+                raw, mime = buf.getvalue(), "image/png"
+            else:
+                raw, mime = path.read_bytes(), "image/jpeg" if path.suffix.lower() in (".jpg", ".jpeg") else "image/png"
+            body = {"model": self.model, "temperature": 0, "messages": [{"role": "user", "content": [
+                {"type": "text", "text": VISION_PROMPT},
+                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{base64.b64encode(raw).decode()}"}}]}]}
+            req = urllib.request.Request(f"{self.base}/chat/completions", json.dumps(body).encode(),
+                                         {"Content-Type": "application/json", "Authorization": f"Bearer {self.key}"})
+            with urllib.request.urlopen(req, timeout=60) as r:
+                content = json.load(r)["choices"][0]["message"]["content"]
+            data = json.loads(re.search(r"\{.*\}", content, re.S).group(0))
+            conf = data.get("confidence") or {}
+            d = Draft(text=content)
+            for k in FIELDS:
+                v = data.get(k)
+                if v not in (None, ""):
+                    d.fields[k] = Field(v, float(conf.get(k, 0.8)), "vision")
+            if d.fields["doc_type"].value not in DOC_TYPES:
+                d.fields["doc_type"] = Field("other", 0.3, "vision")
+            return d
+        except Exception as ex:
+            d = Draft()
+            d.error = f"Vision extraction failed ({type(ex).__name__}); fill in the card by hand."
+            d.fields["doc_type"] = Field("other", 0.0, "none")
+            return d
+
+
+def get_extractor() -> Extractor:
+    if os.environ.get("REIMBURSE_EXTRACTOR", "ocr") == "vision":
+        v = VisionExtractor()
+        if v.available():
+            return v
+    return TesseractExtractor()

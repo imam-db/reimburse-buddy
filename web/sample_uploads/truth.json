@@ -1,0 +1,42 @@
+{
+  "hotel_majapahit_kencana.png": {
+    "doc_type": "hotel_receipt",
+    "date": "2026-10-02",
+    "amount": 2700000,
+    "merchant": "HOTEL MAJAPAHIT KENCANA",
+    "nights": 2
+  },
+  "taxi_kota_biru_0310.jpg": {
+    "doc_type": "taxi_receipt",
+    "date": "2026-10-03",
+    "amount": 230000,
+    "merchant": "TAKSI KOTA BIRU"
+  },
+  "boarding_pass_qz7520.png": {
+    "doc_type": "boarding_pass",
+    "date": "2026-10-02",
+    "flight_no": "QZ 7520"
+  },
+  "meal_sari_rasa_2010.png": {
+    "doc_type": "meal_receipt",
+    "date": "2026-10-20",
+    "amount": 185000,
+    "merchant": "RUMAH MAKAN SARI RASA"
+  },
+  "eticket_qz7520.pdf": {
+    "doc_type": "flight_receipt",
+    "date": "2026-10-02",
+    "amount": 1120000,
+    "flight_no": "QZ 7520",
+    "merchant": "E-TICKET RECEIPT"
+  },
+  "taxi_pelangi_blurry.jpg": {
+    "doc_type": "taxi_receipt",
+    "date": "2026-10-21",
+    "amount": 150000,
+    "merchant": "TAKSI PELANGI"
+  },
+  "unreadable_photo.jpg": {
+    "doc_type": "other"
+  }
+}

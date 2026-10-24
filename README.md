@@ -161,11 +161,20 @@ Not part of the judged demo. `web/` holds a small two-sided FastAPI app that imp
 `triage`). It needs no LLM: the reviewer investigates and the rule engine computes every amount. A LangGraph agent (the planned
 version B) will later plug in at `investigate()` and call the tools over MCP.
 
-- Employee portal (`/employee`): submit a claim, forward evidence to the reimburse@ mailbox (files are kept
-  locally in `web/uploads/` as synthetic attachments), see claim status and messages from finance.
+- Employee portal (`/employee`), drop-first: enter the trip, drop all receipts and boarding passes at once
+  (`/employee/new`), then check one draft card per item. Each card field shows where it came from: extracted
+  (`ocr`, `pdf_text` or `vision`, with a confidence; low confidence is highlighted) or `self_declared` (typed or
+  changed by the employee). Cards can be edited, merged, split or deleted, and files moved between them. One
+  submit creates the claim and forwards each file to the reimburse@ mailbox, linked to its item (files are kept
+  locally in `web/uploads/`). The claim page lists evidence per item and has an "Add file" button for gaps.
 - Finance admin (`/admin`): read-only triage, bulk approval only with an explicit confirmation, and a claim page
   with findings, gap codes, ignored evidence, mailbox search, calendar, memos, item decisions, a bilingual note
-  preview, and a status change that needs the reviewer's tick. "Reset demo data" restores the seed data.
+  preview, and a status change that needs the reviewer's tick. Each item shows provenance badges for its fields.
+  Evidence that extraction could not verify (an unreadable file, or a doc type or amount the file does not show)
+  is marked `needs_review` (`unreadable_file` / `self_declared_only`) and kept out of the rule engine until the
+  reviewer clicks "Accept evidence" or "Reject evidence" (logged). Until then the item shows "pending review",
+  its claim cannot be bulk-approved or moved past `on_hold`, and the employee sees "Menunggu verifikasi finance /
+  Awaiting finance review". "Reset demo data" restores the seed data.
 
 ```bash
 uv sync
@@ -173,5 +182,28 @@ uv run uvicorn --app-dir web reimburse_web.app:app --port 8000
 # open http://127.0.0.1:8000/admin
 ```
 
+#### File extraction
+
+Extraction is pluggable (`web/reimburse_web/extract.py`). It only drafts fields; the rule engine still decides
+every amount. The default reads files locally with Tesseract plus regex rules; PDFs use `pdftotext`, falling back
+to rasterising with `pdf2image`. An unreadable file becomes an empty card for manual input.
+
+```bash
+sudo apt-get install tesseract-ocr tesseract-ocr-ind poppler-utils   # Debian/Ubuntu
+brew install tesseract tesseract-lang poppler                       # macOS
+```
+
+An optional vision extractor calls any OpenAI-compatible chat completions API. It is off by default and the key
+is read from the environment only:
+
+```bash
+export REIMBURSE_EXTRACTOR=vision VISION_API_BASE=https://api.example.com/v1 VISION_MODEL=your-model
+export VISION_API_KEY=...   # never commit this
+```
+
+Synthetic sample uploads live in `web/sample_uploads/` (`make_samples.py` regenerates them with Pillow,
+`truth.json` holds the expected fields). `uv run python web/sample_uploads/measure_accuracy.py` reports field
+accuracy; the OCR extractor gets 25/26 fields right, and the one miss is flagged low confidence.
+
 Known limits before any public deploy: shared in-memory state, no auth, local uploads (basic 5 MB / type
-limits only), and evidence metadata typed by the employee rather than extracted from the file.
+limits only), and a self-declared field is only flagged, not verified.
