@@ -1,0 +1,46 @@
+[
+  {
+    "id": "CLM-2026-0101", "employee_id": "EMP-001", "status": "submitted", "submitted_at": "2026-10-16",
+    "purpose": "Client visit to PT Samudra Logistik (fictional)",
+    "trip": {"origin": "Jakarta", "destination": "Surabaya", "start_date": "2026-10-12", "end_date": "2026-10-14"},
+    "items": [
+      {"id": "IT-1", "category": "flight", "date": "2026-10-12", "description": "CGK-SUB flight GA 312", "amount": "1450000", "receipt": true, "boarding_pass": false},
+      {"id": "IT-2", "category": "hotel", "date": "2026-10-12", "description": "Hotel Tunjungan Raya, 2 nights", "amount": "1900000", "nights": 2, "receipt": true},
+      {"id": "IT-3", "category": "per_diem", "date": "2026-10-12", "description": "Per diem 3 days", "amount": "1350000", "days": 3, "receipt": false},
+      {"id": "IT-4", "category": "taxi", "date": "2026-10-13", "description": "Taxi to client office", "amount": "185000", "receipt": true}
+    ]
+  },
+  {
+    "id": "CLM-2026-0102", "employee_id": "EMP-002", "status": "submitted", "submitted_at": "2026-10-19",
+    "purpose": "Booth staff at Indonesia Retail Tech Expo 2026 (fictional)",
+    "trip": {"origin": "Makassar", "destination": "Jakarta", "start_date": "2026-10-14", "end_date": "2026-10-16"},
+    "items": [
+      {"id": "IT-1", "category": "flight", "date": "2026-10-14", "description": "UPG-CGK flight JT 771", "amount": "1650000", "receipt": true, "boarding_pass": true},
+      {"id": "IT-2", "category": "hotel", "date": "2026-10-14", "description": "Hotel Kemayoran Expo, 2 nights", "amount": "3300000", "nights": 2, "receipt": true},
+      {"id": "IT-3", "category": "per_diem", "date": "2026-10-14", "description": "Per diem 3 days", "amount": "1350000", "days": 3, "receipt": false}
+    ]
+  },
+  {
+    "id": "CLM-2026-0103", "employee_id": "EMP-002", "status": "submitted", "submitted_at": "2026-10-22",
+    "purpose": "Partner workshop in Medan (fictional)",
+    "trip": {"origin": "Makassar", "destination": "Medan", "start_date": "2026-10-20", "end_date": "2026-10-21"},
+    "items": [
+      {"id": "IT-1", "category": "hotel", "date": "2026-10-20", "description": "Hotel Deli Permai, 1 night", "amount": "1050000", "nights": 1, "receipt": true},
+      {"id": "IT-2", "category": "per_diem", "date": "2026-10-20", "description": "Per diem 2 days", "amount": "700000", "days": 2, "receipt": false}
+    ]
+  },
+  {
+    "id": "CLM-2026-0104", "employee_id": "EMP-003", "status": "submitted", "submitted_at": "2026-10-23",
+    "purpose": "Vendor onboarding workshop in Bali (fictional)",
+    "trip": {"origin": "Jakarta", "destination": "Denpasar", "start_date": "2026-10-19", "end_date": "2026-10-21"},
+    "items": [
+      {"id": "IT-1", "category": "flight", "date": "2026-10-19", "description": "CGK-DPS flight ID 6510", "amount": "1580000", "receipt": true, "boarding_pass": true},
+      {"id": "IT-2", "category": "hotel", "date": "2026-10-19", "description": "Hotel Sanur Asri, 2 nights", "amount": "2200000", "nights": 2, "receipt": true},
+      {"id": "IT-3", "category": "late_checkout", "date": "2026-10-21", "description": "Late check-out until 17:00", "amount": "450000", "receipt": true},
+      {"id": "IT-4", "category": "per_diem", "date": "2026-10-19", "description": "Per diem 3 days", "amount": "1350000", "days": 3, "receipt": false},
+      {"id": "IT-5", "category": "taxi", "date": "2026-10-20", "description": "Taxi to vendor site", "amount": "120000", "receipt": true},
+      {"id": "IT-6", "category": "taxi", "date": "2026-10-20", "description": "Taxi to vendor site", "amount": "120000", "receipt": true},
+      {"id": "IT-7", "category": "meal", "date": "2026-10-23", "description": "Dinner after returning", "amount": "210000", "receipt": true}
+    ]
+  }
+]

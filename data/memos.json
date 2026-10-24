@@ -1,0 +1,8 @@
+[
+  {"id": "MEMO-2026-041", "type": "hotel_cap_exception", "employee_ids": ["EMP-002"], "approved_by": "EMP-100", "signed": true, "date": "2026-10-09",
+   "city": "Jakarta", "valid_from": "2026-10-14", "valid_to": "2026-10-16", "approved_nightly_cap": "1700000",
+   "reason": "Indonesia Retail Tech Expo week: hotels within walking distance are fully booked at the standard cap."},
+  {"id": "MEMO-2026-038", "type": "hotel_cap_exception", "employee_ids": ["EMP-001"], "approved_by": "EMP-100", "signed": false, "date": "2026-09-30",
+   "city": "Surabaya", "valid_from": "2026-10-01", "valid_to": "2026-10-05", "approved_nightly_cap": "1400000",
+   "reason": "Draft only, never signed."}
+]

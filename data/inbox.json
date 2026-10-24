@@ -1,0 +1,11 @@
+[
+  {"id": "MSG-5001", "owner_id": "EMP-001", "from": "no-reply@garuda-airline.example", "date": "2026-10-11", "subject": "Your boarding pass GA 312 CGK-SUB 12 Oct 2026",
+   "body": "Passenger RINA WULANDARI. Flight GA 312, Jakarta (CGK) to Surabaya (SUB), 12 Oct 2026 07:40. Seat 23A.",
+   "attachments": [{"name": "boarding_pass_GA312.pdf", "type": "boarding_pass", "flight": "GA 312", "date": "2026-10-12", "passenger": "Rina Wulandari"}]},
+  {"id": "MSG-5002", "owner_id": "EMP-001", "from": "reservations@tunjungan-raya.example", "date": "2026-10-10", "subject": "Booking confirmation, 12-14 Oct",
+   "body": "Two nights, deluxe room, IDR 950,000 per night.", "attachments": []},
+  {"id": "MSG-5003", "owner_id": "EMP-002", "from": "dewi.anggraini@nusantara-niaga.example", "date": "2026-10-09", "subject": "Re: Expo hotel rates",
+   "body": "Hotels near the expo are fully booked at cap. See approval memo MEMO-2026-041.", "attachments": []},
+  {"id": "MSG-5004", "owner_id": "EMP-003", "from": "frontdesk@sanur-asri.example", "date": "2026-10-21", "subject": "Late check-out confirmation",
+   "body": "Late check-out until 17:00 on 21 Oct confirmed. Fee IDR 450,000.", "attachments": [{"name": "late_checkout_invoice.pdf", "type": "receipt"}]}
+]

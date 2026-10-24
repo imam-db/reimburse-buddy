@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "reimburse-buddy": {
+      "command": "uv",
+      "args": ["--directory", "/ABSOLUTE/PATH/TO/reimburse-buddy", "run", "reimburse-buddy-mcp"],
+      "env": {}
+    }
+  }
+}

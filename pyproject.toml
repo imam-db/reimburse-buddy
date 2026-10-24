@@ -1,0 +1,25 @@
+[project]
+name = "reimburse-buddy"
+version = "0.1.0"
+description = "Business-travel expense-claim auditing agent for Tencent WorkBuddy: a local MCP server with mock office tools and a deterministic rule engine."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = ["mcp>=1.2,<2"]
+
+[project.scripts]
+reimburse-buddy-mcp = "reimburse_buddy.server:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/reimburse_buddy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

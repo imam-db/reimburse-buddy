@@ -1,0 +1,106 @@
+# reimburse-buddy
+
+An office agent that audits business-travel expense claims, built for the
+**Tencent Cloud Hackathon 2026 (Office Agent track)** on **Tencent WorkBuddy**.
+
+The agent reads a claim, plans its review, spots gaps, goes looking for evidence
+(inbox, calendar, approval memos), revises its plan on screen, asks a human only when
+it has to, and drafts a decision. Every Rupiah figure comes from a deterministic Python
+rule engine, never from the language model.
+
+> All data in this repository is synthetic. Company, people, hotels and emails are fictional.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    U[Reviewer] <-->|chat, questions| WB
+    subgraph WB[Tencent WorkBuddy]
+        S[Skill: claim-auditor<br/>plan, revise, ask human]
+    end
+    WB <-->|MCP over stdio| M
+    subgraph M[reimburse-buddy MCP server - Python]
+        T[Mock office tools<br/>get_claim, list_claims, get_policy<br/>search_inbox, get_calendar, find_approval_memo]
+        R[Rule engine - Decimal<br/>check_claim, draft_decision]
+    end
+    T --> D[(data/*.json<br/>synthetic)]
+    R --> D
+```
+
+- **WorkBuddy** does the reasoning: planning, tool choice, plan revision and the human-in-the-loop.
+- **Python** does what must be exact: data access and policy arithmetic.
+
+## Tools
+
+| Tool | Purpose |
+|---|---|
+| `list_claims(status)` | Claims waiting for review |
+| `get_claim(claim_id)` | Claim, trip, items and employee |
+| `get_policy()` | Travel policy: city tiers, hotel caps, per diem, receipt rules |
+| `search_inbox(employee_id, query)` | Mock mailbox search (boarding passes, receipts) |
+| `get_calendar(employee_id, date_from, date_to)` | Mock calendar |
+| `find_approval_memo(employee_id, city, date)` | Hotel-cap exception memos |
+| `check_claim(claim_id, evidence_ids, human_decisions)` | Deterministic rule check |
+| `draft_decision(...)` | Reviewer-ready decision note |
+
+Rules in `check_claim`: hotel nightly cap by city tier (or a signed memo), per diem per trip day,
+receipt and boarding pass required, expense dates within the trip, duplicate detection,
+and late check-out justified by a business meeting (capped at 50% of the nightly cap).
+
+## Demo scenarios
+
+| # | Claim | What happens |
+|---|---|---|
+| 1 | `CLM-2026-0101` | Flight has no boarding pass. Agent searches the inbox, finds `MSG-5001`, claim approved. |
+| 2a | `CLM-2026-0102` | Jakarta hotel over cap. Agent finds signed memo `MEMO-2026-041`, approved. |
+| 2b | `CLM-2026-0103` | Medan hotel over cap, no memo. Agent asks the reviewer; capped amount approved. |
+| 3 | `CLM-2026-0104` | Late check-out fee. Calendar shows a contract signing until 15:30, so the fee is justified. A duplicate taxi and a post-trip dinner are rejected. |
+
+Run them without WorkBuddy:
+
+```bash
+uv run python -m reimburse_buddy.demo boarding-pass   # or hotel-memo, hotel-ask, late-checkout, all
+```
+
+## Setup
+
+Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
+
+```bash
+git clone https://github.com/imam-db/reimburse-buddy.git
+cd reimburse-buddy
+uv sync
+uv run pytest            # rule tests + a real MCP stdio round-trip
+uv run reimburse-buddy-mcp   # starts the server on stdio (WorkBuddy normally does this)
+```
+
+## Plug into WorkBuddy
+
+1. Copy `.workbuddy/mcp.json` into your project's `.workbuddy/` folder (or merge it into
+   `~/.workbuddy/mcp.json`) and replace `/ABSOLUTE/PATH/TO/reimburse-buddy` with your clone path.
+   On Windows use a path like `C:\\Users\\you\\reimburse-buddy`.
+2. Restart WorkBuddy and confirm the `reimburse-buddy` server shows its 8 tools.
+3. Add the skill in `skills/claim-auditor/SKILL.md` to WorkBuddy's skills.
+4. Try: *"Review claim CLM-2026-0101."*
+
+To point the server at another dataset, set `REIMBURSE_BUDDY_DATA=/path/to/data` in the `env` block.
+
+## Project layout
+
+```
+src/reimburse_buddy/
+  server.py      MCP server (FastMCP, stdio)
+  rules.py       deterministic rule engine
+  decision.py    decision note renderer
+  data_store.py  JSON data access + mock tools
+  models.py      result types, Decimal helpers
+  demo.py        scripted scenarios
+data/            synthetic employees, policy, claims, inbox, calendar, memos
+skills/claim-auditor/SKILL.md
+.workbuddy/mcp.json
+tests/
+```
+
+## License
+
+MIT
