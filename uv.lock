@@ -1336,14 +1336,12 @@ dependencies = [
 dev = [
     { name = "fastapi" },
     { name = "httpx" },
-    { name = "onnxruntime" },
     { name = "pdf2image" },
     { name = "pillow" },
     { name = "pytesseract" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "python-multipart" },
-    { name = "rapidocr" },
     { name = "uvicorn" },
 ]
 ocr = [
@@ -1368,14 +1366,12 @@ requires-dist = [{ name = "mcp", specifier = ">=1.2,<2" }]
 dev = [
     { name = "fastapi", specifier = ">=0.110" },
     { name = "httpx", specifier = ">=0.27" },
-    { name = "onnxruntime", specifier = ">=1.18" },
     { name = "pdf2image", specifier = ">=1.17" },
     { name = "pillow", specifier = ">=10" },
     { name = "pytesseract", specifier = ">=0.3.10" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-asyncio", specifier = ">=0.23" },
     { name = "python-multipart", specifier = ">=0.0.9" },
-    { name = "rapidocr", specifier = ">=3.4" },
     { name = "uvicorn", specifier = ">=0.29" },
 ]
 ocr = [
