@@ -4,7 +4,7 @@ An office agent that audits business-travel expense claims, built for the
 **Tencent Cloud Hackathon 2026 (Office Agent track)** on **Tencent WorkBuddy**.
 
 The agent reads a claim, plans its review, spots gaps, goes looking for evidence
-(inbox, calendar, approval memos), revises its plan on screen, asks a human only when
+(shared reimburse@ mailbox, calendar, approval memos), revises its plan on screen, asks a human only when
 it has to, and drafts a decision. Every Rupiah figure comes from a deterministic Python
 rule engine, never from the language model.
 
@@ -20,7 +20,7 @@ flowchart LR
     end
     WB <-->|MCP over stdio| M
     subgraph M[reimburse-buddy MCP server - Python]
-        T[Mock office tools<br/>get_claim, list_claims, get_policy<br/>search_inbox, get_calendar, find_approval_memo]
+        T[Mock office tools<br/>get_claim, list_claims, get_policy<br/>search_reimburse_mailbox, get_calendar, find_approval_memo]
         R[Rule engine - Decimal<br/>check_claim, draft_decision]
     end
     T --> D[(data/*.json<br/>synthetic)]
@@ -37,7 +37,8 @@ flowchart LR
 | `list_claims(status)` | Claims waiting for review |
 | `get_claim(claim_id)` | Claim, trip, items and employee |
 | `get_policy()` | Travel policy: city tiers, hotel caps, per diem, receipt rules |
-| `search_inbox(employee_id, query)` | Mock mailbox search (boarding passes, receipts) |
+| `search_reimburse_mailbox(employee_id, query)` | Search the shared reimburse@ mailbox that employees forward evidence to (boarding passes, receipts, schedule changes). Personal inboxes are never read. |
+| `approve_cleared_batch(batch_id, claim_ids, reviewer_confirmed)` | (Mock write) Bulk-approve the claims triage cleared, only with explicit reviewer confirmation and the exact cleared list |
 | `get_calendar(employee_id, date_from, date_to)` | Mock calendar |
 | `find_approval_memo(employee_id, city, date)` | Hotel-cap exception memos |
 | `check_claim(claim_id, evidence_ids, human_decisions)` | Deterministic rule check |
@@ -50,14 +51,14 @@ flowchart LR
 | `reset_demo()` | Restore all in-memory state before a new take (replies, outbox, approvals, statuses) |
 
 Write tools are mocks: state lives in memory for one server process. `send_message` is a
-closed loop: scripted replies in `data/replies.json` land in the employee's mailbox right away,
-so the agent can `search_inbox` and pass the reply's ID to `check_claim`.
+closed loop: scripted replies in `data/replies.json` are the employee's answer and land in the reimburse@ mailbox right away,
+so the agent can `search_reimburse_mailbox` and pass the reply's ID to `check_claim`.
 
 Rules in `check_claim`:
 
 - hotel nightly cap by city tier (or a signed memo), and hotel nights inside the trip
 - per diem per trip day
-- receipt required; a receipt found in the inbox counts
+- receipt required; a receipt forwarded to the reimburse mailbox counts
 - boarding pass must match flight number, date and passenger name
 - expense dates within the trip
 - duplicates keyed on receipt number (no distinct receipt numbers means `duplicate_suspected`, not auto-reject)
@@ -72,7 +73,7 @@ Unresolved problems come back as **gap codes** (`receipt_missing`, `boarding_pas
 `ignored_evidence` lists IDs that did not count and why (`unknown_id`, `belongs_to_other_employee`, `memo_unsigned`,
 `no_matching_item`). Wrong argument shapes return an error with a correct example, so the model can retry.
 
-`search_inbox` is a ranked OR search (case-insensitive, `QZ7520` = `QZ 7520`, identifiers weigh more) that
+`search_reimburse_mailbox` is a ranked OR search (case-insensitive, `QZ7520` = `QZ 7520`, identifiers weigh more) that
 returns the top 5 summaries. Scripted replies react to English and Indonesian requests (receipt, struk,
 kuitansi, nota, bukti, taksi). The decision note's Indonesian section is fully localised and lists ignored
 evidence as an audit trail.
@@ -83,7 +84,7 @@ evidence as an audit trail.
 |---|---|---|
 | Triage | batch `2026-W43` | `triage_claims` checks 10 claims: 7 clean ones are auto-cleared, 3 exceptions are investigated. Time-saved estimate: ~105 min (15 min per auto-cleared claim, a stated synthetic assumption). |
 | Hero | `CLM-2026-0110` | Four problems in one claim. (a) Searching "boarding pass" only finds another trip; the airline email says "Check-in successful: QZ 7520", so the agent retries with the flight number. (b) The only hotel memo, `MEMO-2026-038`, is **unsigned**, so `check_claim` ignores it (`memo_unsigned`) and the agent asks the reviewer. (c) The calendar says the meeting ended 11:30, but an email moved it to 13:00-15:00; together they justify the 16:30 check-out. (d) The taxi receipt is missing; the agent emails Rina and her reply carries the receipt. |
-| 1 | `CLM-2026-0101` | Flight has no boarding pass. Agent searches the inbox, finds `MSG-5001`, claim approved. |
+| 1 | `CLM-2026-0101` | Flight has no boarding pass. Agent searches the reimburse mailbox, finds `MSG-5001`, claim approved. |
 | 2a | `CLM-2026-0102` | Jakarta hotel over cap. Agent finds signed memo `MEMO-2026-041`, approved. |
 | 2b | `CLM-2026-0103` | Medan hotel over cap, no memo. Agent asks the reviewer; capped amount approved. |
 | 3 | `CLM-2026-0104` | Late check-out fee. Calendar shows a contract signing until 15:30, so the fee is justified. A post-trip dinner is rejected and a suspected duplicate taxi goes to the reviewer. |
@@ -130,7 +131,7 @@ src/reimburse_buddy/
   models.py      result types, Decimal helpers
   triage.py      batch triage
   demo.py        scripted scenarios
-data/            synthetic employees, policy, claims, inbox, calendar, memos
+data/            synthetic employees, policy, claims, reimburse mailbox (inbox.json), calendar, memos
 skills/claim-auditor/SKILL.md
 .workbuddy/mcp.json
 tests/
@@ -139,3 +140,13 @@ tests/
 ## License
 
 MIT
+
+## Human in the loop
+
+The agent proposes, the reviewer confirms. `triage_claims` is read-only; cleared claims change status only
+through `approve_cleared_batch(..., reviewer_confirmed=true)` with the exact cleared list. Final status
+changes, rejections, above-cap approvals, escalations and decision notices always wait for the reviewer.
+Gathering evidence and asking an employee for a missing document happen automatically.
+
+In a real deployment the evidence source is a dedicated reimburse@ mailbox that employees forward
+documents to, plus connectors for calendar, HR and ERP. The mock MCP tools here stand in for those.

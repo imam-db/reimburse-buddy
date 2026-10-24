@@ -28,7 +28,9 @@
           "item_id": "IT-6",
           "receipt_no": "TX-90022"
         }
-      ]
+      ],
+      "mailbox": "reimburse@nusantara-niaga.example",
+      "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
     }
   },
   {
@@ -60,7 +62,9 @@
           "item_id": "IT-5",
           "receipt_no": "TX-30577"
         }
-      ]
+      ],
+      "mailbox": "reimburse@nusantara-niaga.example",
+      "forwarded_by": "rina.wulandari@nusantara-niaga.example"
     }
   }
 ]

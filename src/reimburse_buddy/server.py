@@ -8,6 +8,7 @@ from .data_store import DataStore
 from .decision import draft_decision as _draft
 from .models import to_jsonable
 from .rules import check_claim as _check
+from .triage import approve_cleared_batch as _approve_batch
 from .triage import triage_claims as _triage
 
 mcp = FastMCP("reimburse-buddy")
@@ -39,11 +40,13 @@ def get_policy() -> dict:
 
 
 @mcp.tool()
-def search_inbox(employee_id: str, query: str = "") -> list[dict]:
-    """Search an employee's mailbox (mail to or from them). Ranked OR search over subject, body,
+def search_reimburse_mailbox(employee_id: str, query: str = "") -> list[dict]:
+    """Search the shared reimburse@ mailbox that employees forward evidence to (boarding passes,
+    receipts, schedule changes), limited to one employee's messages. Personal inboxes are never
+    accessible. Ranked OR search over subject, body,
     sender and attachment names; returns the top 5 as summaries (id, subject, snippet, attachments).
     Pass promising IDs to check_claim; it reports IDs that match no item as no_matching_item."""
-    return store.search_inbox(employee_id, query)
+    return store.search_reimburse_mailbox(employee_id, query)
 
 
 @mcp.tool()
@@ -64,7 +67,7 @@ def check_claim(claim_id: str, evidence_ids: list[str] | None = None,
                 human_decisions: dict[str, str] | None = None) -> dict:
     """Run the deterministic policy rules on a claim. ALWAYS use this for any money figure.
 
-    evidence_ids: IDs you found (inbox MSG-..., calendar EVT-..., memo MEMO-...).
+    evidence_ids: IDs you found (mailbox MSG-..., calendar EVT-..., memo MEMO-...).
     human_decisions: {item_id: approve_full | approve_capped | reject}; works for any item category.
     Items with status needs_evidence list gap codes (e.g. boarding_pass_missing, hotel_over_cap,
     late_checkout_unjustified, duplicate_suspected). `ignored_evidence` explains IDs that did not count."""
@@ -74,8 +77,17 @@ def check_claim(claim_id: str, evidence_ids: list[str] | None = None,
 @mcp.tool()
 def triage_claims(batch: str = "") -> dict:
     """Check every submitted claim in a batch (e.g. "2026-W43"). Returns auto-cleared claims,
-    exceptions with their gap codes, and a time-saved estimate. Investigate only the exceptions."""
+    exceptions with their gap codes, and a time-saved estimate. Read-only: it never changes a status.
+    Propose the cleared list to the reviewer, then call approve_cleared_batch after they confirm."""
     return _triage(store, batch)
+
+
+@mcp.tool()
+def approve_cleared_batch(batch_id: str, claim_ids: list[str], reviewer_confirmed: bool = False) -> dict:
+    """(Mock write) Mark auto-cleared claims as approved in one step. Only works when the reviewer
+    explicitly confirmed (reviewer_confirmed=true) and claim_ids exactly equal the claims that
+    triage_claims(batch_id) currently clears. Otherwise returns an error and changes nothing."""
+    return _approve_batch(store, batch_id, claim_ids, reviewer_confirmed)
 
 
 @mcp.tool()
@@ -90,7 +102,7 @@ def draft_decision(claim_id: str, evidence_ids: list[str] | None = None,
 @mcp.tool()
 def send_message(to: str, body: str, subject: str = "", claim_id: str = "") -> dict:
     """(Mock) Email an employee, e.g. to ask for a missing receipt. Goes to the outbox.
-    Scripted replies arrive in that employee's mailbox; check with search_inbox."""
+    The employee's scripted reply arrives in the reimburse@ mailbox; check with search_reimburse_mailbox."""
     return store.send_message(to, body, subject, claim_id)
 
 
@@ -117,7 +129,7 @@ def get_outbox() -> dict:
 def reset_demo() -> dict:
     """Restore all demo state: removes delivered replies, clears outbox, approval requests and status changes."""
     store.reset()
-    return {"status": "reset", "claims": len(store.claims), "inbox_messages": len(store.inbox)}
+    return {"status": "reset", "claims": len(store.claims), "mailbox_messages": len(store.inbox)}
 
 
 def main() -> None:
