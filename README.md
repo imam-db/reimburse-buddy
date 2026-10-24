@@ -170,8 +170,13 @@ version B) will later plug in at `investigate()` and call the tools over MCP.
 - Finance admin (`/admin`): read-only triage, bulk approval only with an explicit confirmation, and a claim page
   with findings, gap codes, ignored evidence, mailbox search, calendar, memos, item decisions, a bilingual note
   preview, and a status change that needs the reviewer's tick. Each item shows provenance badges for its fields.
-  Evidence that extraction could not verify (an unreadable file, or a doc type or amount the file does not show)
-  is marked `needs_review` (`unreadable_file` / `self_declared_only`) and kept out of the rule engine until the
+  Each uploaded file is cross-checked against its item; any failed rule marks it `needs_review` and keeps it
+  out of the rule engine. Rules: `unreadable_file`, `self_declared_only` (the file does not show the doc type or
+  amount), `mismatch_with_file` (item amount, date or flight number differs from the file),
+  `file_date_outside_trip`, `doc_type_mismatch`, `implausible_amount` (per-category caps, override with
+  `REIMBURSE_PLAUSIBLE_MAX`), `boarding_pass_mismatch` (passenger or flight on the pass) and `duplicate_file`
+  (same file hash on another item or claim). Extraction confidence is only a display hint. Boarding pass
+  metadata is taken from the file, never from the item. The item stays out of the engine until the
   reviewer clicks "Accept evidence" or "Reject evidence" (logged). Until then the item shows "pending review",
   its claim cannot be bulk-approved or moved past `on_hold`, and the employee sees "Menunggu verifikasi finance /
   Awaiting finance review". "Reset demo data" restores the seed data.
@@ -186,7 +191,11 @@ uv run uvicorn --app-dir web reimburse_web.app:app --port 8000
 
 Extraction is pluggable (`web/reimburse_web/extract.py`). It only drafts fields; the rule engine still decides
 every amount. The default reads files locally with Tesseract plus regex rules; PDFs use `pdftotext`, falling back
-to rasterising with `pdf2image`. An unreadable file becomes an empty card for manual input.
+to rasterising with `pdf2image`. Photos are read with two page layouts and the better-supported parse wins.
+The amount is chosen from labelled lines (SUBTOTAL, PPN, SERVICE, DISKON, TOTAL, TUNAI, KEMBALI): cash, change,
+discount and tax lines are never the total, and a TOTAL that matches subtotal + tax + service - discount or
+cash - change is preferred; no consistent TOTAL means low confidence. Dates with a 2-digit year (03/10/26) are
+read. An unreadable file becomes an empty card for manual input. Only PDF, PNG and JPEG are accepted.
 
 ```bash
 sudo apt-get install tesseract-ocr tesseract-ocr-ind poppler-utils   # Debian/Ubuntu
@@ -202,8 +211,14 @@ export VISION_API_KEY=...   # never commit this
 ```
 
 Synthetic sample uploads live in `web/sample_uploads/` (`make_samples.py` regenerates them with Pillow,
-`truth.json` holds the expected fields). `uv run python web/sample_uploads/measure_accuracy.py` reports field
-accuracy; the OCR extractor gets 25/26 fields right, and the one miss is flagged low confidence.
+`truth.json` holds the expected fields). `web/sample_uploads/heldout/` is a separate set of tricky layouts
+(TOTAL (3 item), cash larger than the total, 2-digit year, TOTAL DISKON last) not used to tune the parser.
+`uv run python web/sample_uploads/measure_accuracy.py` reports both: 25/26 fields on the tuning set (the miss is
+flagged low confidence) and 12/12 on the held-out set. Both sets are synthetic and small.
 
 Known limits before any public deploy: shared in-memory state, no auth, local uploads (basic 5 MB / type
 limits only), and a self-declared field is only flagged, not verified.
+
+Known limitation: the cross-checks compare the item with what OCR read from the same file, so a convincingly
+forged or edited image still passes; OCR heuristics are tuned on synthetic receipts and need real, anonymised
+receipts (and a vision fallback) before production use.
