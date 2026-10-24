@@ -28,28 +28,15 @@ SKILL_PATH = Path(__file__).resolve().parents[2] / "skills" / "claim-auditor" / 
 READ_ONLY_TOOLS = frozenset({
     "list_claims", "get_claim", "get_policy", "search_reimburse_mailbox", "get_calendar",
     "find_approval_memo", "check_claim", "triage_claims", "draft_decision", "get_outbox",
+    # fixed-template evidence ask, owner-only, idempotent (server builds the text; see
+    # src/reimburse_buddy/evidence_request.py), so it needs no reviewer.
+    "request_missing_evidence",
 })
 # Never offered to the agent at all: wipes outbox, statuses and replies.
 HIDDEN_TOOLS = frozenset({"reset_demo"})
 
-# send_message may skip approval only as a plain evidence request: to the claim's owner, tied to a
-# claim, and with no money in it (no "Rp", no number of 4+ digits). Structural, not word matching.
-# Permanent fix (follow-up): a server tool request_missing_evidence(claim_id, item_id, gap_code)
-# that builds the text itself and can only address the claim owner.
-
-
-def _digits_run(text: str) -> bool:
-    # 4+ digits, also when written with thousands separators (2.400.000, 6,590)
-    return any(len(re.sub(r"[.,]", "", m)) >= 4 for m in re.findall(r"\d[\d.,]*\d|\d", text))
-
-
-def send_is_safe(args: dict[str, Any], owner: str | None) -> bool:
-    claim_id = str(args.get("claim_id") or "").strip()
-    to = str(args.get("to") or "").strip()
-    text = f"{args.get('subject', '')} {args.get('body', '')}"
-    if not claim_id or not owner or to != owner:
-        return False
-    return "rp" not in text.lower() and not _digits_run(text)
+# send_message carries free text the model wrote, so it is always gated (it is not in
+# READ_ONLY_TOOLS). Evidence requests go through request_missing_evidence instead.
 
 
 def load_system_prompt(path: Path = SKILL_PATH) -> str:
@@ -57,13 +44,9 @@ def load_system_prompt(path: Path = SKILL_PATH) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def needs_confirmation(name: str, args: dict[str, Any], owner: str | None = None) -> bool:
-    """owner: employee_id of args['claim_id'] (looked up by the graph); None = unknown -> gate."""
-    if name in READ_ONLY_TOOLS:
-        return False
-    if name == "send_message":
-        return not send_is_safe(args, owner)
-    return True
+def needs_confirmation(name: str, args: dict[str, Any] | None = None) -> bool:
+    """Deny by default: everything outside the allowlist, including every send_message."""
+    return name not in READ_ONLY_TOOLS
 
 
 MAX_GATED_CALLS = 10  # per run; past this, gated calls are declined without asking (approval fatigue)
@@ -90,19 +73,10 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
     by_name = {t.name: t for t in tools}
     bound = model.bind_tools(tools)
 
-    async def claim_owner(claim_id: str) -> str | None:
-        if not claim_id or "get_claim" not in by_name:
-            return None
-        try:
-            data = json.loads(tool_text(await by_name["get_claim"].ainvoke({"claim_id": claim_id})))
-            return data.get("employee_id") if isinstance(data, dict) else None
-        except Exception:
-            return None
-
     async def agent(state: State):
         return {"messages": [await bound.ainvoke([system, *state["messages"]])]}
 
-    async def gate(state: State):
+    def gate(state: State):
         last = state["messages"][-1]
         declined: dict[str, str] = {}
         count = state.get("gated_count", 0)
@@ -110,8 +84,7 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         for call in last.tool_calls:
             if call["name"] not in by_name:
                 continue  # unknown or hidden tool: run_tools returns an error, no prompt for the reviewer
-            owner = await claim_owner(str(call["args"].get("claim_id") or "")) if call["name"] == "send_message" else None
-            if not needs_confirmation(call["name"], call["args"], owner):
+            if not needs_confirmation(call["name"], call["args"]):
                 continue
             sig = call_signature(call)
             if sig in sigs:
