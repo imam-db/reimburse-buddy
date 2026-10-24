@@ -351,7 +351,7 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
 {f'<h3>Evidence review log</h3><ul>{log_rows}</ul>' if log_rows else ''}{f'<h3>Ignored evidence</h3><ul>{ignored}</ul>' if ignored else ''}{f'<h3>Warnings</h3><ul>{warns}</ul>' if warns else ''}</div>
 <div class="box"><h2>Investigate</h2>
 <form method=post action="/admin/claims/{e(cid)}/investigate"><button>Investigate with agent</button>
-<span class="note">Runs the LangGraph agent on this claim. It pauses for your approval before any write.</span></form>
+<span class="note">Runs the LangGraph agent on this claim. It pauses for your approval before any write or decision message.</span></form>
 <p class="note">Or investigate by hand:</p>
 <h3>Search the reimburse mailbox</h3><form method=get><input name=q value="{e(q)}" size=40 placeholder="boarding pass QZ 7520"><button>Search</button></form>
 {f'<table><tr><th>ID</th><th>Date</th><th>Subject</th><th>Attachments</th><th></th></tr>{hit_rows}</table>' if hits else ''}
@@ -492,6 +492,8 @@ def investigation_page(rid: str):
             tag = " <span class='tag bad'>declined</span>" if x.get("declined") else ""
             rows += (f"<tr class=step><td>{x['n']}</td><td><code>{e(x['tool'])}</code>{tag}</td>"
                      f"<td><code>{e(x['args_summary'])}</code></td><td>{e(x['result_summary'])}</td></tr>")
+        elif x["type"] == "auto_declined":
+            rows += "<tr><td></td><td colspan=3 class=note>No answer in time: auto-declined</td></tr>"
         elif x["type"] == "decision":
             rows += (f"<tr><td></td><td colspan=3 class=note>Reviewer {'approved' if x['approved'] else 'declined'} "
                      f"<code>{e(x['tool'])}</code></td></tr>")
@@ -500,9 +502,9 @@ def investigation_page(rid: str):
     if pend:
         pending_html = f"""<div class="box" id=pending><h2>Pending write: awaiting your approval</h2>
 <p><code>{e(pend['tool'])}</code></p><pre>{e(json.dumps(pend['args'], ensure_ascii=False, indent=2))}</pre>
-<p class=note>Nothing is written until you click Approve.</p>
-<form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=approved value=true><button>Approve</button></form>
-<form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=approved value=false>
+<p class=note>This call runs only if you click Approve. Read-only lookups, and a plain evidence request to the claim's owner (no amounts), run without asking; every other write or message waits here. Unanswered approvals are declined automatically.</p>
+<form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=tool_call_id value="{e(pend['tool_call_id'])}"><input type=hidden name=approved value=true><button>Approve</button></form>
+<form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=tool_call_id value="{e(pend['tool_call_id'])}"><input type=hidden name=approved value=false>
 <input name=reason size=40 placeholder="Reason (optional)"><button>Decline</button></form></div>"""
     final = next((x for x in evs if x["type"] == "final"), None)
     err = next((x for x in evs if x["type"] == "error"), None)
@@ -514,7 +516,14 @@ def investigation_page(rid: str):
                 f"<p class=note>Tokens: {t.get('input', 0)} in / {t.get('output', 0)} out. Amounts come from tool results; verify against the rule engine.</p></div>")
     if err:
         msg = NO_KEY_MESSAGE if err.get("code") == "no_key" else err.get("message", "")
-        tail += f"<div class=box id=error><p class='tag bad'>{e(msg)}</p></div>"
+        tail += f"<div class=box id=error><p class='tag bad'>{e(msg)}</p>"
+        log = run.stderr_tail(20)
+        if log and err.get("code") not in ("no_key", "cancelled"):
+            tail += f"<details id=stderr><summary>Last log lines (redacted)</summary><pre>{e(log)}</pre></details>"
+        tail += "</div>"
+    if not (final or err):
+        tail += (f"<form method=post action='/admin/investigations/{e(rid)}/cancel' id=cancel>"
+                 "<button>Cancel run</button></form>")
     refresh = "" if (final or err or pend) else '<meta http-equiv="refresh" content="2">'
     body = f"""{refresh}<p><a href="/admin/claims/{e(run.claim_id)}">&larr; Claim {e(run.claim_id)}</a></p>
 <div class="box"><h2>Agent investigation: {e(run.claim_id)}</h2>
@@ -526,7 +535,14 @@ def investigation_page(rid: str):
 
 
 @app.post("/admin/investigations/{rid}/resume")
-def investigation_resume(rid: str, approved: str = Form("false"), reason: str = Form("")):
+def investigation_resume(rid: str, tool_call_id: str = Form(""), approved: str = Form("false"),
+                         reason: str = Form("")):
     run = _get_run(rid)
-    run.resume(approved == "true", reason)
+    run.resume(tool_call_id, approved == "true", reason)  # stale/duplicate answers are ignored
+    return RedirectResponse(f"/admin/investigations/{rid}", status_code=303)
+
+
+@app.post("/admin/investigations/{rid}/cancel")
+def investigation_cancel(rid: str):
+    _get_run(rid).cancel()
     return RedirectResponse(f"/admin/investigations/{rid}", status_code=303)

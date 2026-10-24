@@ -1,6 +1,6 @@
 """Start the existing reimburse-buddy MCP server over stdio, exactly as WorkBuddy does.
 
-Command: uv --directory <repo root> run --no-dev reimburse-buddy-mcp
+Command: uv --directory <repo root> run --frozen --no-dev reimburse-buddy-mcp
 (`reimburse-buddy-mcp` is the [project.scripts] entry point in the root pyproject.toml.)
 `--no-dev` keeps the server environment to its runtime dependency (`mcp`) only.
 """
@@ -23,7 +23,7 @@ def server_connection(repo_root: Path = REPO_ROOT) -> dict:
     return {
         "transport": "stdio",
         "command": "uv",
-        "args": ["--directory", str(repo_root), "run", "--no-dev", SERVER_ENTRYPOINT],
+        "args": ["--directory", str(repo_root), "run", "--frozen", "--no-dev", SERVER_ENTRYPOINT],
         # Pass PATH etc. through, but no model keys: the server does not need them.
         "env": {k: v for k, v in os.environ.items() if not k.startswith("REIMBURSE_AGENT_")
                 and not k.endswith("_API_KEY") and k != "VIRTUAL_ENV"},

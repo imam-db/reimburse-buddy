@@ -11,10 +11,18 @@ OpenAI-compatible tool-calling model (DeepSeek, Qwen, Gemini via its OpenAI endp
   (one fresh process per session = clean demo state). Note: `--no-dev` syncs the root `.venv`
   without dev packages; the next root `uv run pytest` reinstalls them.
 - **System prompt:** `skills/claim-auditor/SKILL.md`, loaded as-is.
-- **Human gate:** a LangGraph `interrupt()` fires before `update_claim_status`,
-  `approve_cleared_batch`, `request_approval`, and any `send_message` that communicates a
-  decision (approve/reject wording, EN + ID). Asking an employee for a missing document is allowed.
-  A declined call never reaches the server; the model gets `reviewer_declined` back.
+- **Human gate (allowlist):** only read-only tools run freely (`list_claims`, `get_claim`,
+  `get_policy`, `search_reimburse_mailbox`, `get_calendar`, `find_approval_memo`, `check_claim`,
+  `triage_claims`, `draft_decision`, `get_outbox`). Every other tool, including any write tool added
+  to the server later, fires a LangGraph `interrupt()` first. `reset_demo` is not offered to the
+  agent at all.
+- **send_message** skips approval only when it goes to the claim's owner, has `claim_id` set, and
+  contains no "Rp" and no number of 4+ digits. This is a stopgap: a message like "tidak bisa kami
+  bayar" to the owner still passes. The permanent fix is a server tool
+  `request_missing_evidence(claim_id, item_id, gap_code)` that writes the text itself.
+- **Approvals name their call:** each interrupt carries `tool_call_id`; an answer without the
+  matching id (stale page, second tab, double click) counts as a decline and is never applied to
+  another call. A declined call never reaches the server; the model gets `reviewer_declined` back.
 
 ## Run
 
@@ -136,10 +144,18 @@ comparison.
 ## Investigate button (web admin)
 
 `web/` claim pages have an **Investigate with agent** button. The web app starts
-`agent/investigate_worker.py` as a subprocess (`uv --directory agent run --no-dev python investigate_worker.py --claim ...`)
-and talks to it over JSON lines (trace steps, interrupt, final note). Writes (`update_claim_status`,
-`approve_cleared_batch`, `request_approval`, decision messages) pause on the LangGraph interrupt and run
-only after the reviewer clicks **Approve**; **Decline** resumes with `reviewer_declined`.
+`agent/investigate_worker.py` as a subprocess (`uv --directory agent run --frozen --no-dev python investigate_worker.py --claim ...`)
+and talks to it over JSON lines (trace steps, interrupt, final note). Every non-read-only call pauses on
+the LangGraph interrupt and runs only after the reviewer clicks **Approve**; **Decline** resumes with
+`reviewer_declined`. The web side checks and writes each answer under one lock, sends the
+`tool_call_id`, and ignores duplicates.
+
+Run limits: `REIMBURSE_AGENT_RUN_DEADLINE` (default 600 s per run), `REIMBURSE_AGENT_APPROVAL_DEADLINE`
+(default 900 s, then the pending call is auto-declined), model calls time out after 60 s with one retry.
+**Cancel run** stops a run; each run is its own process group, so uv, python and the MCP server all
+exit. stderr goes to a per-run log (`REIMBURSE_AGENT_LOG_DIR`, default a temp dir); on errors the page
+shows the last 20 lines with keys redacted. Web tests that spawn the agent are opt-in:
+`uv run pytest -m agent` (or `RB_AGENT_TESTS=1`).
 
 Why a subprocess: importing the agent into `web/` would pull langgraph/langchain-mcp-adapters (and their
 `mcp` pin) into the root `uv.lock` the hackathon MCP server runs from. The subprocess keeps `agent/` on its
