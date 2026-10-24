@@ -132,3 +132,23 @@ cheaper and ~1.5× faster.
 
 Langfuse tracing, harder eval cases, the "Investigate" button in `web/`, Qwen / Gemini Flash
 comparison.
+
+## Investigate button (web admin)
+
+`web/` claim pages have an **Investigate with agent** button. The web app starts
+`agent/investigate_worker.py` as a subprocess (`uv --directory agent run --no-dev python investigate_worker.py --claim ...`)
+and talks to it over JSON lines (trace steps, interrupt, final note). Writes (`update_claim_status`,
+`approve_cleared_batch`, `request_approval`, decision messages) pause on the LangGraph interrupt and run
+only after the reviewer clicks **Approve**; **Decline** resumes with `reviewer_declined`.
+
+Why a subprocess: importing the agent into `web/` would pull langgraph/langchain-mcp-adapters (and their
+`mcp` pin) into the root `uv.lock` the hackathon MCP server runs from. The subprocess keeps `agent/` on its
+own lockfile; the JSON-lines protocol is the only contract.
+
+Config (web server env): `DEEPSEEK_API_KEY` or `REIMBURSE_AGENT_API_KEY` (without it the page shows a
+"no key configured" message and runs nothing), `REIMBURSE_AGENT_MODEL` (default `deepseek-flash`),
+`REIMBURSE_INVESTIGATE_MAX_PER_MIN` (default 3; one live run at a time), `REIMBURSE_AGENT_MAX_TOKENS`
+(default 250000 per run). Compact tool outputs are always on.
+
+Known limit: the agent runs against its own MCP server process (fresh demo state), so approved writes land
+in that session, not in the web page's in-memory store. A shared database fixes this later.

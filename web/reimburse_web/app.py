@@ -9,6 +9,7 @@ A LangGraph agent will later plug in at `investigate()` and call the same tools 
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from datetime import date
@@ -25,6 +26,8 @@ from reimburse_buddy.models import rupiah
 from reimburse_buddy.rules import check_claim
 from reimburse_buddy.triage import approve_cleared_batch, triage_claims
 
+from .agent_bridge import NO_KEY_MESSAGE, Investigator, RateLimited, key_configured
+
 BATCH = "2026-W43"
 WEB_BATCH = "web-submissions"
 MAILBOX = "reimburse@nusantara-niaga.example"
@@ -38,6 +41,8 @@ store = DataStore()
 REVIEW: dict[str, dict] = {}
 # Employee upload drafts (drop-first flow), keyed by draft ID.
 DRAFTS: dict[str, dict] = {}
+# LangGraph agent runs (subprocess per run, see agent_bridge.py).
+INVESTIGATOR = Investigator()
 
 
 def review(cid: str) -> dict:
@@ -61,6 +66,7 @@ def reset_all() -> None:
     store.reset()
     REVIEW.clear()
     DRAFTS.clear()
+    INVESTIGATOR.stop_all()
 
 
 def run_check(cid: str):
@@ -343,7 +349,10 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
 <p class="note">Every amount on this page comes from check_claim. Evidence attached: {e(', '.join(r['evidence']) or 'none')}</p>
 <table><tr><th>Item</th><th>Category</th><th class=num>Claimed</th><th class=num>Approvable</th><th>Status</th><th>Findings / gaps</th><th>Evidence</th><th>Reviewer decision</th></tr>{item_rows}</table>
 {f'<h3>Evidence review log</h3><ul>{log_rows}</ul>' if log_rows else ''}{f'<h3>Ignored evidence</h3><ul>{ignored}</ul>' if ignored else ''}{f'<h3>Warnings</h3><ul>{warns}</ul>' if warns else ''}</div>
-<div class="box"><h2>Investigate</h2><p class="note">Today the reviewer investigates; the LangGraph agent will propose these steps later.</p>
+<div class="box"><h2>Investigate</h2>
+<form method=post action="/admin/claims/{e(cid)}/investigate"><button>Investigate with agent</button>
+<span class="note">Runs the LangGraph agent on this claim. It pauses for your approval before any write.</span></form>
+<p class="note">Or investigate by hand:</p>
 <h3>Search the reimburse mailbox</h3><form method=get><input name=q value="{e(q)}" size=40 placeholder="boarding pass QZ 7520"><button>Search</button></form>
 {f'<table><tr><th>ID</th><th>Date</th><th>Subject</th><th>Attachments</th><th></th></tr>{hit_rows}</table>' if hits else ''}
 <h3>Calendar during the trip</h3><table><tr><th>ID</th><th>When</th><th>Title</th><th>Location</th><th></th></tr>{cal_rows}</table>
@@ -444,3 +453,80 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+# --- agent investigation ---------------------------------------------------------
+def _agent_ready() -> bool:
+    return bool(INVESTIGATOR.fake_script) or key_configured()
+
+
+@app.post("/admin/claims/{cid}/investigate")
+def investigate_start(cid: str):
+    store.get_claim(cid)
+    if not _agent_ready():
+        return page(f"Investigate {cid}", f"<p><a href='/admin/claims/{e(cid)}'>&larr; Claim</a></p>"
+                    f"<div class='box'><h2>Agent not configured</h2><p class='tag warn' id=no-key>{e(NO_KEY_MESSAGE)}</p></div>")
+    try:
+        run = INVESTIGATOR.start(cid)
+    except RateLimited as exc:
+        return page(f"Investigate {cid}", f"<p><a href='/admin/claims/{e(cid)}'>&larr; Claim</a></p>"
+                    f"<div class='box'><p class='tag warn' id=rate-limited>{e(exc)}</p></div>")
+    return RedirectResponse(f"/admin/investigations/{run.id}", status_code=303)
+
+
+def _get_run(rid: str):
+    run = INVESTIGATOR.runs.get(rid)
+    if run is None:
+        raise HTTPException(404, "Unknown investigation")
+    return run
+
+
+@app.get("/admin/investigations/{rid}", response_class=HTMLResponse)
+def investigation_page(rid: str):
+    run = _get_run(rid)
+    evs = run.snapshot()
+    start = next((x for x in evs if x["type"] == "start"), {})
+    rows = ""
+    for x in evs:
+        if x["type"] == "step":
+            tag = " <span class='tag bad'>declined</span>" if x.get("declined") else ""
+            rows += (f"<tr class=step><td>{x['n']}</td><td><code>{e(x['tool'])}</code>{tag}</td>"
+                     f"<td><code>{e(x['args_summary'])}</code></td><td>{e(x['result_summary'])}</td></tr>")
+        elif x["type"] == "decision":
+            rows += (f"<tr><td></td><td colspan=3 class=note>Reviewer {'approved' if x['approved'] else 'declined'} "
+                     f"<code>{e(x['tool'])}</code></td></tr>")
+    pend = run.pending
+    pending_html = ""
+    if pend:
+        pending_html = f"""<div class="box" id=pending><h2>Pending write: awaiting your approval</h2>
+<p><code>{e(pend['tool'])}</code></p><pre>{e(json.dumps(pend['args'], ensure_ascii=False, indent=2))}</pre>
+<p class=note>Nothing is written until you click Approve.</p>
+<form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=approved value=true><button>Approve</button></form>
+<form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=approved value=false>
+<input name=reason size=40 placeholder="Reason (optional)"><button>Decline</button></form></div>"""
+    final = next((x for x in evs if x["type"] == "final"), None)
+    err = next((x for x in evs if x["type"] == "error"), None)
+    status = ("finished" if final else "stopped" if err else "awaiting approval" if pend else "running")
+    tail = ""
+    if final:
+        t = final.get("tokens", {})
+        tail = (f"<div class=box id=final><h2>Agent's final note</h2><pre>{e(final['note'])}</pre>"
+                f"<p class=note>Tokens: {t.get('input', 0)} in / {t.get('output', 0)} out. Amounts come from tool results; verify against the rule engine.</p></div>")
+    if err:
+        msg = NO_KEY_MESSAGE if err.get("code") == "no_key" else err.get("message", "")
+        tail += f"<div class=box id=error><p class='tag bad'>{e(msg)}</p></div>"
+    refresh = "" if (final or err or pend) else '<meta http-equiv="refresh" content="2">'
+    body = f"""{refresh}<p><a href="/admin/claims/{e(run.claim_id)}">&larr; Claim {e(run.claim_id)}</a></p>
+<div class="box"><h2>Agent investigation: {e(run.claim_id)}</h2>
+<p>Status <b id=status>{e(status)}</b> &middot; model {e(start.get('model', '...'))} &middot; compact mode {'on' if start.get('compact') else '...'}</p>
+<p class=note>The agent runs against its own MCP server session (fresh demo state), not this page's store.</p>
+<table id=trace style="table-layout:fixed;width:100%;word-break:break-word"><tr><th>#</th><th>Tool</th><th>Args</th><th>Result</th></tr>{rows}</table></div>
+{pending_html}{tail}"""
+    return page(f"Investigate {run.claim_id}", body)
+
+
+@app.post("/admin/investigations/{rid}/resume")
+def investigation_resume(rid: str, approved: str = Form("false"), reason: str = Form("")):
+    run = _get_run(rid)
+    run.resume(approved == "true", reason)
+    return RedirectResponse(f"/admin/investigations/{rid}", status_code=303)
