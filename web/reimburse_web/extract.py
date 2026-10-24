@@ -1,8 +1,11 @@
 """Pluggable document extraction for the drop-first upload flow.
 
 An extractor turns one uploaded file into draft fields, each with a value, a confidence (0-1) and a source.
-Default: Tesseract OCR plus heuristics for Indonesian receipts. Optional: a vision model behind an
-OpenAI-compatible API (set REIMBURSE_EXTRACTOR=vision, VISION_API_BASE, VISION_MODEL, VISION_API_KEY).
+Default (REIMBURSE_EXTRACTOR=ocr): Tesseract OCR plus heuristics for Indonesian receipts.
+REIMBURSE_EXTRACTOR=dual also runs RapidOCR (optional `rapidocr` extra) and flags every field the two engines
+disagree on; REIMBURSE_EXTRACTOR=rapidocr uses RapidOCR alone. Without RapidOCR installed both fall back to
+Tesseract. Optional: a vision model behind an OpenAI-compatible API (set REIMBURSE_EXTRACTOR=vision,
+VISION_API_BASE, VISION_MODEL, VISION_API_KEY).
 Anything unreadable comes back as an empty draft for manual input. Nothing here decides money:
 the rule engine still computes every approved amount.
 """
@@ -54,9 +57,11 @@ class Draft:
     fields: dict[str, Field] = field(default_factory=lambda: {k: Field() for k in FIELDS})
     text: str = ""
     error: str = ""
+    disagreements: list[str] = field(default_factory=list)  # fields two OCR engines read differently
 
     def to_json(self) -> dict:
-        return {"fields": {k: asdict(v) for k, v in self.fields.items()}, "text": self.text, "error": self.error}
+        return {"fields": {k: asdict(v) for k, v in self.fields.items()}, "text": self.text, "error": self.error,
+                "disagreements": list(self.disagreements)}
 
 
 class Extractor(Protocol):
@@ -333,9 +338,131 @@ class VisionExtractor:
             return d
 
 
+# --- RapidOCR (optional) and dual-engine mode ---------------------------------------
+GLUED_TIME_RE = re.compile(r"(\d{1,2}[/\-.]\d{1,2}[/\-.](?:20)?\d\d)(?=\d{1,2}:\d{2})")
+ZERO_MONTH_RE = re.compile(r"(?<=\d )0(ct|kt)\b", re.I)  # "02 0ct 2026": zero read for the letter O
+
+
+def boxes_to_lines(boxes, txts, scores) -> tuple[str, dict[int, float]]:
+    """Rebuild reading-order lines from RapidOCR word boxes.
+
+    Boxes whose vertical centres fall within half a box height of the current line join it; each line is then
+    sorted left to right. RapidOCR also glues a date to the following time ("03-10-202609:12", "03/10/2621:40"),
+    which breaks the date regex, so a space is inserted there, and "0ct" after a day number becomes "Oct".
+    """
+    items = []
+    for b, t, sc in zip(boxes, txts, scores):
+        ys = [float(p[1]) for p in b]
+        items.append(((min(ys) + max(ys)) / 2, max(ys) - min(ys), min(float(p[0]) for p in b), t, float(sc)))
+    items.sort(key=lambda i: i[0])
+    rows: list[list] = []
+    for it in items:
+        if rows and abs(it[0] - rows[-1][0][0]) <= max(it[1], rows[-1][0][1]) / 2:
+            rows[-1].append(it)
+        else:
+            rows.append([it])
+    lines, conf = [], {}
+    for n, row in enumerate(rows):
+        row.sort(key=lambda i: i[2])
+        line = GLUED_TIME_RE.sub(r"\1 ", " ".join(i[3] for i in row))
+        lines.append(ZERO_MONTH_RE.sub(lambda m: "O" + m.group(1), line))
+        conf[n] = sum(i[4] for i in row) / len(row)
+    return "\n".join(lines), conf
+
+
+def rapidocr_available() -> bool:
+    try:
+        import onnxruntime  # noqa: F401
+        import rapidocr  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+class RapidOCRExtractor:
+    """RapidOCR (PaddleOCR models on onnxruntime, CPU). PDFs with a text layer reuse the Tesseract path."""
+
+    name = "rapidocr"
+    _engine = None
+
+    def __init__(self):
+        self._pdf = TesseractExtractor()
+
+    @classmethod
+    def engine(cls):
+        if cls._engine is None:
+            import logging
+            from rapidocr import RapidOCR
+            logging.getLogger("RapidOCR").setLevel(logging.WARNING)
+            cls._engine = RapidOCR()
+        return cls._engine
+
+    def extract(self, path: Path) -> Draft:
+        if path.suffix.lower() == ".pdf":
+            return self._pdf.extract(path)
+        try:
+            r = self.engine()(str(path))
+            if not r.txts:
+                return parse_text("", None, "ocr")
+            return parse_text(*boxes_to_lines(r.boxes, r.txts, r.scores), "ocr")
+        except Exception as ex:
+            d = Draft()
+            d.error = f"Could not read this file ({type(ex).__name__}); fill in the card by hand."
+            d.fields["doc_type"] = Field("other", 0.0, "none")
+            return d
+
+
+COMPARED = ("doc_type", "date", "amount", "merchant", "flight_no", "nights", "passenger")
+
+
+def _same(k: str, a, b) -> bool:
+    if k in ("merchant", "passenger", "flight_no"):
+        return re.sub(r"[^A-Z0-9]", "", str(a).upper()) == re.sub(r"[^A-Z0-9]", "", str(b).upper())
+    return str(a) == str(b)
+
+
+def combine(primary: Draft, second: Draft) -> Draft:
+    """Tesseract draft plus the fields where RapidOCR read something different.
+
+    A field disagrees when both engines read a value and the values differ, or when only one engine read it.
+    Disagreeing fields keep the Tesseract value but drop below LOW_CONFIDENCE, so the card highlights them.
+    """
+    if primary.error and not second.error:
+        return second
+    if second.error:
+        return primary
+    out = Draft(fields=dict(primary.fields), text=primary.text, error=primary.error)
+    for k in COMPARED:
+        a, b = primary.fields[k].value, second.fields[k].value
+        if a in (None, "") and b in (None, ""):
+            continue
+        if a in (None, "") or b in (None, "") or not _same(k, a, b):
+            out.disagreements.append(k)
+            f = primary.fields[k] if a not in (None, "") else second.fields[k]
+            out.fields[k] = Field(f.value, min(f.confidence, LOW_CONFIDENCE - 0.1), f.source)
+    return out
+
+
+class DualExtractor:
+    """Run Tesseract and RapidOCR; any field they disagree on sends the file to needs_review."""
+
+    name = "dual (tesseract + rapidocr)"
+
+    def __init__(self):
+        self.a, self.b = TesseractExtractor(), RapidOCRExtractor()
+
+    def extract(self, path: Path) -> Draft:
+        if path.suffix.lower() == ".pdf":  # one engine reads PDFs, nothing to compare
+            return self.a.extract(path)
+        return combine(self.a.extract(path), self.b.extract(path))
+
+
 def get_extractor() -> Extractor:
-    if os.environ.get("REIMBURSE_EXTRACTOR", "ocr") == "vision":
+    mode = os.environ.get("REIMBURSE_EXTRACTOR", "ocr")
+    if mode == "vision":
         v = VisionExtractor()
         if v.available():
             return v
+    if mode in ("dual", "rapidocr") and rapidocr_available():
+        return DualExtractor() if mode == "dual" else RapidOCRExtractor()
     return TesseractExtractor()
