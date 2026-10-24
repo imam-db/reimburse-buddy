@@ -78,9 +78,11 @@ def triage_claims(batch: str = "") -> dict:
 
 @mcp.tool()
 def draft_decision(claim_id: str, evidence_ids: list[str] | None = None,
-                   human_decisions: dict[str, str] | None = None, note: str = "") -> str:
-    """Draft the final decision note for a reviewer. Re-runs check_claim, so numbers stay consistent."""
-    return _draft(store, _check(store, claim_id, evidence_ids, human_decisions), note)
+                   human_decisions: dict[str, str] | None = None, note: str = "",
+                   language: str = "both") -> str:
+    """Draft the final decision note for a reviewer. Re-runs check_claim, so numbers stay consistent.
+    language: "id" (Bahasa Indonesia), "en" or "both" (default: Indonesian, then English)."""
+    return _draft(store, _check(store, claim_id, evidence_ids, human_decisions), note, language)
 
 
 @mcp.tool()

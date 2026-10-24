@@ -42,7 +42,7 @@ flowchart LR
 | `find_approval_memo(employee_id, city, date)` | Hotel-cap exception memos |
 | `check_claim(claim_id, evidence_ids, human_decisions)` | Deterministic rule check |
 | `triage_claims(batch)` | Split a batch into auto-cleared claims and exceptions, with a time-saved estimate |
-| `draft_decision(...)` | Reviewer-ready decision note |
+| `draft_decision(..., language)` | Reviewer-ready decision note: `id`, `en` or `both` (default, Bahasa Indonesia first) |
 | `send_message(to, body, subject, claim_id)` | (Mock write) Email an employee; goes to the outbox |
 | `request_approval(manager_id, claim_id, item_id, reason)` | (Mock write) Ask the claimant's manager; returns a pending request |
 | `update_claim_status(claim_id, status, note)` | (Mock write) `on_hold`, `approved`, `partially_approved`, `rejected` |
@@ -105,8 +105,10 @@ uv run reimburse-buddy-mcp   # starts the server on stdio (WorkBuddy normally do
    `~/.workbuddy/mcp.json`) and replace `/ABSOLUTE/PATH/TO/reimburse-buddy` with your clone path.
    On Windows use a path like `C:\\Users\\you\\reimburse-buddy`.
 2. Restart WorkBuddy and confirm the `reimburse-buddy` server shows its 13 tools.
-3. Add the skill in `skills/claim-auditor/SKILL.md` to WorkBuddy's skills.
-4. Try: *"Review claim CLM-2026-0101."*
+3. Add the skill in `skills/claim-auditor/SKILL.md` to WorkBuddy's skills. It covers the gap-code-to-tool
+   mapping, the fallback search strategy, how to explain `ignored_evidence`, batching questions to the
+   reviewer, and post-decision actions.
+4. Try: *"Triage batch 2026-W43."* or *"Review claim CLM-2026-0110."*
 
 To point the server at another dataset, set `REIMBURSE_BUDDY_DATA=/path/to/data` in the `env` block.
 
