@@ -6,7 +6,7 @@ import sys
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-EXPECTED = {"list_claims", "get_claim", "get_policy", "search_inbox", "get_calendar",
+EXPECTED = {"list_claims", "get_claim", "get_policy", "search_reimburse_mailbox", "approve_cleared_batch", "get_calendar",
             "find_approval_memo", "check_claim", "draft_decision",
             "send_message", "request_approval", "update_claim_status", "get_outbox", "triage_claims", "reset_demo"}
 

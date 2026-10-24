@@ -33,8 +33,10 @@ T = {
                  "Uang harian maksimal {limit} ({days} hari, tarif tier-{tier})."),
     "lc_ok": ("Check-out at {time} justified by a business meeting ({ids}) in {location}.",
               "Check-out pukul {time} dibenarkan oleh rapat kerja ({ids}) di {location}."),
-    "lc_missing": ("No business meeting in {location} on {date} ending after {std} and within {hours}h of check-out at {time}.",
-                   "Tidak ada rapat kerja di {location} pada {date} yang selesai setelah {std} dan paling lama {hours} jam sebelum check-out pukul {time}."),
+    "lc_missing": ("Check-out at {time} on {date} in {location} is past the standard {std} and does not match "
+                   "the claimed trip schedule. Needs justification.",
+                   "Check-out pukul {time} tanggal {date} di {location} melewati jam standar {std} dan tidak sesuai "
+                   "dengan jadwal perjalanan yang diklaim. Perlu justifikasi."),
     "human_resolved": ("Resolved by the reviewer: {choice}.", "Diputuskan oleh reviewer: {choice}."),
     "human_rejected": ("Rejected by the reviewer.", "Ditolak oleh reviewer."),
     "return_missing": ("Outbound flight claimed but no return flight. Confirm how the employee returned.",
