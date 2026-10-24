@@ -16,10 +16,17 @@ OpenAI-compatible tool-calling model (DeepSeek, Qwen, Gemini via its OpenAI endp
   `triage_claims`, `draft_decision`, `get_outbox`). Every other tool, including any write tool added
   to the server later, fires a LangGraph `interrupt()` first. `reset_demo` is not offered to the
   agent at all.
-- **send_message** skips approval only when it goes to the claim's owner, has `claim_id` set, and
-  contains no "Rp" and no number of 4+ digits. This is a stopgap: a message like "tidak bisa kami
-  bayar" to the owner still passes. The permanent fix is a server tool
-  `request_missing_evidence(claim_id, item_id, gap_code)` that writes the text itself.
+- **send_message is always gated** (it carries free text the model wrote). Evidence requests use
+  the server tool `request_missing_evidence(claim_id, item_id, gap_code, evidence_ids?,
+  human_decisions?)`, registered only when `REIMBURSE_ENABLE_EVIDENCE_TOOL=1` (the agent's
+  `mcp_client` sets it; WorkBuddy's server keeps exactly 15 tools). It builds the text from a fixed
+  template (no amounts, no decision), sends only to the claim's owner, accepts only a gap that still
+  persists given the evidence and decisions passed, and doesn't resend an open request. The agent
+  lets it run without approval only when: the claim is the run's claim, the gap code is a pure
+  document request (`receipt_missing`, `boarding_pass_missing`, `hotel_nights_mismatch`), the gap
+  is in the run's latest `check_claim` result for that item, and fewer than 3 such requests ran in
+  this run. Anything else waits for approval. A version-B-only addendum appended to the loaded
+  `SKILL.md` tells the model to use it (`SKILL.md` itself is unchanged).
 - **Approvals name their call:** the worker gives each interrupt its own `approval_id` (not the
   model's `tool_call_id`); an answer without the matching id (stale page, second tab, double click)
   is rejected and never applied to another call. The trace shows a decision only after the worker
@@ -45,7 +52,7 @@ uv run python run.py --claim CLM-2026-0110 --auto-decline   # scripted: decline 
 cd agent && uv run pytest
 ```
 
-- `tests/test_mcp_tools.py`: loads the 15 tools over MCP and checks the hero claim
+- `tests/test_mcp_tools.py`: loads the 16 tools over MCP and checks the hero claim
   (`CLM-2026-0110`, no evidence → `needs_info`, approvable Rp4.840.000).
 - `tests/test_compact.py`: compact mode keeps IDs, gap codes and money figures and shrinks outputs.
 - `tests/test_graph_interrupt.py`: a scripted fake chat model proves the interrupt fires before
