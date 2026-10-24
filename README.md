@@ -106,7 +106,7 @@ git clone https://github.com/imam-db/reimburse-buddy.git
 cd reimburse-buddy
 uv sync
 uv run pytest            # rule tests + a real MCP stdio round-trip
-uv run reimburse-buddy-mcp   # starts the server on stdio (WorkBuddy normally does this)
+uv run --no-dev reimburse-buddy-mcp   # starts the server on stdio (WorkBuddy normally does this)
 ```
 
 ## Plug into WorkBuddy
@@ -221,18 +221,21 @@ uv sync --group rapidocr                 # adds rapidocr + onnxruntime (models s
 REIMBURSE_EXTRACTOR=dual uv run uvicorn --app-dir web reimburse_web.app:app --port 8000
 ```
 
-Measured on the synthetic samples (`uv run python web/sample_uploads/measure_accuracy.py ocr rapidocr dual`,
-CPU, mean seconds per file after a warm-up file):
+RapidOCR is not in the default `dev` group, so `uv sync` and the MCP server never install it. Install it with
+`uv sync --group rapidocr`; without it the RapidOCR test skips and `dual` / `rapidocr` fall back to Tesseract.
+
+On 10 clean synthetic images we generated (38 fields), Tesseract read 37/38 fields and RapidOCR 38/38; dual mode
+flagged the one Tesseract error and no other file. This shows the pipeline works end to end. It says nothing about
+accuracy on real receipts.
+
+Reproduce with `uv run python web/sample_uploads/measure_accuracy.py ocr rapidocr dual`. Timings are mean seconds
+per file after a warm-up file, measured on a cloud VM with an Intel Xeon CPU (no GPU), and vary by machine:
 
 | Extractor | Tuning set (7 files, 26 fields) | Held-out set (3 files, 12 fields) | Files flagged for review |
 |---|---|---|---|
 | Tesseract | 25/26, 1.22 s/file | 12/12, 0.67 s/file | n/a |
 | RapidOCR | 26/26, 0.48 s/file | 12/12, 0.41 s/file | n/a |
 | Dual | 25/26, 1.58 s/file | 12/12, 1.08 s/file | 1 (tuning: the blurry taxi merchant, the one Tesseract miss) |
-
-In dual mode the only flagged file is the one where Tesseract reads `TAKS! PELANGI`, so the disagreement check
-catches the single extraction error. The samples are clean, synthetic and few; RapidOCR's advantage is expected to
-matter more on skewed or faded photos, which these sets do not contain.
 
 An optional vision extractor calls any OpenAI-compatible chat completions API. It is off by default and the key
 is read from the environment only:
@@ -245,11 +248,11 @@ export VISION_API_KEY=...   # never commit this
 Synthetic sample uploads live in `web/sample_uploads/` (`make_samples.py` regenerates them with Pillow,
 `truth.json` holds the expected fields). `web/sample_uploads/heldout/` is a separate set of tricky layouts
 (TOTAL (3 item), cash larger than the total, 2-digit year, TOTAL DISKON last) not used to tune the parser.
-`uv run python web/sample_uploads/measure_accuracy.py` reports both (Tesseract: 25/26 fields on the tuning set, the miss
-flagged low confidence, and 12/12 on the held-out set; see the table above for RapidOCR and dual). Both sets are synthetic and small.
+`uv run python web/sample_uploads/measure_accuracy.py` reports both (see the table above). Both sets are synthetic and small.
 
 Known limits before any public deploy: shared in-memory state, no auth, local uploads (basic 5 MB / type
-limits only), and a self-declared field is only flagged, not verified.
+limits only), and a self-declared field is only flagged, not verified. Dual mode detects OCR misreads, not edited
+receipts; PDFs, single-engine reads and near-duplicate files are not cross-checked yet (planned after the hackathon).
 
 Known limitation: the cross-checks compare the item with what OCR read from the same file, so a convincingly
 forged or edited image still passes; OCR heuristics are tuned on synthetic receipts and need real, anonymised
