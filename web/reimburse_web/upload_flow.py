@@ -302,6 +302,17 @@ def _validate(d: dict) -> bool:
     return ok
 
 
+def evidence_review_reason(f: dict, prov: dict) -> str:
+    """Why uploaded evidence cannot count as verified: '' when extraction read it."""
+    if f.get("error"):
+        return "unreadable_file"
+    ex = f["extract"]["fields"]
+    key = "flight_no" if f["doc_type"] == "boarding_pass" else "amount"
+    if f.get("doc_type_source") == "self_declared" or ex.get(key, {}).get("value") in (None, ""):
+        return "self_declared_only"  # the file itself does not show the doc type / amount
+    return ""
+
+
 def _forward(emp: str, cid: str, item: dict, f: dict) -> str:
     """Forward one file to the reimburse@ mailbox, linked to its claim item. Returns the message ID."""
     me = core.store.get_employee(emp)
@@ -312,13 +323,17 @@ def _forward(emp: str, cid: str, item: dict, f: dict) -> str:
                "passenger": me["name"]}
     else:
         att = {"name": f["name"], "type": "receipt", "claim_id": cid, "item_id": item["id"]}
-    att.update(stored_as=f["stored"], provenance=prov,
-               self_declared=any(v == "self_declared" for v in prov.values()))
+    reason = evidence_review_reason(f, prov)
+    att.update(stored_as=f["stored"], provenance=prov, self_declared=any(v == "self_declared" for v in prov.values()),
+               evidence_status="needs_review" if reason else "extracted", review_reason=reason)
     core.store.inbox.append({"id": mid, "owner_id": emp, "from": me["email"], "date": date.today().isoformat(),
                              "subject": f"Claim {cid} {item['id']}: {f['doc_type'].replace('_', ' ')}", "body": "",
                              "attachments": [att], "mailbox": core.MAILBOX, "forwarded_by": me["email"]})
     rv = core.review(cid)
-    rv["evidence"].append(mid)
+    if reason:  # kept out of check_claim until a reviewer accepts it
+        rv["pending"][mid] = {"item_id": item["id"], "reason": reason, "state": "pending"}
+    else:
+        rv["evidence"].append(mid)
     rv.setdefault("origin", {})[mid] = "employee_upload"
     return mid
 
@@ -384,6 +399,7 @@ async def update_draft(did: str, request: Request):
     return RedirectResponse(f"/employee/drafts/{did}", status_code=303)
 
 
+AWAITING = "Menunggu verifikasi finance / Awaiting finance review"
 GAP_TEXT = {"receipt_missing": "receipt missing", "boarding_pass_missing": "boarding pass missing",
             "hotel_over_cap": "over the hotel cap: finance will review", "duplicate_suspected": "possible duplicate",
             "hotel_nights_mismatch": "nights do not match the trip", "late_checkout_unjustified": "needs justification"}
@@ -401,12 +417,15 @@ def employee_claim(cid: str, msg: str = ""):
         for a in m.get("attachments", []):
             if a.get("claim_id") == cid and a.get("item_id"):
                 files_by_item.setdefault(a["item_id"], []).append(a["name"])
+    pending = core.pending_items(cid)
     used = {i.item_id: i.evidence_used for i in chk.items}
     rows = ""
     for it, res in zip(claim["items"], chk.items):
         have = files_by_item.get(it["id"], []) + [x for x in used.get(it["id"], []) if x.startswith("MSG")
                                                   and not any(x in f for f in files_by_item.get(it["id"], []))]
         missing = [GAP_TEXT.get(str(g), str(g).replace("_", " ")) for g in res.gaps]
+        if it["id"] in pending:
+            missing = [AWAITING]
         status = (", ".join(missing) if missing else ("rejected" if res.status.value == "rejected" else "evidence complete"))
         cls = "warn" if missing else ("bad" if res.status.value == "rejected" else "ok")
         add = (f"<form method=post action='/employee/claims/{e(cid)}/items/{e(it['id'])}/files' enctype='multipart/form-data'>"

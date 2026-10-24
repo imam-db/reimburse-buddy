@@ -170,7 +170,11 @@ version B) will later plug in at `investigate()` and call the tools over MCP.
 - Finance admin (`/admin`): read-only triage, bulk approval only with an explicit confirmation, and a claim page
   with findings, gap codes, ignored evidence, mailbox search, calendar, memos, item decisions, a bilingual note
   preview, and a status change that needs the reviewer's tick. Each item shows provenance badges for its fields.
-  "Reset demo data" restores the seed data.
+  Evidence that extraction could not verify (an unreadable file, or a doc type or amount the file does not show)
+  is marked `needs_review` (`unreadable_file` / `self_declared_only`) and kept out of the rule engine until the
+  reviewer clicks "Accept evidence" or "Reject evidence" (logged). Until then the item shows "pending review",
+  its claim cannot be bulk-approved or moved past `on_hold`, and the employee sees "Menunggu verifikasi finance /
+  Awaiting finance review". "Reset demo data" restores the seed data.
 
 ```bash
 uv sync
