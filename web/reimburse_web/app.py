@@ -41,7 +41,20 @@ DRAFTS: dict[str, dict] = {}
 
 
 def review(cid: str) -> dict:
-    return REVIEW.setdefault(cid, {"evidence": [], "decisions": {}})
+    return REVIEW.setdefault(cid, {"evidence": [], "decisions": {}, "pending": {}, "evidence_log": []})
+
+
+def pending_items(cid: str) -> dict[str, list[str]]:
+    """Items whose uploaded evidence still awaits explicit reviewer acceptance: item_id -> message IDs.
+
+    Such evidence (unreadable file, or doc type / amount only self-declared) is kept out of check_claim's
+    evidence list until a reviewer accepts it, so the engine never treats it as verified.
+    """
+    out: dict[str, list[str]] = {}
+    for mid, p in review(cid).get("pending", {}).items():
+        if p["state"] == "pending":
+            out.setdefault(p["item_id"], []).append(mid)
+    return out
 
 
 def reset_all() -> None:
@@ -248,6 +261,8 @@ def admin(batch: str = BATCH, msg: str = ""):
 
 @app.post("/admin/batch/approve")
 def batch_approve(batch: str = Form(...), claim_ids: list[str] = Form([]), reviewer_confirmed: str = Form("false")):
+    held = [c for c in claim_ids if pending_items(c)]
+    claim_ids = [c for c in claim_ids if c not in held]
     res = approve_cleared_batch(store, batch, claim_ids, reviewer_confirmed == "true")
     text = f"Approved {res['count']} claims" if res["ok"] else "Not approved: " + res["error"]
     return RedirectResponse(f"/admin?batch={batch}&msg={text.replace(' ', '+')}", status_code=303)
@@ -274,16 +289,27 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
         finds = "<br>".join(f"<span class=tag>{e(f.rule)}</span> {e(f.message)}" for f in it.findings)
         gaps = "".join(f"<span class='tag warn'>{e(g)}</span>" for g in it.gaps)
         dec = ""
-        if it.gaps or it.human_decision:
+        if (it.gaps or it.human_decision) and it.item_id not in pending_items(cid):
             dec = (f"<form method=post action='/admin/claims/{e(cid)}/decide' style='display:inline'>"
                    f"<input type=hidden name=item_id value='{e(it.item_id)}'>"
                    + "".join(f"<button name=choice value='{ch}'{' disabled' if it.human_decision == ch else ''}>{ch}</button> "
                              for ch in CHOICES) + "</form>")
             if it.human_decision:
                 dec += f"<div class=note>Reviewer: {e(it.human_decision)}</div>"
+        pend = pending_items(cid).get(it.item_id, [])
+        status_cell = e(it.status.value)
+        if pend:
+            status_cell = "<span class='tag warn'>pending review</span>"
+            for mid in pend:
+                p = r["pending"][mid]
+                dec = (f"<form method=post action='/admin/claims/{e(cid)}/evidence/{e(mid)}/review' style='display:inline'>"
+                       f"<div class=note>{e(mid)}: {e(p['reason'])}</div><button name=verdict value=accept>Accept evidence</button> "
+                       f"<button name=verdict value=reject>Reject evidence</button></form>") + dec
         item_rows += (f"<tr><td>{e(it.item_id)}</td><td>{e(it.category)}<div class=note>{e(src['description'])}</div></td>"
                       f"<td class=num>{e(rupiah(it.claimed))}</td><td class=num>{e(rupiah(it.approvable))}</td>"
-                      f"<td>{e(it.status.value)}</td><td>{provenance_badges(src)}{finds}<div>{gaps}</div></td><td>{e(', '.join(it.evidence_used))}</td><td>{dec}</td></tr>")
+                      f"<td>{status_cell}</td><td>{provenance_badges(src)}{finds}<div>{gaps}</div></td><td>{e(', '.join(it.evidence_used))}</td><td>{dec}</td></tr>")
+    log_rows = "".join(f"<li>{e(x['at'])} {e(x['evidence_id'])} ({e(x['item_id'])}, {e(x['reason'])}): "
+                       f"<b>{e(x['verdict'])}</b> by reviewer</li>" for x in r["evidence_log"])
     ignored = "".join(f"<li>{e(i.id)}: <span class='tag bad'>{e(i.reason)}</span></li>" for i in c.ignored_evidence)
     warns = "".join(f"<li>{e(w.message)}</li>" for w in c.warnings)
 
@@ -306,6 +332,8 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
     sent_rows = "".join(f"<li>{e(m['id'])} to {e(m['to'])}: {e(m['subject'])}</li>" for m in sent)
     note = draft_decision(store, c, language="both")
     allowed_status = STATUS_FOR_DECISION[c.decision.value]
+    if pending_items(cid):
+        allowed_status = ["on_hold"]
     body = f"""<p><a href="/admin">&larr; Triage</a></p>{f'<p class="tag ok">{e(msg)}</p>' if msg else ''}
 <p>{e(emp)} {e(store.get_employee(emp)['name'])} &middot; {e(claim['purpose'])} &middot; {e(trip['destination'])}
 {e(trip['start_date'])} &rarr; {e(trip['end_date'])} &middot; status {status_tag(claim['status'])}</p>
@@ -313,7 +341,7 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
 <p>Approvable <b>{e(rupiah(c.total_approvable))}</b> of {e(rupiah(c.total_claimed))} &middot; pending {e(rupiah(c.total_pending))}</p>
 <p class="note">Every amount on this page comes from check_claim. Evidence attached: {e(', '.join(r['evidence']) or 'none')}</p>
 <table><tr><th>Item</th><th>Category</th><th class=num>Claimed</th><th class=num>Approvable</th><th>Status</th><th>Findings / gaps</th><th>Evidence</th><th>Reviewer decision</th></tr>{item_rows}</table>
-{f'<h3>Ignored evidence</h3><ul>{ignored}</ul>' if ignored else ''}{f'<h3>Warnings</h3><ul>{warns}</ul>' if warns else ''}</div>
+{f'<h3>Evidence review log</h3><ul>{log_rows}</ul>' if log_rows else ''}{f'<h3>Ignored evidence</h3><ul>{ignored}</ul>' if ignored else ''}{f'<h3>Warnings</h3><ul>{warns}</ul>' if warns else ''}</div>
 <div class="box"><h2>Investigate</h2><p class="note">Today the reviewer investigates; the LangGraph agent will propose these steps later.</p>
 <h3>Search the reimburse mailbox</h3><form method=get><input name=q value="{e(q)}" size=40 placeholder="boarding pass QZ 7520"><button>Search</button></form>
 {f'<table><tr><th>ID</th><th>Date</th><th>Subject</th><th>Attachments</th><th></th></tr>{hit_rows}</table>' if hits else ''}
@@ -333,16 +361,46 @@ Status changes only after you confirm. Notes are sent only by you.</p></div>"""
 @app.post("/admin/claims/{cid}/evidence")
 def add_evidence(cid: str, evidence_id: str = Form(...), q: str = Form("")):
     store.get_claim(cid)
+    p = review(cid)["pending"].get(evidence_id)
+    if p and p["state"] != "accepted":
+        return RedirectResponse(f"/admin/claims/{cid}?msg=Not+attached:+{evidence_id}+needs+Accept+evidence+first",
+                                status_code=303)
     ev = review(cid)["evidence"]
     if evidence_id not in ev:
         ev.append(evidence_id)
     return RedirectResponse(f"/admin/claims/{cid}?q={q}", status_code=303)
 
 
+@app.post("/admin/claims/{cid}/evidence/{mid}/review")
+def review_evidence(cid: str, mid: str, verdict: str = Form(...)):
+    """Explicit reviewer verdict on evidence that extraction could not verify. Logged."""
+    from datetime import datetime
+
+    store.get_claim(cid)
+    r = review(cid)
+    p = r["pending"].get(mid)
+    if not p:
+        raise HTTPException(404, f"{mid} is not awaiting review on {cid}")
+    if verdict not in ("accept", "reject"):
+        raise HTTPException(400, "verdict must be accept or reject")
+    p["state"] = "accepted" if verdict == "accept" else "rejected"
+    for m in store.inbox:
+        if m["id"] == mid:
+            for a in m["attachments"]:
+                a["evidence_status"] = "accepted_by_reviewer" if verdict == "accept" else "rejected_by_reviewer"
+    if verdict == "accept" and mid not in r["evidence"]:
+        r["evidence"].append(mid)
+    r["evidence_log"].append({"at": datetime.now().strftime("%Y-%m-%d %H:%M"), "evidence_id": mid, "item_id": p["item_id"],
+                              "reason": p["reason"], "verdict": p["state"]})
+    return RedirectResponse(f"/admin/claims/{cid}?msg=Evidence+{mid}+{p['state']}", status_code=303)
+
+
 @app.post("/admin/claims/{cid}/decide")
 def decide(cid: str, item_id: str = Form(...), choice: str = Form(...)):
     if choice not in CHOICES:
         raise HTTPException(400, f"choice must be one of {CHOICES}")
+    if item_id in pending_items(cid):
+        raise HTTPException(409, f"{item_id} has evidence awaiting review: accept or reject it first")
     review(cid)["decisions"][item_id] = choice
     try:
         run_check(cid)
@@ -364,6 +422,8 @@ def set_status(cid: str, status: str = Form(...), reviewer_confirmed: str = Form
     if reviewer_confirmed != "true":
         return RedirectResponse(f"/admin/claims/{cid}?msg=Not+changed:+tick+the+confirmation+first", status_code=303)
     c = run_check(cid)
+    if pending_items(cid) and status != "on_hold":
+        return RedirectResponse(f"/admin/claims/{cid}?msg=Not+changed:+evidence+is+awaiting+review", status_code=303)
     if status not in STATUS_FOR_DECISION[c.decision.value]:
         return RedirectResponse(f"/admin/claims/{cid}?msg=Not+changed:+{status}+is+not+allowed+while+the+engine+says+"
                                 f"{c.decision.value}", status_code=303)

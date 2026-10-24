@@ -79,7 +79,10 @@ def test_edits_are_self_declared_and_submit_forwards_files(client):
     assert len(fwd) == 3 and fwd[0]["attachments"][0] == fwd[0]["attachments"][0] | {
         "type": "receipt", "claim_id": cid, "item_id": "IT-1"}
     chk = web.run_check(cid)
-    assert all("receipt_missing" not in i.gaps for i in chk.items)
+    assert [i.item_id for i in chk.items if "receipt_missing" in i.gaps] == ["IT-3"]  # unreadable file awaits review
+    assert web.pending_items(cid) == {"IT-3": ["MSG-W003"]}
+    assert fwd[2]["attachments"][0]["evidence_status"] == "needs_review"
+    assert fwd[2]["attachments"][0]["review_reason"] == "unreadable_file"
     page = client.get(r.headers["location"]).text
     assert "forwarded to" in page and "Add file" in page
     admin = client.get(f"/admin/claims/{cid}").text
@@ -122,3 +125,61 @@ def test_flight_needs_flight_no(client):
     form[f"c_{d['cards'][0]['id']}_flight_no"] = ""
     client.post(f"/employee/drafts/{d['id']}", data=dict(form, action="submit"))
     assert "Flight number is required for flights." in d["cards"][0]["errors"]
+
+
+def submitted_with_unreadable(client):
+    d = drop(client, ["taxi_kota_biru_0310.jpg", "unreadable_photo.jpg"])
+    blank = d["cards"][1]["id"]
+    form = dict(form_of(d), **{f"c_{blank}_category": "meal", f"c_{blank}_date": "2026-10-03",
+                                f"c_{blank}_amount": "95.000", f"c_{blank}_merchant": "Warung"})
+    r = client.post(f"/employee/drafts/{d['id']}", data=dict(form, action="submit"), follow_redirects=False)
+    return r.headers["location"].split("/")[3].split("?")[0], r.headers["location"]
+
+
+def test_unreadable_evidence_needs_explicit_acceptance(client):
+    cid, loc = submitted_with_unreadable(client)
+    assert "Awaiting finance review" in client.get(loc).text and "Menunggu verifikasi finance" in client.get(loc).text
+    admin = client.get(f"/admin/claims/{cid}").text
+    assert "pending review" in admin and "Accept evidence" in admin and "Reject evidence" in admin
+    assert "unreadable_file" in admin
+    assert web.run_check(cid).decision.value == "needs_info"
+    # Neither the mailbox Attach button nor a status change can treat it as cleared.
+    client.post(f"/admin/claims/{cid}/evidence", data={"evidence_id": "MSG-W002"})
+    assert "MSG-W002" not in web.review(cid)["evidence"]
+    client.post(f"/admin/claims/{cid}/status", data={"status": "approved", "reviewer_confirmed": "true"})
+    assert web.store.get_claim(cid)["status"] == "submitted"
+    r = client.post(f"/admin/claims/{cid}/decide", data={"item_id": "IT-2", "choice": "approve_full"})
+    assert r.status_code == 409 and "IT-2" not in web.review(cid)["decisions"]
+    assert "approve_full" not in admin
+    client.post(f"/admin/claims/{cid}/evidence/MSG-W002/review", data={"verdict": "accept"})
+    assert web.pending_items(cid) == {}
+    assert web.run_check(cid).decision.value == "approve"
+    log = web.review(cid)["evidence_log"]
+    assert log[-1] | {"at": ""} == {"at": "", "evidence_id": "MSG-W002", "item_id": "IT-2",
+                                    "reason": "unreadable_file", "verdict": "accepted"}
+    assert "Evidence review log" in client.get(f"/admin/claims/{cid}").text
+
+
+def test_rejected_evidence_leaves_item_missing(client):
+    cid, loc = submitted_with_unreadable(client)
+    client.post(f"/admin/claims/{cid}/evidence/MSG-W002/review", data={"verdict": "reject"})
+    chk = web.run_check(cid)
+    assert "receipt_missing" in chk.items[1].gaps and chk.decision.value == "needs_info"
+    assert web.review(cid)["evidence_log"][-1]["verdict"] == "rejected"
+    assert "receipt missing" in client.get(loc).text
+
+
+def test_self_declared_doc_type_needs_review(client):
+    d = drop(client, ["taxi_kota_biru_0310.jpg"])
+    form = form_of(d)
+    fid = d["cards"][0]["files"][0]["id"]
+    form[f"f_{fid}_doc_type"] = "meal_receipt"
+    r = client.post(f"/employee/drafts/{d['id']}", data=dict(form, action="submit"), follow_redirects=False)
+    cid = r.headers["location"].split("/")[3].split("?")[0]
+    assert web.review(cid)["pending"]["MSG-W001"]["reason"] == "self_declared_only"
+
+
+def test_bulk_approve_skips_pending(client):
+    cid, _ = submitted_with_unreadable(client)
+    client.post("/admin/batch/approve", data={"batch": web.WEB_BATCH, "claim_ids": [cid], "reviewer_confirmed": "true"})
+    assert web.store.get_claim(cid)["status"] == "submitted"
