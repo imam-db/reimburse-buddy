@@ -27,6 +27,9 @@ class Finding:
     status: ItemStatus
     message: str
     gap: str | None = None  # machine-readable gap code, e.g. "boarding_pass_missing"
+    key: str = ""  # message template key (messages.py), used to localise the note
+    params: dict = field(default_factory=dict)
+    resolved_by: str | None = None  # set when a human decision closed this gap
 
 
 @dataclass
@@ -58,7 +61,7 @@ class ClaimCheck:
 @dataclass
 class IgnoredEvidence:
     id: str
-    reason: str  # unknown_id | belongs_to_other_employee | memo_unsigned
+    reason: str  # unknown_id | belongs_to_other_employee | memo_unsigned | no_matching_item
 
 
 def to_jsonable(obj):

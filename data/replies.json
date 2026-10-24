@@ -5,7 +5,13 @@
     "claim_id": "CLM-2026-0104",
     "keywords_any": [
       "IT-6",
-      "taxi"
+      "receipt",
+      "struk",
+      "kuitansi",
+      "nota",
+      "bukti",
+      "taxi",
+      "taksi"
     ],
     "reply": {
       "id": "MSG-5101",
@@ -31,7 +37,13 @@
     "claim_id": "CLM-2026-0110",
     "keywords_any": [
       "IT-5",
-      "receipt"
+      "receipt",
+      "struk",
+      "kuitansi",
+      "nota",
+      "bukti",
+      "taxi",
+      "taksi"
     ],
     "reply": {
       "id": "MSG-5203",

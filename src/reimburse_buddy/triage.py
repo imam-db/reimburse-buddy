@@ -14,11 +14,10 @@ def triage_claims(store: DataStore, batch: str = "") -> dict:
     cleared, exceptions = [], []
     for c in claims:
         chk = check_claim(store, c["id"])
-        row = {"claim_id": c["id"], "employee_id": c["employee_id"], "decision": chk.decision.value,
-               "total_claimed": str(chk.total_claimed), "total_approvable": str(chk.total_approvable)}
         if chk.decision == Decision.APPROVE and not chk.warnings:
-            cleared.append(row)
+            cleared.append(c["id"])
         else:
+            row = {"claim_id": c["id"], "employee_id": c["employee_id"]}
             row["gaps"] = sorted({g for i in chk.items for g in i.gaps} | {w.gap for w in chk.warnings if w.gap})
             row["rejected_items"] = [i.item_id for i in chk.items if i.status.value == "rejected"]
             exceptions.append(row)
@@ -26,7 +25,7 @@ def triage_claims(store: DataStore, batch: str = "") -> dict:
     return {
         "batch": batch or "all",
         "claims": len(claims),
-        "auto_cleared": cleared,
+        "auto_cleared": cleared,  # claim IDs; call check_claim on one if the reviewer asks
         "exceptions": exceptions,
         "time_saved_estimate": {
             "minutes": str(minutes * len(cleared)),

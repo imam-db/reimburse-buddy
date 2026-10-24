@@ -25,8 +25,8 @@ def test_boarding_pass_missing_then_found(store):
     assert c.total_pending == Decimal("1450000")
     assert item(c, "IT-1").gaps == ["boarding_pass_missing"]
     hits = store.search_inbox("EMP-001", "boarding pass")
-    assert [h["id"] for h in hits] == ["MSG-5001"]
-    c = check_claim(store, "CLM-2026-0101", ["MSG-5001"])
+    assert hits[0]["id"] == "MSG-5001"
+    c = check_claim(store, "CLM-2026-0101", [h["id"] for h in hits])
     assert c.decision == Decision.APPROVE
     assert c.total_approvable == Decimal("6265000")
 

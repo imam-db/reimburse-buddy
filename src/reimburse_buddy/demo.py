@@ -92,7 +92,9 @@ def hero() -> None:
     say("plan revised", "4 gaps -> 3a boarding pass, 3b hotel memo, 3c late check-out, 3d taxi receipt")
     # 3a: dead end, then an alternative query
     hits = store.search_inbox(emp, "boarding pass")
-    say("search_inbox 'boarding pass'", json.dumps([h["id"] + ": " + h["subject"] for h in hits]) + "  <- other trip, dead end")
+    say("search_inbox 'boarding pass'", json.dumps([h["id"] + ": " + h["subject"] for h in hits]))
+    probe = check_claim(store, cid, [hits[0]["id"]])
+    say("check_claim", f"top hit {hits[0]['id']} -> " + ", ".join(f"{i.id}: {i.reason}" for i in probe.ignored_evidence))
     hits = store.search_inbox(emp, "QZ 7520")
     say("search_inbox 'QZ 7520'", json.dumps([h["id"] + ": " + h["subject"] for h in hits]))
     ev += [h["id"] for h in hits]

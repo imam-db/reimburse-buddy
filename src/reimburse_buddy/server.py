@@ -40,7 +40,9 @@ def get_policy() -> dict:
 
 @mcp.tool()
 def search_inbox(employee_id: str, query: str = "") -> list[dict]:
-    """Search an employee's mailbox. All words in `query` must match (subject, body, sender, attachments)."""
+    """Search an employee's mailbox (mail to or from them). Ranked OR search over subject, body,
+    sender and attachment names; returns the top 5 as summaries (id, subject, snippet, attachments).
+    Pass promising IDs to check_claim; it reports IDs that match no item as no_matching_item."""
     return store.search_inbox(employee_id, query)
 
 
@@ -109,6 +111,13 @@ def get_outbox() -> dict:
     """(Mock) Show sent messages, approval requests and status changes made in this session."""
     return {"messages": store.outbox, "approval_requests": store.approval_requests,
             "status_changes": store.status_log}
+
+
+@mcp.tool()
+def reset_demo() -> dict:
+    """Restore all demo state: removes delivered replies, clears outbox, approval requests and status changes."""
+    store.reset()
+    return {"status": "reset", "claims": len(store.claims), "inbox_messages": len(store.inbox)}
 
 
 def main() -> None:
