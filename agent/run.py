@@ -31,7 +31,8 @@ async def main() -> None:
     cfg = load_config()
     print(f"model: {cfg!r}")
     async with mcp_tools() as (_session, tools):
-        graph = build_graph(build_chat_model(cfg), tools, checkpointer=InMemorySaver(), compact=not a.raw)
+        graph = build_graph(build_chat_model(cfg), tools, checkpointer=InMemorySaver(), compact=not a.raw,
+                            run_claim=a.claim)
         conf = {"configurable": {"thread_id": str(uuid.uuid4())}, "recursion_limit": a.max_steps}
         payload: object = {"messages": [("user", a.prompt.format(claim=a.claim))], "declined": {}}
         tokens = {"input": 0, "output": 0}
