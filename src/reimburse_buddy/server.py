@@ -75,6 +75,32 @@ def draft_decision(claim_id: str, evidence_ids: list[str] | None = None,
     return _draft(store, _check(store, claim_id, evidence_ids, human_decisions), note)
 
 
+@mcp.tool()
+def send_message(to: str, body: str, subject: str = "", claim_id: str = "") -> dict:
+    """(Mock) Email an employee, e.g. to ask for a missing receipt. Goes to the outbox.
+    Scripted replies arrive in that employee's mailbox; check with search_inbox."""
+    return store.send_message(to, body, subject, claim_id)
+
+
+@mcp.tool()
+def request_approval(manager_id: str, claim_id: str, item_id: str, reason: str = "") -> dict:
+    """(Mock) Ask the claimant's manager to approve one item. Returns a pending request."""
+    return store.request_approval(manager_id, claim_id, item_id, reason)
+
+
+@mcp.tool()
+def update_claim_status(claim_id: str, status: str, note: str = "") -> dict:
+    """(Mock) Set claim status: submitted, on_hold, approved, partially_approved or rejected."""
+    return store.update_claim_status(claim_id, status, note)
+
+
+@mcp.tool()
+def get_outbox() -> dict:
+    """(Mock) Show sent messages, approval requests and status changes made in this session."""
+    return {"messages": store.outbox, "approval_requests": store.approval_requests,
+            "status_changes": store.status_log}
+
+
 def main() -> None:
     mcp.run()  # stdio transport
 
