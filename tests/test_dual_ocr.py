@@ -83,9 +83,9 @@ def test_default_is_tesseract(monkeypatch):
     assert isinstance(get_extractor(), extract.TesseractExtractor)
 
 
-@pytest.mark.skipif(shutil.which("tesseract") is None or not extract.rapidocr_available(),
-                    reason="needs tesseract and rapidocr")
+@pytest.mark.skipif(shutil.which("tesseract") is None, reason="needs tesseract")
 def test_dual_reads_sample_taxi_without_disagreement(monkeypatch):
+    pytest.importorskip("rapidocr", reason="optional group: uv sync --group rapidocr")
     monkeypatch.setenv("REIMBURSE_EXTRACTOR", "dual")
     d = get_extractor().extract(SAMPLES / "taxi_kota_biru_0310.jpg")
     assert d.fields["date"].value == "2026-10-03" and d.fields["amount"].value == 230000
