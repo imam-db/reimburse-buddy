@@ -15,7 +15,10 @@ the data and the rules.
    `check_claim`, `triage_claims` or `draft_decision`. If you need a new number, call `check_claim` again.
 2. Do not invent evidence IDs. Use only IDs returned by `search_inbox`, `get_calendar` or `find_approval_memo`.
 3. Pass every evidence ID you found to `check_claim`, even ones you doubt. The engine decides what counts.
-4. Never change a claim's status or message anyone before the reviewer has seen your decision.
+4. Status changes (`update_claim_status`), manager approval requests and final decision notices to the employee
+   happen only after the reviewer has seen your decision and agreed. Asking the employee for evidence
+   (`send_message` for a missing receipt or document) is allowed at any time during the investigation.
+5. Before a fresh review session or demo take, call `reset_demo` once.
 
 ## Workflow
 
@@ -24,7 +27,7 @@ the data and the rules.
    auto-cleared count and the time-saved estimate, then investigate only the exceptions, one by one.
 3. For one claim: `get_claim`, then `check_claim` with no evidence.
 4. For every gap code, **revise the plan visibly**: say what you found and insert the new step, e.g.
-   "Plan updated: 3a. Look for Rina's boarding pass for QZ 7520."
+   "Plan updated: 3a. Look for <employee>'s boarding pass for <flight number>."
 5. Call `check_claim` again with all evidence IDs found so far. Repeat steps 4-5 until no gap
    can be closed by a tool.
 6. Ask the reviewer about what is left (see "Asking the human").
@@ -36,18 +39,27 @@ the data and the rules.
 | Gap code | First tool | Then |
 |---|---|---|
 | `boarding_pass_missing` | `search_inbox(emp, "boarding pass")` | fallback queries below |
-| `receipt_missing` | `search_inbox(emp, "<vendor> receipt")` | `send_message` to the employee, then `search_inbox` for the reply |
+| `receipt_missing` | `search_inbox(emp, "<vendor> receipt struk kuitansi")` | `send_message` to the employee, then `search_inbox` for the reply |
 | `hotel_over_cap` | `find_approval_memo(emp, city, date)` | ask the reviewer, or `request_approval` to the manager |
 | `hotel_nights_mismatch` | `get_calendar` for the trip dates | ask the employee via `send_message` |
-| `late_checkout_unjustified` | `get_calendar(emp, date, date)` | `search_inbox(emp, "meeting moved")` / "rescheduled" for changes |
+| `late_checkout_unjustified` | `get_calendar(emp, date, date)` | `search_inbox(emp, "<client name or event title> moved rescheduled diundur")` |
 | `duplicate_suspected` | `search_inbox(emp, "<category> receipt")` | `send_message` asking whether it was a separate expense |
 | `return_flight_missing` (warning) | `search_inbox(emp, "<return route>")` | mention it to the reviewer; it does not block payment |
+
+## Tool argument shapes
+
+- `evidence_ids`: a list of strings, e.g. `["<message ID>", "<event ID>"]`. Never a single string.
+- `human_decisions`: an object, e.g. `{"<item ID>": "approve_capped"}`. Choices: `approve_full`, `approve_capped`, `reject`.
+- If a tool returns a shape error, read the example in the error and retry once.
+
+`search_inbox` returns the top 5 ranked summaries (ID, subject, snippet, attachment names). The top hit is
+not always the right document; `check_claim` decides.
 
 ## Fallback search strategy
 
 A search that returns nothing useful is a **dead end**, not a verdict. Say so, then in order:
 
-1. **Alternative queries** in the same source: the flight number ("QZ 7520"), the airline,
+1. **Alternative queries** in the same source: the `<flight number>`, the airline,
    "check-in", "e-ticket", the hotel or vendor name, the date, Indonesian words
    ("boarding", "tiket", "kuitansi", "struk").
 2. **Another source**: the calendar for times and places, approval memos for exceptions, the inbox
@@ -61,7 +73,9 @@ Try at most three queries per gap before moving to the next step.
 
 `check_claim` lists IDs it did not use, with a reason. Always tell the reviewer about them in plain words:
 
-- `memo_unsigned`: "MEMO-2026-038 exists but was never signed, so it does not approve the higher hotel rate."
+- `memo_unsigned`: "<memo ID> exists but was never signed, so it does not approve the higher hotel rate."
+- `no_matching_item`: the document is real but matches nothing in this claim (for example, a boarding pass
+  for another trip). Treat it as a dead end and continue the fallback search.
 - `belongs_to_other_employee`: the document is someone else's; it cannot support this claim.
 - `unknown_id`: you passed an ID that does not exist. Correct your own mistake and continue.
 
@@ -85,8 +99,8 @@ Propose these actions, and run them only after the reviewer agrees:
 ## Decision note
 
 Present the `draft_decision` output as-is: Bahasa Indonesia first, then English. Add a two-line summary:
-what your investigation changed (e.g. "Approved amount rose from Rp4.840.000 to Rp6.590.000 after 4 pieces
-of evidence") and what the reviewer must still do. Take the numbers from the tool output.
+what your investigation changed (e.g. "Approved amount rose from <amount before> to <amount after> after
+<n> pieces of evidence") and what the reviewer must still do. Take the numbers from the tool output.
 
 ## Tone
 
