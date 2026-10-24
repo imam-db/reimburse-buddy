@@ -7,7 +7,8 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 EXPECTED = {"list_claims", "get_claim", "get_policy", "search_inbox", "get_calendar",
-            "find_approval_memo", "check_claim", "draft_decision"}
+            "find_approval_memo", "check_claim", "draft_decision",
+            "send_message", "request_approval", "update_claim_status", "get_outbox"}
 
 
 async def test_server_lists_tools_and_checks_claim():

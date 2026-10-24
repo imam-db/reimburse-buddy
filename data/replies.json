@@ -1,0 +1,11 @@
+[
+  {
+    "id": "RPL-0001", "to": "EMP-003", "claim_id": "CLM-2026-0104", "keywords_any": ["IT-6", "taxi"],
+    "reply": {
+      "id": "MSG-5101", "owner_id": "EMP-003", "from": "sari.kusumawati@nusantara-niaga.example", "date": "2026-10-24",
+      "subject": "Re: Claim CLM-2026-0104: taxi IT-6",
+      "body": "Yes, separate ride: back to the vendor site after lunch. Second taxi receipt attached.",
+      "attachments": [{"name": "taxi_receipt_2.jpg", "type": "receipt", "claim_id": "CLM-2026-0104", "item_id": "IT-6", "receipt_no": "TX-90022"}]
+    }
+  }
+]
