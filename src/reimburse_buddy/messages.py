@@ -7,13 +7,17 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-MONEY = {"per_night", "cap", "memo_cap", "limit", "max_fee"}
+MONEY = {"per_night", "cap", "memo_cap", "limit", "max_fee", "receipt_amount", "item_amount"}
 
 T = {
     "date_outside": ("Expense date {date} is outside the trip {start} to {end}.",
                      "Tanggal biaya {date} di luar periode perjalanan {start} s.d. {end}."),
     "receipt_found": ("Receipt found in {src}.", "Bukti pembayaran ditemukan di {src}."),
     "receipt_missing": ("Receipt missing.", "Bukti pembayaran tidak ada."),
+    "receipt_amount_mismatch": ("Receipt in {src} shows {receipt_amount}, but the item claims {item_amount}. Needs review.",
+                                "Bukti di {src} menunjukkan {receipt_amount}, tetapi item diklaim {item_amount}. Perlu ditinjau."),
+    "multiple_receipts": ("Several receipts were submitted for this item ({srcs}). Needs review: which one is right?",
+                          "Ada beberapa bukti untuk item ini ({srcs}). Perlu ditinjau: mana yang benar?"),
     "category_not_allowed": ("Category '{category}' is not allowed by the policy (allowed: {allowed}).",
                              "Kategori '{category}' tidak diizinkan kebijakan (yang diizinkan: {allowed})."),
     "dup_same_receipt": ("Same receipt number {rno} as {other}.", "Nomor bukti {rno} sama dengan {other}."),

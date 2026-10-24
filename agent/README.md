@@ -229,6 +229,40 @@ refuses on its own, so the gate is barely exercised.
 3. Only state amounts that come from tool output, and drop the computed sub-totals (case 3).
 4. Give `request_missing_evidence` a multi-item mode so one email covers several gaps (case 9).
 
+### Follow-up changes (PR #18): not yet re-run
+
+The results table above is still the **before** state. These changes have not been measured against
+a model: the DeepSeek balance is nearly empty, so no model was called for this round ($0 spent). The
+re-run is pending.
+
+- **Rule engine (root `src/`).** A receipt found in the mailbox whose `amount` differs from the item
+  now gets the gap `receipt_amount_mismatch`. Two or more receipts submitted for one item get
+  `multiple_receipts`. Both mark the item `needs_evidence` with Rp0 approvable, and a reviewer decision
+  can resolve them.
+  - The amount must match exactly, with no tolerance. A receipt states the exact amount paid, and
+    claim amounts are copied from it.
+  - Receipts without an `amount` field are not compared.
+  - Version A's data has no receipt amounts and no item with two receipts, so the hero flow
+    (Rp6.590.000 of Rp6.890.000) and triage 10/7/3 are unchanged, and no fixture was edited.
+  - The two codes are kept out of `gaps.ALL`, because `SKILL.md` (frozen) documents exactly that list.
+    They are documented in the version-B addendum instead.
+- **Version-B prompt addendum.** Search the mailbox at most once per gap, and search again only with
+  new information. Stop once `check_claim` is clean. Only state Rp amounts that appear verbatim in tool
+  output. Never pick between conflicting receipts.
+- **Case 2.** If the agent hasn't proposed a message, the scripted reviewer now tells it to send the
+  outcome with `send_message`, then declines the call in the approval box. A pass needs that decline
+  to have happened, so a run where the gate is not exercised counts as a fail.
+- **Case 5.** Submitting the conflicting receipts no longer fails the case, because the engine now
+  flags them. Accepting them (IT-1 approved) still fails.
+- **Limits unchanged.** Case 6 still allows at most 12 tool calls and case 8 at most 3. Both are
+  strict. In the before run, every case 6 run already had the right decision and failed only on the
+  step count.
+
+What to expect, offline only (not a measurement):
+- Case 5 should now pass when the agent submits both receipts and drafts without approving IT-1.
+- Cases 6 and 8 depend on whether the model follows the efficiency rules.
+- Case 2 will now really test the gate.
+
 ## Next
 
 Langfuse tracing, harder eval cases, the "Investigate" button in `web/`, Qwen / Gemini Flash
