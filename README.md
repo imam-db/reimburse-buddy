@@ -41,6 +41,7 @@ flowchart LR
 | `get_calendar(employee_id, date_from, date_to)` | Mock calendar |
 | `find_approval_memo(employee_id, city, date)` | Hotel-cap exception memos |
 | `check_claim(claim_id, evidence_ids, human_decisions)` | Deterministic rule check |
+| `triage_claims(batch)` | Split a batch into auto-cleared claims and exceptions, with a time-saved estimate |
 | `draft_decision(...)` | Reviewer-ready decision note |
 | `send_message(to, body, subject, claim_id)` | (Mock write) Email an employee; goes to the outbox |
 | `request_approval(manager_id, claim_id, item_id, reason)` | (Mock write) Ask the claimant's manager; returns a pending request |
@@ -73,6 +74,8 @@ Unresolved problems come back as **gap codes** (`receipt_missing`, `boarding_pas
 
 | # | Claim | What happens |
 |---|---|---|
+| Triage | batch `2026-W43` | `triage_claims` checks 10 claims: 7 clean ones are auto-cleared, 3 exceptions are investigated. Time-saved estimate: ~105 min (15 min per auto-cleared claim, a stated synthetic assumption). |
+| Hero | `CLM-2026-0110` | Four problems in one claim. (a) Searching "boarding pass" only finds another trip; the airline email says "Check-in successful: QZ 7520", so the agent retries with the flight number. (b) The only hotel memo, `MEMO-2026-038`, is **unsigned**, so `check_claim` ignores it (`memo_unsigned`) and the agent asks the reviewer. (c) The calendar says the meeting ended 11:30, but an email moved it to 13:00-15:00; together they justify the 16:30 check-out. (d) The taxi receipt is missing; the agent emails Rina and her reply carries the receipt. |
 | 1 | `CLM-2026-0101` | Flight has no boarding pass. Agent searches the inbox, finds `MSG-5001`, claim approved. |
 | 2a | `CLM-2026-0102` | Jakarta hotel over cap. Agent finds signed memo `MEMO-2026-041`, approved. |
 | 2b | `CLM-2026-0103` | Medan hotel over cap, no memo. Agent asks the reviewer; capped amount approved. |
@@ -81,7 +84,7 @@ Unresolved problems come back as **gap codes** (`receipt_missing`, `boarding_pas
 Run them without WorkBuddy:
 
 ```bash
-uv run python -m reimburse_buddy.demo boarding-pass   # or hotel-memo, hotel-ask, late-checkout, all
+uv run python -m reimburse_buddy.demo boarding-pass   # or triage, hero, hotel-memo, hotel-ask, late-checkout, all
 ```
 
 ## Setup
@@ -101,7 +104,7 @@ uv run reimburse-buddy-mcp   # starts the server on stdio (WorkBuddy normally do
 1. Copy `.workbuddy/mcp.json` into your project's `.workbuddy/` folder (or merge it into
    `~/.workbuddy/mcp.json`) and replace `/ABSOLUTE/PATH/TO/reimburse-buddy` with your clone path.
    On Windows use a path like `C:\\Users\\you\\reimburse-buddy`.
-2. Restart WorkBuddy and confirm the `reimburse-buddy` server shows its 12 tools.
+2. Restart WorkBuddy and confirm the `reimburse-buddy` server shows its 13 tools.
 3. Add the skill in `skills/claim-auditor/SKILL.md` to WorkBuddy's skills.
 4. Try: *"Review claim CLM-2026-0101."*
 
@@ -116,6 +119,7 @@ src/reimburse_buddy/
   decision.py    decision note renderer
   data_store.py  JSON data access + mock tools
   models.py      result types, Decimal helpers
+  triage.py      batch triage
   demo.py        scripted scenarios
 data/            synthetic employees, policy, claims, inbox, calendar, memos
 skills/claim-auditor/SKILL.md
