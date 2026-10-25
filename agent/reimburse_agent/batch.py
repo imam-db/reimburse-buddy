@@ -19,9 +19,14 @@ from langgraph.graph.message import add_messages
 from langgraph.types import interrupt
 
 from .compact import tool_text
-from .graph import (MAX_GATED_CALLS, _jsonish, build_graph, call_signature, check_position, describe_writes,
+from .graph import (MAX_GATED_CALLS, _compact, _jsonish, build_graph, call_signature, check_position, describe_writes,
                     open_gaps)
 
+# Model tokens (provider-reported input+output). Live case 3 (review 5) spent ~120k over 17 calls, ~7k a call,
+# and never finished 0110. Each sub-run gets min(SUBRUN, what is left of BATCH), so the batch always reaches
+# finish with a code-built summary for every claim, even if a claim run stops early on its budget.
+SUBRUN_TOKEN_BUDGET = 35000
+BATCH_TOKEN_BUDGET = 105000
 APPROVE_WORDS = re.compile(r"\b(approve|approval|setujui)\b", re.I)
 
 
@@ -33,6 +38,9 @@ class BatchState(TypedDict, total=False):
     messages: Annotated[list[BaseMessage], add_messages]
     batch_id: str
     triage_text: str  # triage_claims output, verbatim
+    policy_text: str  # get_policy output (compacted), fetched once and served to every sub-run
+    free_evidence: list[list[str]]  # [claim, item, gap] free evidence requests the sub-runs sent
+    tokens_used: int  # model tokens all sub-runs used so far
     cleared: list[str]
     queue: list[str]  # exception claims not yet investigated
     summaries: list[dict]  # one per finished sub-run, built by claim_summary()
@@ -75,8 +83,26 @@ def summary_text(s: dict) -> str:
     return "\n".join(parts)
 
 
+def policy_summary(policy_text: str) -> str:
+    """The numbers a claim review needs (tiers, caps, rates, required documents), without the rule prose:
+    the engine applies the rules in check_claim, and the full policy is still served on get_policy."""
+    p = _jsonish(policy_text) or {}
+    keep = ("currency", "city_tiers", "default_tier", "hotel_nightly_cap", "per_diem_daily", "late_checkout",
+            "receipt_required_categories", "boarding_pass_required_for")
+    return json.dumps({k: p[k] for k in keep if k in p}, ensure_ascii=False, separators=(",", ":"))
+
+
+def triage_row(triage_text: str, cid: str) -> str:
+    data = _jsonish(triage_text) or {}
+    row = next((r for r in data.get("exceptions") or [] if r.get("claim_id") == cid), None)
+    return json.dumps(row, ensure_ascii=False) if row else ""
+
+
 def build_batch_graph(model, tools, batch_id: str, system_prompt: str | None = None, checkpointer=None,
-                      compact: bool = True, max_gated: int = MAX_GATED_CALLS):
+                      compact: bool = True, max_gated: int = MAX_GATED_CALLS,
+                      subrun_token_budget: int | None = SUBRUN_TOKEN_BUDGET,
+                      batch_token_budget: int | None = BATCH_TOKEN_BUDGET, slim: bool = True):
+    """slim=False is the review-5 sub-run (bare prompt, nothing served), kept for the token comparison."""
     by_name = {t.name: t for t in tools}
 
     async def call(name, args):
@@ -90,7 +116,8 @@ def build_batch_graph(model, tools, batch_id: str, system_prompt: str | None = N
         data = _jsonish(text) or {}
         return {"batch_id": batch_id, "triage_text": text, "cleared": list(data.get("auto_cleared") or []),
                 "queue": [r["claim_id"] for r in data.get("exceptions") or [] if r.get("claim_id")],
-                "summaries": [], "writes": [], "gated_count": 0, "graph_proposals": []}
+                "policy_text": _compact(await call("get_policy", {})) if "get_policy" in by_name else "",
+                "summaries": [], "writes": [], "gated_count": 0, "graph_proposals": [], "free_evidence": []}
 
     async def approve(state: BatchState):
         first = next((m for m in state["messages"] if isinstance(m, HumanMessage)), None)
@@ -120,15 +147,31 @@ def build_batch_graph(model, tools, batch_id: str, system_prompt: str | None = N
         checkpointer of its own, so it is scoped to this call and its interrupts surface in the parent."""
         cid = state["queue"][0]
         left = max(0, max_gated - state.get("gated_count", 0))
-        sub = build_graph(model, tools, system_prompt=system_prompt, compact=compact, max_gated=left, run_claim=cid)
+        spent = state.get("tokens_used", 0)
+        caps = [b for b in (subrun_token_budget, None if batch_token_budget is None else max(0, batch_token_budget - spent))
+                if b is not None]
+        budget = min(caps) if caps else None
+        served = None if not slim else {"triage_claims": ({"batch": batch_id}, state.get("triage_text", ""))}
+        if slim and state.get("policy_text"):
+            served["get_policy"] = ({}, state["policy_text"])
+        sub = build_graph(model, tools, system_prompt=system_prompt, compact=compact, max_gated=left, run_claim=cid,
+                          served=served, token_budget=budget)
         first = next((m for m in state["messages"] if isinstance(m, HumanMessage)), None)
+        # Triage and policy are already known: hand them in so the model need not call for them again
+        # (if it does, the sub-run serves the held text; the tool list is unchanged).
         prompt = (f"Review claim {cid} and draft the decision note. It is an exception in batch {batch_id} "
-                  f"(the reviewer's request: \"{first.content if first else ''}\").")
+                  f"(the reviewer's request: \"{first.content if first else ''}\")."
+                  + (f"\n\nTriage row for {cid} (already run, do not call triage_claims again):\n{triage_row(state.get('triage_text', ''), cid)}"
+                     if slim else "")
+                  + (f"\n\nPolicy summary (already loaded, do not call get_policy again):\n{policy_summary(state['policy_text'])}"
+                     if slim and state.get("policy_text") else ""))
         v = await sub.ainvoke({"messages": [HumanMessage(prompt)], "declined": {}})
         s = claim_summary(cid, v)
         return {"queue": state["queue"][1:], "summaries": [*state.get("summaries", []), s],
                 "writes": [*state.get("writes", []), *s["writes"]],
                 "gated_count": state.get("gated_count", 0) + v.get("gated_count", 0),
+                "free_evidence": [*state.get("free_evidence", []), *v.get("free_evidence", [])],
+                "tokens_used": spent + v.get("tokens_used", 0),
                 "effective_args": v.get("effective_args", {})}
 
     def finish(state: BatchState):

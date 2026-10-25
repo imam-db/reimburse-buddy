@@ -149,6 +149,7 @@ class State(TypedDict, total=False):
     instructions: list[dict]  # explicit reviewer instructions not yet carried out (see parse_instructions)
     graph_proposals: list[dict]  # gated actions the graph proposed itself: {"tool", "args", "id", "approved", "from"}
     unattributed_searches: int  # raw mailbox searches that named no single open gap
+    tokens_used: int  # model input+output tokens this run (provider usage, else a chars/4 estimate)
 
 
 SEARCH_TOOL = "search_reimburse_mailbox"
@@ -417,12 +418,35 @@ def describe_writes(writes: list[dict]) -> str:
     return "Writes made in this run: " + "; ".join(parts) + "."
 
 
+def message_tokens(m) -> int:
+    """Provider-reported input+output tokens of one model reply; 0 when the provider gave none."""
+    um = getattr(m, "usage_metadata", None) or {}
+    if um.get("total_tokens"):
+        return int(um["total_tokens"])
+    tu = (getattr(m, "response_metadata", None) or {}).get("token_usage") or {}
+    return int((tu.get("prompt_tokens") or 0) + (tu.get("completion_tokens") or 0))
+
+
+def estimate_tokens(msgs) -> int:
+    """Rough chars/4 size of a prompt, for models (fakes) that report no usage."""
+    return sum(len(str(getattr(m, "content", ""))) + len(json.dumps(getattr(m, "tool_calls", None) or [], default=str))
+               for m in msgs) // 4
+
+
+BUDGET_STOP = "graph_budget_stop"  # AIMessage.name of the graph's own stop text (no model call behind it)
+
+
 def build_graph(model, tools, system_prompt: str | None = None, checkpointer=None, compact: bool = True,
-                max_gated: int = MAX_GATED_CALLS, run_claim: str | None = None):
+                max_gated: int = MAX_GATED_CALLS, run_claim: str | None = None,
+                served: dict[str, tuple[dict, str]] | None = None, token_budget: int | None = None):
     """model: any LangChain chat model with bind_tools. tools: LangChain tools (e.g. from MCP).
     compact: shrink tool outputs before the model sees them (see compact.py); False = raw.
     run_claim: the claim this run investigates; without it every evidence request is gated, reviewer
-    decisions are not injected and there is no gap search budget or auto-draft."""
+    decisions are not injected and there is no gap search budget or auto-draft.
+    served: tool name -> (args it holds, output) the caller already has (batch: triage_claims, get_policy). The tool stays
+    in the bound list; a call to it just returns the held text instead of hitting the server again.
+    token_budget: model tokens this run may use; once spent, the agent node stops with plain text
+    (no model call, no tool call) and the run ends the normal way (graph_actions or END)."""
     system = SystemMessage(system_prompt if system_prompt is not None else load_system_prompt())
     tools = [t for t in tools if t.name not in HIDDEN_TOOLS]
     by_name = {t.name: t for t in tools}
@@ -432,6 +456,10 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
     bound = model.bind_tools(tools)
 
     async def invoke(name: str, args: dict) -> str:
+        if served and name in served:
+            want, text = served[name]  # held only for these args (e.g. the same batch); other args go to the server
+            if all(args.get(k) in (None, v) for k, v in want.items()):
+                return text
         res = await by_name[name].ainvoke(args)
         if compact:
             return _compact(tool_text(res))
@@ -485,7 +513,15 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         return out
 
     async def agent(state: State):
-        return {"messages": [await bound.ainvoke([system, *state["messages"]])]}
+        used = state.get("tokens_used", 0)
+        if token_budget is not None and used >= token_budget:
+            return {"messages": [AIMessage(name=BUDGET_STOP, content=(
+                f"Stopped: this claim run used its model budget ({used} of {token_budget} tokens). "
+                "No draft was written by the model; see the open gaps."))]}
+        prompt = [system, *state["messages"]]
+        reply = await bound.ainvoke(prompt)
+        n = message_tokens(reply) or estimate_tokens(prompt) + estimate_tokens([reply])
+        return {"messages": [reply], "tokens_used": used + n}
 
     def gate(state: State):
         last = state["messages"][-1]
