@@ -138,7 +138,7 @@ SCHEDULE_TERMS = re.compile(
     r"\b(?:dimajukan|dimajuin|majuin|maju|diundur|diundurin|undur|dipindah|dipindahin|pindah|digeser|geser|"
     r"batal|dibatalkan|dibatalin|cancel(?:led|ed)?|reschedul\w*|moved?|postponed?|brought forward|"
     r"pushed (?:back|forward)|called off|ganti jadwal|jadwal baru|jadwalnya berubah)\b", re.I)
-SIMILARITY_THRESHOLD = 0.55  # cosine, paraphrase-multilingual-MiniLM; tuned on set A (eval/fixtures/large)
+SIMILARITY_THRESHOLD = 0.45  # tuned on large set A only (needed 0.538 vs best distractor 0.393); set B is held out
 
 
 async def find_messages(search, employee_id: str, query: str, date_from: str | None = None,

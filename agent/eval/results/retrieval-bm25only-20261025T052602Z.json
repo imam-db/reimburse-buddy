@@ -1,0 +1,205 @@
+{
+  "large_a": {
+    "rows": [
+      {
+        "family": "taxi_body",
+        "claim": "CLM-2026-6001",
+        "needed": "MSG-6359",
+        "query": "Taxi airport to hotel taxi taksi receipt struk kuitansi 2026-10-13",
+        "mailbox": 51,
+        "pool": 35,
+        "possibly_incomplete": true,
+        "in_pool": true,
+        "rank": {
+          "lexical": null,
+          "ranked": 9,
+          "ranked_full": 13
+        }
+      },
+      {
+        "family": "reschedule_later",
+        "claim": "CLM-2026-6002",
+        "needed": "MSG-6360",
+        "query": "Late check-out until 16:00 late checkout hotel moved reschedul diundur 2026-10-16",
+        "mailbox": 47,
+        "pool": 36,
+        "possibly_incomplete": true,
+        "in_pool": true,
+        "rank": {
+          "lexical": null,
+          "ranked": null,
+          "ranked_full": null
+        }
+      },
+      {
+        "family": "reschedule_earlier",
+        "claim": "CLM-2026-6003",
+        "needed": "MSG-6338",
+        "query": "Late check-out until 15:00 late checkout hotel moved reschedul diundur 2026-10-09",
+        "mailbox": 68,
+        "pool": 47,
+        "possibly_incomplete": true,
+        "in_pool": true,
+        "rank": {
+          "lexical": null,
+          "ranked": 3,
+          "ranked_full": 3
+        },
+        "scan": {
+          "query": "Partner review with PT Bahari Sejahtera 2026-10-09",
+          "needed_similarity": null,
+          "best_other_similarity": null,
+          "hits": []
+        }
+      },
+      {
+        "family": "slang_reply",
+        "claim": "CLM-2026-6004",
+        "needed": "MSG-6099",
+        "query": "CLM-2026-6004 IT-3 Taxi hotel to airport taxi taksi receipt struk kuitansi",
+        "mailbox": 64,
+        "pool": 43,
+        "possibly_incomplete": true,
+        "in_pool": true,
+        "rank": {
+          "lexical": null,
+          "ranked": null,
+          "ranked_full": null
+        }
+      },
+      {
+        "family": "quoted",
+        "claim": "CLM-2026-6005",
+        "needed": "MSG-6377",
+        "query": "Taxi hotel to airport taxi taksi receipt struk kuitansi 2026-10-21",
+        "mailbox": 54,
+        "pool": 33,
+        "possibly_incomplete": true,
+        "in_pool": true,
+        "rank": {
+          "lexical": 1,
+          "ranked": null,
+          "ranked_full": null
+        }
+      }
+    ],
+    "lexical": {
+      "recall@5": 0.2,
+      "mrr": 0.2
+    },
+    "ranked": {
+      "recall@5": 0.2,
+      "mrr": 0.089
+    },
+    "ranked_full": {
+      "recall@5": 0.2,
+      "mrr": 0.082
+    },
+    "ranker": "bm25 only"
+  },
+  "large_b": {
+    "rows": [
+      {
+        "family": "taxi_body",
+        "claim": "CLM-2026-7001",
+        "needed": "MSG-7357",
+        "query": "Taxi airport to hotel taxi taksi receipt struk kuitansi 2026-10-13",
+        "mailbox": 46,
+        "pool": 36,
+        "possibly_incomplete": true,
+        "in_pool": true,
+        "rank": {
+          "lexical": 3,
+          "ranked": 7,
+          "ranked_full": 7
+        }
+      },
+      {
+        "family": "reschedule_later",
+        "claim": "CLM-2026-7002",
+        "needed": "MSG-7358",
+        "query": "Late check-out until 16:00 late checkout hotel moved reschedul diundur 2026-10-16",
+        "mailbox": 67,
+        "pool": 44,
+        "possibly_incomplete": true,
+        "in_pool": true,
+        "rank": {
+          "lexical": null,
+          "ranked": 2,
+          "ranked_full": 2
+        }
+      },
+      {
+        "family": "reschedule_earlier",
+        "claim": "CLM-2026-7003",
+        "needed": "MSG-7332",
+        "query": "Late check-out until 15:00 late checkout hotel moved reschedul diundur 2026-10-09",
+        "mailbox": 51,
+        "pool": 38,
+        "possibly_incomplete": true,
+        "in_pool": true,
+        "rank": {
+          "lexical": null,
+          "ranked": 2,
+          "ranked_full": 2
+        },
+        "scan": {
+          "query": "Partner review with PT Delta Samudra 2026-10-09",
+          "needed_similarity": null,
+          "best_other_similarity": null,
+          "hits": [
+            {
+              "id": "MSG-7332",
+              "similarity": null,
+              "term": "dimajukan"
+            }
+          ]
+        }
+      },
+      {
+        "family": "slang_reply",
+        "claim": "CLM-2026-7004",
+        "needed": "MSG-7099",
+        "query": "CLM-2026-7004 IT-3 Taxi hotel to airport taxi taksi receipt struk kuitansi",
+        "mailbox": 67,
+        "pool": 43,
+        "possibly_incomplete": true,
+        "in_pool": true,
+        "rank": {
+          "lexical": null,
+          "ranked": null,
+          "ranked_full": null
+        }
+      },
+      {
+        "family": "quoted",
+        "claim": "CLM-2026-7005",
+        "needed": "MSG-7383",
+        "query": "Taxi hotel to airport taxi taksi receipt struk kuitansi 2026-10-21",
+        "mailbox": 60,
+        "pool": 36,
+        "possibly_incomplete": true,
+        "in_pool": true,
+        "rank": {
+          "lexical": 4,
+          "ranked": null,
+          "ranked_full": null
+        }
+      }
+    ],
+    "lexical": {
+      "recall@5": 0.4,
+      "mrr": 0.117
+    },
+    "ranked": {
+      "recall@5": 0.4,
+      "mrr": 0.229
+    },
+    "ranked_full": {
+      "recall@5": 0.4,
+      "mrr": 0.229
+    },
+    "ranker": "bm25 only"
+  },
+  "fixtures_sha256": "3846d22865cc562354f3aab210e8403f490dad423fcd78c50d6eaf4ea4f2e3a3"
+}
