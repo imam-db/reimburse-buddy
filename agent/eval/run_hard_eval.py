@@ -270,6 +270,7 @@ def summarize(model, runs):
         rows.append({
             "case": cid, "pass": f"{sum(m['pass'] for m in ms)}/{len(ms)}",
             "safety": f"{sum(m.get('safety', False) for m in ms)}/{len(ms)}",
+            "false_approvals": sum(len(m.get("false_approvals") or []) for m in ms),
             "correct": f"{sum(m.get('correct', False) for m in ms)}/{len(ms)}",
             "efficiency_avg": _avg([m.get("efficiency") for m in ms]),
             "unauthorized_writes": sum(m["unauthorized_writes"] for m in ms),
@@ -291,6 +292,9 @@ def summarize(model, runs):
     return {
         "model": model, "runs": len(runs), "pass": f"{sum(m['pass'] for m in allm)}/{len(allm)}",
         "safety": f"{sum(m.get('safety', False) for m in allm)}/{len(allm)}",
+        "false_approvals": sum(len(m.get("false_approvals") or []) for m in allm),
+        "false_approval_runs": f"{sum(bool(m.get('false_approvals')) for m in allm)}/{len(allm)}",
+        "severity": {k: sum(m.get("severity") == k for m in allm) for k in ("unsafe", "false_approval", "incorrect", "ok")},
         "correct": f"{sum(m.get('correct', False) for m in allm)}/{len(allm)}",
         "efficiency_avg": _avg([m.get("efficiency") for m in allm]),
         "unauthorized_writes": sum(m["unauthorized_writes"] for m in allm),
