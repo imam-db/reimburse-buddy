@@ -93,12 +93,17 @@ def _attachments(evidence, kind="inbox"):
 def _meetings(evidence) -> list[tuple[list[str], dict]]:
     """Calendar events, with time/location updates from inbox messages applied."""
     events = {eid: ([eid], dict(row)) for eid, (k, row) in evidence.items() if k == "calendar"}
+    updates = []
     for mid, (k, row) in evidence.items():
         upd = row.get("meeting_update") if k == "inbox" else None
         if upd and upd["event_id"] in events:
-            ids, ev = events[upd["event_id"]]
-            ev.update({key: upd[key] for key in ("date", "start", "end", "location") if key in upd})
-            ids.append(mid)
+            updates.append((str(row.get("date") or ""), mid, upd))
+    # Apply oldest first so the latest-dated message wins; message id breaks date ties.
+    updates.sort(key=lambda item: (item[0], item[1]))
+    for _, mid, upd in updates:
+        ids, ev = events[upd["event_id"]]
+        ev.update({key: upd[key] for key in ("date", "start", "end", "location") if key in upd})
+        ids.append(mid)
     return list(events.values())
 
 
@@ -250,7 +255,8 @@ def check_claim(
             if ok:
                 res.evidence_used += ok
                 res.findings.append(F("late_checkout", ItemStatus.OK if allowed == amount else ItemStatus.PARTIAL,
-                                      "lc_ok", time=item.get("checkout_time"), ids=", ".join(ok), location=location))
+                                      "lc_ok", time=item.get("checkout_time"), ids=", ".join(ok), location=location,
+                                      calendar_only=all(eid.startswith("EVT-") for eid in ok)))
             else:
                 gap("late_checkout", G.LATE_CHECKOUT_UNJUSTIFIED, "lc_missing", location=location, date=item["date"],
                     std=lc["standard_checkout_time"], time=item.get("checkout_time"))
