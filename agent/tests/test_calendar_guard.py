@@ -1,5 +1,5 @@
-"""Step 3 (fake model, no key): a late checkout that check_claim passes on a calendar event alone needs one
-mailbox search attributed to that gap before the graph (or the model) drafts. Case 14: the search built from
+"""Calendar-only guard (fake model, no key): a late checkout that check_claim passes on a calendar event alone
+gets a graph-run contradiction scan before the graph (or the model) drafts. Case 14: the search built from
 the event title finds the email that moved the meeting earlier, so nothing is approved without the reviewer."""
 
 from langchain_core.messages import AIMessage
@@ -22,7 +22,14 @@ def _msgs(turns, tag):
 def test_calendar_only_detection():
     row = {"item_id": "IT-4", "evidence_used": ["EVT-1"], "findings": [{"rule": "late_checkout", "status": "ok"}]}
     assert calendar_only({"items": [row]}) == {"IT-4:late_checkout_unjustified": ["EVT-1"]}
-    assert calendar_only({"items": [{**row, "evidence_used": ["EVT-1", "MSG-2"]}]}) == {}
+    # compacted output (no params): any EVT counts, so an unrelated MSG passed alongside cannot switch it off
+    assert calendar_only({"items": [{**row, "evidence_used": ["EVT-1", "MSG-2"]}]}) == {"IT-4:late_checkout_unjustified": ["EVT-1"]}
+    # raw output: the finding's own provenance decides
+    raw = {**row, "evidence_used": ["EVT-1", "MSG-2"], "findings": [{"rule": "late_checkout", "status": "ok",
+                                                                     "params": {"ids": "EVT-1"}}]}
+    assert calendar_only({"items": [raw]}) == {"IT-4:late_checkout_unjustified": ["EVT-1"]}
+    raw["findings"][0]["params"]["ids"] = "EVT-1,MSG-2"
+    assert calendar_only({"items": [raw]}) == {}
     assert calendar_only({"items": [row]}, {"IT-4": "reject"}) == {}
 
 

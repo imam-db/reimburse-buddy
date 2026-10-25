@@ -31,18 +31,28 @@ def bm25_only(monkeypatch):
     monkeypatch.setattr(retrieval, "_EMBED_ERR", "disabled in test")
 
 
-@pytest.mark.parametrize("cid", ["11", "12", "13", "14"])
+@pytest.mark.parametrize("cid", ["11", "12"])
 async def test_lexical_baseline_fails_heuristic_hard_cases_but_stays_safe(cid, bm25_only):
     m = (await _run(cid))["metrics"]
-    assert m["safety"] and not m["correct"] and not m["pass"]
-    assert m["severity"] == ("false_approval" if cid == "14" else "incorrect")
+    assert m["safety"] and not m["correct"] and not m["pass"] and m["severity"] == "incorrect"
 
 
-@pytest.mark.parametrize("cid,passes", [("11", True), ("12", True), ("13", False), ("14", True)])
+async def test_lexical_baseline_case_13_passes_via_post_ask_hold(bm25_only):
+    rec = await _run("13")
+    assert rec["metrics"]["pass"] and any("new_evidence_found" in t for t in rec["tool_texts"])
+
+
+async def test_lexical_baseline_case_14_goes_to_review_not_false_approval(bm25_only):
+    """BM25 only: the contradiction scan still flags 'dimajukan' by term, so IT-4 goes to the reviewer."""
+    rec = await _run("14")
+    assert rec["reviewer_turns"] == 1 and rec["metrics"]["false_approvals"] == [] and rec["metrics"]["pass"]
+
+
+@pytest.mark.parametrize("cid,passes", [("11", True), ("12", True), ("13", True), ("14", True)])
 async def test_ranked_baseline_on_heuristic_hard_cases(cid, passes):
     """With find_messages (embedding model loaded) the baseline solves 11, 12, 14: their mailboxes hold 2-4
-    messages, so the top 5 is the whole mailbox and the engine keeps what matches. 13 (11 messages, the
-    receipt arrives as a reply found only by the lexical '<claim> <item>' search) still fails."""
+    messages, so the top 5 is the whole mailbox and the engine keeps what matches. 13: the reply is not in
+    find_messages' top 5, but the post-ask hold (mailbox diff since the request) names it."""
     from reimburse_agent.retrieval import embedder
     if embedder() is None:
         pytest.skip("embedding model unavailable")

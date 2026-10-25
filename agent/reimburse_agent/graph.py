@@ -23,7 +23,8 @@ from langgraph.graph.message import add_messages
 from langgraph.types import interrupt
 
 from .compact import compact as _compact, tool_text
-from .retrieval import clean_query, find_messages as ranked_find
+from .retrieval import (clean_query, contradiction_hits, find_messages as ranked_find, message_pool,
+                        pool_version)
 
 SKILL_PATH = Path(__file__).resolve().parents[2] / "skills" / "claim-auditor" / "SKILL.md"
 
@@ -163,29 +164,45 @@ class State(TypedDict, total=False):
     unattributed_searches: int  # raw mailbox searches that named no single open gap
     reply_evidence: list[str]  # IDs the graph's own reply search found and check_claim accepted
     tokens_used: int  # model input+output tokens this run (provider usage, else a chars/4 estimate)
+    mailbox_before: dict  # {"ids", "version", "incomplete"}: the employee's mailbox just before the first request
+    held_versions: list[str]  # mailbox versions a draft was already held for (hold once per version)
+    unused_evidence: list[dict]  # drafts let through on a repeat with new evidence not used: {"ids", "version"}
+    guard_checked: list[str]  # check_claim tool_call_ids the calendar-only scan already ran for
+    guard_scans: list[dict]  # contradiction scans the graph ran: {"gap", "query", "hits", "unavailable", "flag"}
 
 
 SEARCH_TOOL = "search_reimburse_mailbox"
 # Rule -> gap code whose resolution by calendar events alone needs one mailbox search for that gap first: a
 # calendar can be out of date, so the investigation must have looked for a contradicting email (Claude review 8 b).
 CALENDAR_GUARDED = {"late_checkout": "late_checkout_unjustified", "hotel_nights_within_trip": "hotel_nights_mismatch"}
-CALENDAR_ONLY_NOTE = ("calendar-only justification for {k}: the graph searched the mailbox for that gap and found "
-                      "{ids}, which changes check_claim's result. Nothing was drafted. Run check_claim with these "
-                      "IDs added, then draft or ask the reviewer.")
+
+SCAN_NOTE = ("calendar-only justification for {k}: {why}. Nothing was drafted. Ask the reviewer how to treat "
+             "{items} (or run check_claim with the listed IDs added).")
 
 
 def calendar_only(check: dict | None, decided: dict | None = None) -> dict[str, list[str]]:
-    """{"item:gap": [EVT ids]} for guarded rules the latest check passes on calendar events alone (no
-    mailbox message among the item's evidence) and the reviewer did not decide."""
+    """{"item:gap": [EVT ids]} for guarded rules a check passes on calendar events alone, excluding items
+    the reviewer decided. Which evidence a finding rests on comes from the finding's own provenance
+    (params.ids, present in raw check_claim output); without it (compacted output) the item's evidence_used
+    is the fallback, and any EVT there counts, so the compacted test is a superset of the raw one."""
     out: dict[str, list[str]] = {}
     for i in (check or {}).get("items", []):
-        used = list(i.get("evidence_used") or [])
-        if not used or not all(str(e).startswith("EVT-") for e in used) or i.get("item_id") in (decided or {}):
+        if i.get("item_id") in (decided or {}):
             continue
+        used = [str(e) for e in i.get("evidence_used") or []]
         for f in i.get("findings", []):
             code = CALENDAR_GUARDED.get(f.get("rule"))
-            if code and f.get("status") in ("ok", "partial"):
-                out[f"{i['item_id']}:{code}"] = used
+            if not code or f.get("status") not in ("ok", "partial"):
+                continue
+            p = f.get("params")
+            if isinstance(p, dict) and p.get("ids"):
+                ids = [x.strip() for x in str(p["ids"]).split(",") if x.strip()]
+                alone = all(x.startswith("EVT-") for x in ids)
+            else:
+                ids = [e for e in used if e.startswith("EVT-")]
+                alone = bool(ids)
+            if alone and ids:
+                out[f"{i['item_id']}:{code}"] = ids
     return out
 GAP_SEARCH_TOOL = "search_for_gap"  # version B only; wraps SEARCH_TOOL and attributes the search to one gap
 EMPLOYEE_MESSAGE_TOOLS = frozenset({EVIDENCE_TOOL, "send_message"})
@@ -554,6 +571,81 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             return _compact(tool_text(res))
         return res if isinstance(res, str) else json.dumps(res, default=str, ensure_ascii=False)
 
+    async def raw_rows(a: dict) -> list:
+        return _rows(tool_text(await by_name[SEARCH_TOOL].ainvoke(a)))
+
+    async def raw_check(args: dict) -> dict:
+        """check_claim output before compaction (keeps per-finding provenance, params.ids)."""
+        return _as_json(tool_text(await by_name["check_claim"].ainvoke(args))) or {}
+
+    async def mailbox(emp: str) -> dict:
+        rows, inc = await message_pool(raw_rows, emp)
+        return {"ids": sorted(r["id"] for r in rows), "version": pool_version(rows), "incomplete": inc}
+
+    async def snapshot_for(state: State, snap: dict | None, name: str) -> dict | None:
+        """The mailbox just before the first employee message of the run (requests, send_message)."""
+        if snap or name not in EMPLOYEE_MESSAGE_TOOLS or not run_claim or SEARCH_TOOL not in by_name:
+            return snap
+        chk = latest_check(state["messages"], run_claim) or {}
+        emp = chk.get("employee_id")
+        if not emp and "get_claim" in by_name:
+            emp = (_jsonish(await invoke("get_claim", {"claim_id": run_claim})) or {}).get("employee_id")
+        return await mailbox(emp) if emp else snap
+
+    def considered(state: State, check_id: str | None) -> set[str]:
+        """Every ID the latest check_claim was given, plus IDs the engine already ignored this run."""
+        ev = (state.get("effective_args", {}).get(check_id, {}) or {}).get("evidence_ids") or []
+        return {*ev, *state.get("ignored_ids", {}), *state.get("reply_evidence", [])}
+
+    async def late_replies(state: State, check_id: str | None, emp: str | None) -> tuple[list[str], str | None]:
+        """(IDs that arrived after the first request and the latest check did not consider, mailbox version).
+        A fact about the mailbox, independent of the search budget."""
+        snap = state.get("mailbox_before")
+        if not snap or not emp or SEARCH_TOOL not in by_name:
+            return [], None
+        now = await mailbox(emp)
+        seen = considered(state, check_id)
+        return [i for i in now["ids"] if i not in snap["ids"] and i not in seen], now["version"]
+
+    async def contradiction_scan(check: dict, k: str, evts: list[str], given: list[str] | None = None) -> dict:
+        """Graph-run scan for a calendar-only resolution: find_messages over the trip window with the event's
+        title and date. Any hit above the similarity threshold or with a schedule-change term flags it; an
+        incomplete mailbox pool makes the scan unavailable. Both send the item to review."""
+        emp = check.get("employee_id")
+        claim = (_jsonish(await invoke("get_claim", {"claim_id": run_claim})) or {}) if "get_claim" in by_name else {}
+        trip = claim.get("trip") or {}
+        t0, t1 = trip.get("start_date"), trip.get("end_date")
+        evs = []
+        if "get_calendar" in by_name:
+            try:
+                evs = [e for e in _rows(await invoke("get_calendar", {"employee_id": emp, "date_from": t0 or "0000-01-01",
+                                                                       "date_to": t1 or "9999-12-31"}))
+                       if isinstance(e, dict) and e.get("id") in evts]
+            except Exception:
+                evs = []
+        query = " ".join(f"{e.get('title', '')} {e.get('date', '')}" for e in evs).strip() or k.split(":", 1)[0]
+        try:
+            res = await ranked_find(raw_rows, emp, query, t0, t1)
+        except Exception as exc:
+            return {"gap": k, "query": query, "hits": [], "unavailable": f"search failed: {exc}", "flag": True}
+        # Messages the check was given are excluded: the engine already read them (it applies a meeting
+        # update from a message to the event itself), so they cannot be an unseen contradiction.
+        hits = [h for h in contradiction_hits(res) if h["id"] not in set(given or [])]
+        unavailable = "mailbox pool possibly incomplete (a probe hit the 5-result cap)" if res.get("possibly_incomplete") else None
+        return {"gap": k, "query": query, "hits": hits, "unavailable": unavailable, "ranker": res.get("ranker"),
+                "flag": bool(hits or unavailable)}
+
+    def scan_why(scans: list[dict]) -> str:
+        parts = []
+        for sc in scans:
+            if sc["hits"]:
+                parts.append(f"{sc['gap']}: possible contradiction in " + ", ".join(
+                    f"{h['id']} ({'term ' + repr(h['term']) if h['term'] else 'similarity ' + str(h['similarity'])})"
+                    for h in sc["hits"]))
+            if sc["unavailable"]:
+                parts.append(f"{sc['gap']}: contradiction check unavailable, {sc['unavailable']}")
+        return "; ".join(parts)
+
     async def intake(state: State):
         """Human channel: parse decisions out of the newest reviewer message, confirm them with the reviewer
         (interrupt quoting their own words) before storing; note explicit instructions; mark searched gaps
@@ -651,59 +743,14 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         asked = att.get("request") is not None or att.get("reviewer") is not None
         return SEARCHES_PER_GAP + (SEARCHES_AFTER_ASK if asked else 0)
 
-    def guard_pending(check: dict | None, attempts: dict, state: State) -> dict[str, list[str]]:
-        """Calendar-only resolutions with no mailbox search attributed to that gap yet."""
-        if not run_claim or SEARCH_TOOL not in by_name:
-            return {}
-        return {k: v for k, v in calendar_only(check, trusted_decisions(state, run_claim)).items()
-                if not attempts.get(k, {}).get("searches")}
-
-    async def corroborate(state: State, check: dict, attempts: dict, pending: dict[str, list[str]], ev: list[str],
-                          ignored: dict, here: int) -> tuple[list[str], dict | None]:
-        """One mailbox search per pending gap, built from the calendar event's own title (state only, no
-        tool-call message); check_claim decides whether any hit matters. Returns (new IDs check_claim kept,
-        the re-check) when the outcome changed, else ([], None)."""
-        emp, found = check.get("employee_id"), []
-        for k, evts in pending.items():
-            item = k.split(":", 1)[0]
-            row = next((i for i in check.get("items", []) if i.get("item_id") == item), {})
-            titles = []
-            if "get_calendar" in by_name:
-                day = next((f.get("params", {}).get("date") for f in row.get("findings", []) if f.get("params")), None)
-                try:
-                    evs = _rows(await invoke("get_calendar", {"employee_id": emp, "date_from": day or "0000-01-01",
-                                                                 "date_to": day or "9999-12-31"}))
-                    titles = [e.get("title", "") for e in evs or [] if isinstance(e, dict) and e.get("id") in evts]
-                except Exception:
-                    titles = []
-            query = " ".join(titles) or f"{row.get('category', '')} {item}"
-            try:
-                hits = _rows(await invoke(SEARCH_TOOL, {"employee_id": emp, "query": query}))
-            except Exception:
-                hits = []
-            a = attempts.setdefault(k, {})
-            a["searches"], a["search"], a["calendar_check"] = a.get("searches", 0) + 1, here, query
-            found += [h["id"] for h in hits if isinstance(hits, list) and isinstance(h, dict) and h.get("id")
-                      and h["id"] not in found and h["id"] not in ev and h["id"] not in ignored]
-        if not found:
-            return [], None
-        base = {"claim_id": run_claim}
-        hd = trusted_decisions(state, run_claim)
-        if hd:
-            base["human_decisions"] = hd
-        try:
-            before = _jsonish(await invoke("check_claim", {**base, **({"evidence_ids": ev} if ev else {})})) or {}
-            after = _jsonish(await invoke("check_claim", {**base, "evidence_ids": [*ev, *found]})) or {}
-        except Exception:
-            return [], None
-        def outcome(d):
-            return (d.get("decision"), d.get("total_approvable"),
-                    [(i.get("item_id"), i.get("status")) for i in d.get("items", [])])
-        if outcome(before) == outcome(after):
-            return [], None
-        # The hits changed the engine's result. A meeting update can be listed under ignored_evidence (it
-        # matches no item itself) and still move the meeting, so every hit is reported, not only matched ones.
-        return found, after
+    def guard_maybe(state: State) -> bool:
+        """Cheap routing test on the compacted latest check (superset of the exact raw test)."""
+        if not run_claim or SEARCH_TOOL not in by_name or "check_claim" not in by_name:
+            return False
+        pos = check_position(state["messages"], run_claim)
+        if not pos or pos[1] in state.get("guard_checked", []):
+            return False
+        return bool(calendar_only(pos[2], trusted_decisions(state, run_claim)))
 
     async def run_tools(state: State):
         last = state["messages"][-1]
@@ -719,6 +766,10 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         free = [list(x) for x in state.get("free_evidence", [])]
         check = latest_check(state["messages"], run_claim) if run_claim else None
         gaps_now = open_gaps(check)
+        snap = state.get("mailbox_before")
+        held = list(state.get("held_versions", []))
+        unused = list(state.get("unused_evidence", []))
+        scans = list(state.get("guard_scans", []))
 
         def record_write(name, args, by="model"):
             writes.append({"tool": name, "args": args, "by": by})
@@ -780,6 +831,8 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                     full = {**a, "evidence_ids": evidence_now() or None,
                             "human_decisions": trusted_decisions(state, run_claim) or None}
                     try:
+                        nonlocal snap
+                        snap = await snapshot_for(state, snap, EVIDENCE_TOOL)
                         res = _jsonish(await invoke(EVIDENCE_TOOL, {k2: v for k2, v in full.items() if v is not None}))
                     except Exception:
                         res = None
@@ -802,60 +855,44 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
 
         reply_found: list[str] = list(state.get("reply_evidence", []))
 
-        async def presearch_draft(args: dict) -> str | None:
-            """Before a MODEL-made draft: a document gap the employee was asked about whose post-ask search is
-            unused may already have its reply in the mailbox. The graph runs that one search itself (state
-            only, no tool-call message), re-checks with any hits, and holds the draft if the outcome changed."""
+        async def presearch_draft(args: dict) -> tuple[str | None, str | None]:
+            """Before a MODEL-made draft: (hold message, note). Holds when (1) an item rests on calendar events
+            alone and the graph's contradiction scan flags it or cannot run, or (2) an employee reply arrived
+            after the first request and the latest check_claim did not consider it. (2) holds once per mailbox
+            version; a repeat draft without a re-check runs, flagged 'new evidence found but not used'."""
             ev0 = [e for e in (args.get("evidence_ids") or []) if e not in ignored]
-            drafted = check  # what the engine says for exactly the draft's evidence
-            if any(str(e).startswith("EVT-") for e in ev0):
-                try:
-                    drafted = _jsonish(await invoke("check_claim", {**args, "evidence_ids": ev0})) or check
-                except Exception:
-                    drafted = check
-            pend = guard_pending(drafted, attempts, state)
-            if pend:
-                keep, _after = await corroborate(state, drafted, attempts, pend, ev0, ignored, here)
-                if keep:
-                    return json.dumps({"error": "new_evidence_found", "message": CALENDAR_ONLY_NOTE.format(
-                        k=", ".join(pend), ids=", ".join(keep)), "new_evidence_ids": keep}, ensure_ascii=False)
-            waiting = awaiting_reply({**state, "gap_attempts": attempts}, gaps_now)
-            if not waiting or SEARCH_TOOL not in by_name:
-                return None
-            emp, found = check.get("employee_id"), []
-            for k in waiting:
-                item = k.split(":", 1)[0]
-                try:
-                    hits = _rows(await invoke(SEARCH_TOOL, {"employee_id": emp, "query": f"{run_claim} {item}"}))
-                except Exception:
-                    hits = []
-                attempts.setdefault(k, {})["searches"] = attempts.get(k, {}).get("searches", 0) + 1
-                attempts[k]["search"] = here
-                found += [h["id"] for h in hits if isinstance(hits, list) and isinstance(h, dict) and h.get("id")
-                          and h["id"] not in found]
-            ev = [e for e in (args.get("evidence_ids") or []) if e not in ignored]
-            new = [e for e in found if e not in ev]
-            if not new:
-                return None
-            base = {k2: v for k2, v in args.items() if k2 != "evidence_ids"}
             try:
-                before = _jsonish(await invoke("check_claim", {**base, **({"evidence_ids": ev} if ev else {})})) or {}
-                after = _jsonish(await invoke("check_claim", {**base, "evidence_ids": [*ev, *new]})) or {}
+                drafted = await raw_check({k2: v for k2, v in {**args, "evidence_ids": ev0 or None}.items()
+                                           if k2 in ("claim_id", "evidence_ids", "human_decisions") and v})
             except Exception:
-                return None
-            bad = {r.get("id") for r in after.get("ignored_evidence") or [] if isinstance(r, dict)}
-            keep = [e for e in new if e not in bad]
-
-            def outcome(d):
-                return (d.get("decision"), d.get("total_approvable"),
-                        [(i.get("item_id"), i.get("status")) for i in d.get("items", [])])
-            if not keep or outcome(before) == outcome(after):
-                return None
-            reply_found.extend(e for e in keep if e not in reply_found)
-            return json.dumps({"error": "new_evidence_found", "message": (
-                "new evidence found; re-check before drafting. The graph searched the mailbox for the employee's "
-                f"reply and found {', '.join(keep)}, which changes check_claim's result. Nothing was drafted. Run "
-                "check_claim with these IDs added, then draft."), "new_evidence_ids": keep}, ensure_ascii=False)
+                drafted = {}
+            pend = calendar_only(drafted, trusted_decisions(state, run_claim)) if SEARCH_TOOL in by_name else {}
+            if pend:
+                now = [await contradiction_scan(drafted, k, v, ev0) for k, v in pend.items()]
+                scans.extend(now)
+                bad = [sc for sc in now if sc["flag"]]
+                if bad:
+                    ids = [h["id"] for sc in bad for h in sc["hits"]]
+                    return json.dumps({"error": "needs_review", "message": SCAN_NOTE.format(
+                        k=", ".join(sc["gap"] for sc in bad), why=scan_why(bad),
+                        items=", ".join(sc["gap"].split(":")[0] for sc in bad)), "candidate_ids": ids},
+                        ensure_ascii=False), None
+            pos = check_position(state["messages"], run_claim)
+            new, ver = await late_replies({**state, "ignored_ids": ignored, "effective_args": effective,
+                                           "reply_evidence": reply_found}, pos[1] if pos else None,
+                                          check.get("employee_id"))
+            new = [e for e in new if e not in ev0]
+            if not new:
+                return None, None
+            if ver not in held:
+                held.append(ver)
+                return json.dumps({"error": "new_evidence_found", "message": (
+                    "new evidence found; re-check before drafting. Since the employee was asked, "
+                    f"{', '.join(new)} arrived in the mailbox and the latest check_claim did not consider "
+                    "it. Nothing was drafted. Run check_claim with these IDs added, then draft."),
+                    "new_evidence_ids": new}, ensure_ascii=False), None
+            unused.append({"ids": new, "version": ver})
+            return None, f"new evidence found but not used: {', '.join(new)} (arrived after the request; not re-checked)"
 
         for call in last.tool_calls:
             name, args = call["name"], dict(call.get("args") or {})
@@ -913,11 +950,14 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                         note = ("removed " + ", ".join(f"{e} ({ignored[e]})" for e in drop)
                                 + ": check_claim already ignored them in this run. Don't pass them again.")
                 if content is None and name == "draft_decision" and args.get("claim_id") == run_claim and check:
-                    hold = await presearch_draft(args)
+                    hold, flag = await presearch_draft(args)
                     if hold:
                         content, refused = hold, True
+                    elif flag:
+                        note = f"{note} {flag}".strip() if note else flag
                 if content is None:
                     try:
+                        snap = await snapshot_for(state, snap, name)
                         content = await invoke(name, args)
                         res = _jsonish(content)
                         failed = res is not None and "error" in res
@@ -936,7 +976,8 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             out.append(ToolMessage(content=content, tool_call_id=call["id"], name=name))
         return {"messages": out, "declined": {}, "search_cache": cache, "gap_attempts": attempts,
                 "blocked_streak": streak, "unattributed_searches": unattr, "writes": writes, "ignored_ids": ignored, "effective_args": effective,
-                "free_evidence": free, "reply_evidence": reply_found}
+                "free_evidence": free, "reply_evidence": reply_found, "mailbox_before": snap,
+                "held_versions": held, "unused_evidence": unused, "guard_scans": scans}
 
     def exhausted(state: State, gaps: list[str], n: int) -> bool:
         att = state.get("gap_attempts", {})
@@ -968,12 +1009,17 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         emp = data.get("employee_id")
         found: list[str] = []
         here = len(state["messages"])
-        for k in awaiting_reply(state, open_gaps(data)):
+        waiting = awaiting_reply(state, open_gaps(data))
+        diff, _ver = await late_replies(state, check_id, emp)
+        for k in waiting:
             item = k.split(":", 1)[0]
-            try:
-                hits = _rows(await invoke(SEARCH_TOOL, {"employee_id": emp, "query": f"{run_claim} {item}"}))
-            except Exception:
-                hits = []
+            if state.get("mailbox_before"):
+                hits = [{"id": i} for i in diff]  # every message that arrived after the request
+            else:
+                try:
+                    hits = _rows(await invoke(SEARCH_TOOL, {"employee_id": emp, "query": f"{run_claim} {item}"}))
+                except Exception:
+                    hits = []
             att[k]["searches"] = att[k].get("searches", 0) + 1
             att[k]["search"] = here
             found += [h["id"] for h in hits if isinstance(h, dict) and h.get("id") and h["id"] not in found]
@@ -990,29 +1036,37 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         return {"gap_attempts": att, "reply_evidence": [*state.get("reply_evidence", []), *keep]}
 
     async def corroborate_node(state: State):
-        """Before the graph drafts on a calendar-only resolution: search the mailbox for that gap once. If a
-        hit changes check_claim, stop and ask the reviewer (plain text, no tool-call message), else draft."""
+        """Before the graph drafts: for each item resting on calendar events alone (exact test on the raw
+        check), run the contradiction scan. A flagged or unavailable scan stops the run and asks the reviewer
+        (plain text, no tool-call message); otherwise draft."""
         _n, check_id, data = check_position(state["messages"], run_claim)
-        att = {k: dict(v) for k, v in state.get("gap_attempts", {}).items()}
         ignored = dict(state.get("ignored_ids", {}))
         ev = [e for e in (state.get("effective_args", {}).get(check_id, {}).get("evidence_ids") or []) if e not in ignored]
-        pend = guard_pending(data, att, state)
-        keep, after = await corroborate(state, data, att, pend, ev, ignored, len(state["messages"]))
-        out: dict = {"gap_attempts": att}
-        if keep:
-            gaps = open_gaps(after)
-            out["reply_evidence"] = [*state.get("reply_evidence", []), *keep]
+        hd = trusted_decisions(state, run_claim)
+        out: dict = {"guard_checked": [*state.get("guard_checked", []), check_id]}
+        try:
+            raw = await raw_check({"claim_id": run_claim, **({"evidence_ids": ev} if ev else {}),
+                                   **({"human_decisions": hd} if hd else {})})
+        except Exception:
+            return out
+        pend = calendar_only(raw, hd)
+        if not pend:
+            return out
+        now = [await contradiction_scan(raw, k, v, ev) for k, v in pend.items()]
+        out["guard_scans"] = [*state.get("guard_scans", []), *now]
+        bad = [sc for sc in now if sc["flag"]]
+        if bad:
             out["messages"] = [AIMessage(content=(
-                f"Not drafted: {', '.join(pend)} rested on calendar events alone, and a mailbox search for it found "
-                f"{', '.join(keep)}, which changes the engine's result (open now: {', '.join(gaps) or 'none'}). "
-                "Needs your decision: how should these items be treated?"))]
+                f"Not drafted: {', '.join(sc['gap'] for sc in bad)} rested on calendar events alone. "
+                f"{scan_why(bad)}. Needs your decision: how should "
+                f"{', '.join(sc['gap'].split(':')[0] for sc in bad)} be treated?"))]
         return out
 
     def after_corroborate(state: State):
         last = state["messages"][-1]
         if isinstance(last, AIMessage) and not last.tool_calls and str(last.content).startswith("Not drafted:"):
             return END
-        return "auto_draft"
+        return after_tools(state)  # scan clean: route as if it had not run (guard_checked now holds this check)
 
     def after_tools(state: State):
         """To a draft once the latest check is clean, once every open gap was searched for and asked about
@@ -1029,7 +1083,7 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         if "error" in data:
             return "agent"
         gaps = open_gaps(data)
-        if guard_pending(data, state.get("gap_attempts", {}), state):
+        if guard_maybe(state):
             return "corroborate"
         if not gaps:
             return "auto_draft"
@@ -1148,6 +1202,7 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         notes, keep = [], []
         writes = list(state.get("writes", []))
         sigs = list(state.get("declined_sigs", []))
+        snap = state.get("mailbox_before")
         props = list(state.get("graph_proposals", []))
         count = state.get("gated_count", 0)
         for ins in pend:
@@ -1168,6 +1223,7 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             rec = {"tool": name, "args": call_args, "id": tcid, "approved": ok, "from": ins["quote"]}
             if ok:
                 try:
+                    snap = await snapshot_for(state, snap, name)
                     res = _jsonish(await invoke(name, call_args))
                     failed = res is not None and "error" in res
                 except Exception as exc:
@@ -1184,7 +1240,7 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                 notes.append(f"Not done: {name} for {run_claim}; you declined it ({reason}).")
             props.append(rec)
         out = {"instructions": keep, "writes": writes, "declined_sigs": sigs, "graph_proposals": props,
-               "gated_count": count}
+               "gated_count": count, "mailbox_before": snap}
         if notes:
             out["messages"] = [AIMessage(content=" ".join(notes))]
         return out
@@ -1199,7 +1255,32 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                 getattr(m, "type", "") == "tool" and m.name == "draft_decision" for m in state["messages"][pos[0]:]))
             if not drafted:
                 return "auto_draft"  # zero model tokens: the engine drafts with what the run found
+        if run_claim and isinstance(last, AIMessage) and state.get("mailbox_before"):
+            return "late_reply"
         return "graph_actions" if run_claim and state.get("instructions") else END
+
+    async def late_reply(state: State):
+        """The model ended in plain text after asking the employee: if a reply arrived that the latest
+        check_claim did not consider, say so (once per mailbox version) with the engine's result including it."""
+        pos = check_position(state["messages"], run_claim)
+        emp = (pos[2] if pos else {}).get("employee_id")
+        new, ver = await late_replies(state, pos[1] if pos else None, emp)
+        if not new or ver in state.get("held_versions", []):
+            return {}
+        ev = [e for e in considered(state, pos[1] if pos else None) if e not in state.get("ignored_ids", {})]
+        hd = trusted_decisions(state, run_claim)
+        try:
+            fresh = await raw_check({"claim_id": run_claim, "evidence_ids": [*ev, *new], **({"human_decisions": hd} if hd else {})})
+        except Exception:
+            fresh = {}
+        bad = {r.get("id") for r in fresh.get("ignored_evidence") or [] if isinstance(r, dict)}
+        gaps = open_gaps(fresh)
+        return {"held_versions": [*state.get("held_versions", []), ver], "messages": [AIMessage(content=(
+            f"Not final: {', '.join(new)} arrived in the mailbox after the employee was asked and was not checked. "
+            f"With it the engine reports decision {fresh.get('decision')}, approvable {fresh.get('total_approvable')}, "
+            f"open gaps: {', '.join(gaps) or 'none'}"
+            + (f" (ignored: {', '.join(sorted(bad & set(new)))})" if bad & set(new) else "")
+            + ". Re-check before acting."))]}
 
     g = StateGraph(State)
     g.add_node("intake", intake)
@@ -1209,12 +1290,15 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
     g.add_node("auto_draft", auto_draft)
     g.add_node("reply_search", reply_search)
     g.add_node("corroborate", corroborate_node)
-    g.add_conditional_edges("corroborate", after_corroborate, ["auto_draft", END])
+    g.add_node("late_reply", late_reply)
+    g.add_conditional_edges("late_reply", lambda s: "graph_actions" if s.get("instructions") else END,
+                            ["graph_actions", END])
+    g.add_conditional_edges("corroborate", after_corroborate, ["auto_draft", "reply_search", "agent", END])
     g.add_edge("reply_search", "auto_draft")
     g.add_node("graph_actions", graph_actions)
     g.add_edge(START, "intake")
     g.add_edge("intake", "agent")
-    g.add_conditional_edges("agent", route, ["gate", "graph_actions", "auto_draft", END])
+    g.add_conditional_edges("agent", route, ["gate", "graph_actions", "auto_draft", "late_reply", END])
     g.add_edge("gate", "tools")
     g.add_conditional_edges("tools", after_tools, ["auto_draft", "reply_search", "corroborate", "agent"])
     g.add_conditional_edges("auto_draft", lambda s: "graph_actions" if s.get("instructions") else END,

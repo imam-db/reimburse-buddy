@@ -36,7 +36,8 @@ async def test_probe_sweep_recovers_every_message(root):
     for emp in {m["owner_id"] for m in s.inbox}:
         async def search(a):
             return s.search_reimburse_mailbox(a["employee_id"], a["query"])
-        got = {m["id"] for m in await message_pool(search, emp)}
+        rows, _inc = await message_pool(search, emp)
+        got = {m["id"] for m in rows}
         assert got == {m["id"] for m in s.inbox if m["owner_id"] == emp}
 
 
