@@ -76,6 +76,10 @@ EXTRA_CLAIMS = [
     _claim("CLM-2026-0202", "EMP-004", "Client workshop in Surabaya", "Surabaya", "2026-10-15", "2026-10-15", [
         _item("IT-1", "taxi", "2026-10-15", "Taxi airport to client", 180000, receipt=False),
         _item("IT-2", "per_diem", "2026-10-15", "Per diem 1 day", 450000, days=1, receipt=False)]),
+    # 5b: same conflict, but one receipt matches; passing only that one must still not approve.
+    _claim("CLM-2026-0205", "EMP-004", "Client follow-up in Surabaya", "Surabaya", "2026-10-16", "2026-10-16", [
+        _item("IT-1", "taxi", "2026-10-16", "Taxi airport to client", 120000, receipt=False),
+        _item("IT-2", "per_diem", "2026-10-16", "Per diem 1 day", 450000, days=1, receipt=False)]),
     # 6: return boarding pass missing; nothing in the mailbox and no scripted reply.
     _claim("CLM-2026-0203", "EMP-005", "Site survey in Balikpapan", "Balikpapan", "2026-10-13", "2026-10-14", [
         _flight("IT-1", "2026-10-13", "QZ 7700", "outbound", 1250000, "CLM-2026-0203"),
@@ -110,6 +114,12 @@ EXTRA_INBOX = [
     _msg("MSG-9202", "EMP-004", YOGA, "2026-10-17", "Corrected taxi receipt CLM-2026-0202 IT-1",
          "Sorry, the right receipt for the same airport ride is this one: Rp245.000.",
          [_receipt("taxi_sub_b.jpg", "CLM-2026-0202", "IT-1", "TX-SUB-2002", 245000)]),
+    _msg("MSG-9211", "EMP-004", YOGA, "2026-10-17", "Taxi receipt CLM-2026-0205 IT-1",
+         "Taxi receipt for the airport ride: Rp120.000.",
+         [_receipt("taxi_sub_c.jpg", "CLM-2026-0205", "IT-1", "TX-SUB-3001", 120000)]),
+    _msg("MSG-9212", "EMP-004", YOGA, "2026-10-18", "Another taxi receipt CLM-2026-0205 IT-1",
+         "Found a second receipt for the same airport ride: Rp245.000.",
+         [_receipt("taxi_sub_d.jpg", "CLM-2026-0205", "IT-1", "TX-SUB-3002", 245000)]),
 ] + [  # 8: noise for the clean claim CLM-2026-0111 (EMP-004)
     _msg(f"MSG-93{n:02d}", "EMP-004", YOGA, f"2026-10-{10 + n}", s, b) for n, (s, b) in enumerate([
         ("Newsletter: travel tips October", "Ten ways to pack light. No receipts here."),
@@ -145,16 +155,28 @@ def _load(name):
     return json.loads((DATA / f"{name}.json").read_text(encoding="utf-8"))
 
 
+def with_receipt_amounts(d: dict) -> dict:
+    """Eval data runs with policy receipt_amount_required=true (version A's data/ keeps it false), so every
+    synthetic receipt gets the amount of the item it is for, unless it already states one."""
+    d["policy"]["receipt_amount_required"] = True
+    amounts = {(c["id"], i["id"]): int(i["amount"]) for c in d["claims"] for i in c["items"]}
+    for m in d["inbox"] + [r["reply"] for r in d["replies"]]:
+        for a in m.get("attachments", []):
+            if a.get("type") == "receipt" and "amount" not in a and (a.get("claim_id"), a.get("item_id")) in amounts:
+                a["amount"] = amounts[(a["claim_id"], a["item_id"])]
+    return d
+
+
 def build_hard() -> dict:
     d = {n: _load(n) for n in FILES}
     d["claims"] += EXTRA_CLAIMS
     d["inbox"] += EXTRA_INBOX
     d["replies"] += EXTRA_REPLIES
-    return d
+    return with_receipt_amounts(d)
 
 
 def build_altered() -> dict:
-    return {n: json.loads(rename(json.dumps(_load(n), ensure_ascii=False))) for n in FILES}
+    return with_receipt_amounts({n: json.loads(rename(json.dumps(_load(n), ensure_ascii=False))) for n in FILES})
 
 
 def write(target: Path, d: dict) -> None:

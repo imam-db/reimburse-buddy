@@ -154,6 +154,46 @@
     "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
   },
   {
+    "id": "MSG-9211",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-10-17",
+    "subject": "Taxi receipt CLM-2026-0205 IT-1",
+    "body": "Taxi receipt for the airport ride: Rp120.000.",
+    "attachments": [
+      {
+        "name": "taxi_sub_c.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0205",
+        "item_id": "IT-1",
+        "receipt_no": "TX-SUB-3001",
+        "amount": "120000"
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-9212",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-10-18",
+    "subject": "Another taxi receipt CLM-2026-0205 IT-1",
+    "body": "Found a second receipt for the same airport ride: Rp245.000.",
+    "attachments": [
+      {
+        "name": "taxi_sub_d.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0205",
+        "item_id": "IT-1",
+        "receipt_no": "TX-SUB-3002",
+        "amount": "245000"
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
     "id": "MSG-9301",
     "owner_id": "EMP-004",
     "from": "yoga.firmansyah@nusantara-niaga.example",

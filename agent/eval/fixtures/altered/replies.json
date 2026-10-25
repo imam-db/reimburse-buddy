@@ -28,7 +28,8 @@
           "type": "receipt",
           "claim_id": "CLM-2027-0504",
           "item_id": "IT-6",
-          "receipt_no": "TX-90022"
+          "receipt_no": "TX-90022",
+          "amount": 120000
         }
       ],
       "mailbox": "reimburse@nusantara-niaga.example",
@@ -64,7 +65,8 @@
           "type": "receipt",
           "claim_id": "CLM-2027-0510",
           "item_id": "IT-5",
-          "receipt_no": "TX-30577"
+          "receipt_no": "TX-30577",
+          "amount": 230000
         }
       ],
       "mailbox": "reimburse@nusantara-niaga.example",
