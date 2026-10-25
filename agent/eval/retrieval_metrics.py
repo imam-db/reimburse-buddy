@@ -93,7 +93,7 @@ def summarize(rows: list[dict], key: str) -> dict:
 
 async def run(no_embed: bool = False) -> dict:
     out = {}
-    for name, cases in LARGE_CASES.items():
+    for name, cases in ((k, v) for k, v in LARGE_CASES.items() if k.startswith("large")):
         data = cases[0].data
         truth = json.loads((data / "truth.json").read_text())
         rows = [await family_row(data, f, t) for f, t in truth.items()]
@@ -115,7 +115,7 @@ def main():
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     p = RESULTS / f"retrieval{'-bm25only' if a.no_embed else ''}-{ts}.json"
     p.write_text(json.dumps(res, indent=2, ensure_ascii=False))
-    for name in LARGE_CASES:
+    for name in ("large_a", "large_b"):
         r = res[name]
         print(name, {k: r[k] for k in ("lexical", "ranked", "ranked_full")})
         for row in r["rows"]:

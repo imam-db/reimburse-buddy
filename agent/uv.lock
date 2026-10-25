@@ -2071,7 +2071,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "fastembed", marker = "extra == 'embed'", specifier = ">=0.9.1" },
+    { name = "fastembed", marker = "extra == 'embed'", specifier = "==0.9.1" },
     { name = "langchain-core", specifier = ">=0.3" },
     { name = "langchain-mcp-adapters", specifier = ">=0.1" },
     { name = "langchain-openai", specifier = ">=0.3" },

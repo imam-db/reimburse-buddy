@@ -207,5 +207,5 @@
     },
     "ranker": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
   },
-  "fixtures_sha256": "3846d22865cc562354f3aab210e8403f490dad423fcd78c50d6eaf4ea4f2e3a3"
+  "fixtures_sha256": "2b9d08150190bc11943725b04b1ba148fe409d147f5bf2aea17b7dd1867c6cbd"
 }

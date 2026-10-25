@@ -21,6 +21,13 @@ from typing import Awaitable, Callable
 log = logging.getLogger(__name__)
 
 EMBED_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+EMBED_REPO = "Qdrant/paraphrase-multilingual-MiniLM-L12-v2-onnx-Q"  # what fastembed 0.9.1 downloads for EMBED_MODEL
+EMBED_REVISION = "faf4aa4225822f3bc6376869cb1164e8e3feedd0"  # pinned commit (~240 MB on first run)
+
+
+def embed_cache() -> str:
+    """RB_EMBED_CACHE, else FASTEMBED_CACHE_PATH, else ~/.cache/fastembed."""
+    return os.environ.get("RB_EMBED_CACHE") or os.environ.get("FASTEMBED_CACHE_PATH") or os.path.expanduser("~/.cache/fastembed")
 PROBES = "abcdefghijklmnopqrstuvwxyz0123456789"
 TOP_K = 5  # same as the lexical search, so one find_messages call reads as much as one search
 RRF_K = 60
@@ -78,8 +85,10 @@ def embedder():
         else:
             try:
                 from fastembed import TextEmbedding
-                cache = os.environ.get("FASTEMBED_CACHE_PATH", os.path.expanduser("~/.cache/fastembed"))
-                _EMBEDDER = TextEmbedding(EMBED_MODEL, cache_dir=cache)
+                from huggingface_hub import snapshot_download
+                # Pinned: the ONNX repo fastembed maps EMBED_MODEL to, at a fixed commit, in a fixed cache dir.
+                path = snapshot_download(EMBED_REPO, revision=EMBED_REVISION, cache_dir=embed_cache())
+                _EMBEDDER = TextEmbedding(EMBED_MODEL, cache_dir=embed_cache(), specific_model_path=path)
             except Exception as e:  # no package, no network, bad download
                 _EMBED_ERR = f"{type(e).__name__}: {e}"[:200]
                 log.warning("find_messages: embedding model unavailable, BM25 only (%s)", _EMBED_ERR)
