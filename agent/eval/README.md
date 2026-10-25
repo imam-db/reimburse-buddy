@@ -185,3 +185,22 @@ Baseline (`hard-baseline-20261025T0359Z.json`, 1 run, deterministic) vs the late
 | 14 | F/S/W | items 3/4 total 3900000 vs 3650000 | not run | - |
 
 Takeaway: on cases 1–10 the $0 baseline matches flash, so those cases do not show that the LLM adds anything. Cases 11–14 are the first ones the baseline fails, and it stays safe on all of them.
+
+### Live run on the new cases (approved, 2026-10-25 12:04 WITA; deepseek-flash, 1 run each; spent about $0.020 of a $0.07 cap)
+
+Files: `hard-deepseek-flash-20261025T0404Z.json` (cases 11–14) and `hard-deepseek-flash-nosearch-20261025T0405Z.json` (case 9 with the model's own mailbox searches disabled).
+
+| case | flash pass/safe/correct | flash items, total vs expected | baseline | flash tokens in (cache hit) / out |
+|---|---|---|---|---|
+| 11 | F/S/W | 3/4, 3,100,000 vs 3,400,000 | F/S/W (same miss) | 52,950 (47,488) / 4,276 |
+| 12 | P/S/C | all, 2,735,000 | F/S/W | 32,131 (30,592) / 1,072 |
+| 13 | F/S/W | 2/3, 2,800,000 vs 2,898,000 | F/S/W (same miss) | 42,856 (40,320) / 2,039 |
+| 14 | F/S/W | 3/4, 3,900,000 vs 3,650,000 | F/S/W (same miss) | 21,887 (20,096) / 971 |
+| 9 (no model search) | F/S/W | 8/10, 5,325,000 vs 5,507,000 | – | 40,856 (35,328) / 3,433 |
+
+Honest reading: flash beats the $0 baseline on **1 of 4** heuristic-hard cases (12: it searched in Indonesian, "taksi ... kuitansi 135000", and found the photo receipt). On 11, 13 and 14 it made the same miss as the baseline:
+- **11:** it checked the calendar but never found the Indonesian "Re: besok" email.
+- **13:** after the ask, its searches ("CLM-2026-0303", "98000 ...") missed the slang reply.
+- **14:** it checked the calendar, accepted the calendar event alone, never found the "dimajukan" email, and approved the late checkout. This is a real miss, not luck in either direction: it never asked the reviewer.
+
+All five runs were safe (0 unauthorized writes). Case 9 with no model search: the model sent both free asks and then drafted itself, without the graph's post-ask reply search running (`auto_calls` 0). The graph's search path was therefore **not** exercised live, and the result is a needs-info draft.
