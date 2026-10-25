@@ -685,6 +685,50 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                 return []
             return list(effective.get(pos[1], {}).get("evidence_ids") or [])
 
+        reply_found: list[str] = list(state.get("reply_evidence", []))
+
+        async def presearch_draft(args: dict) -> str | None:
+            """Before a MODEL-made draft: a document gap the employee was asked about whose post-ask search is
+            unused may already have its reply in the mailbox. The graph runs that one search itself (state
+            only, no tool-call message), re-checks with any hits, and holds the draft if the outcome changed."""
+            waiting = awaiting_reply({**state, "gap_attempts": attempts}, gaps_now)
+            if not waiting or SEARCH_TOOL not in by_name:
+                return None
+            emp, found = check.get("employee_id"), []
+            for k in waiting:
+                item = k.split(":", 1)[0]
+                try:
+                    hits = _as_json(await invoke(SEARCH_TOOL, {"employee_id": emp, "query": f"{run_claim} {item}"}))
+                except Exception:
+                    hits = []
+                attempts.setdefault(k, {})["searches"] = attempts.get(k, {}).get("searches", 0) + 1
+                attempts[k]["search"] = here
+                found += [h["id"] for h in hits if isinstance(hits, list) and isinstance(h, dict) and h.get("id")
+                          and h["id"] not in found]
+            ev = [e for e in (args.get("evidence_ids") or []) if e not in ignored]
+            new = [e for e in found if e not in ev]
+            if not new:
+                return None
+            base = {k2: v for k2, v in args.items() if k2 != "evidence_ids"}
+            try:
+                before = _jsonish(await invoke("check_claim", {**base, **({"evidence_ids": ev} if ev else {})})) or {}
+                after = _jsonish(await invoke("check_claim", {**base, "evidence_ids": [*ev, *new]})) or {}
+            except Exception:
+                return None
+            bad = {r.get("id") for r in after.get("ignored_evidence") or [] if isinstance(r, dict)}
+            keep = [e for e in new if e not in bad]
+
+            def outcome(d):
+                return (d.get("decision"), d.get("total_approvable"),
+                        [(i.get("item_id"), i.get("status")) for i in d.get("items", [])])
+            if not keep or outcome(before) == outcome(after):
+                return None
+            reply_found.extend(e for e in keep if e not in reply_found)
+            return json.dumps({"error": "new_evidence_found", "message": (
+                "new evidence found; re-check before drafting. The graph searched the mailbox for the employee's "
+                f"reply and found {', '.join(keep)}, which changes check_claim's result. Nothing was drafted. Run "
+                "check_claim with these IDs added, then draft."), "new_evidence_ids": keep}, ensure_ascii=False)
+
         for call in last.tool_calls:
             name, args = call["name"], dict(call.get("args") or {})
             note, refused = None, False
@@ -737,6 +781,10 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                         args["evidence_ids"] = [e for e in ev if e not in ignored]
                         note = ("removed " + ", ".join(f"{e} ({ignored[e]})" for e in drop)
                                 + ": check_claim already ignored them in this run. Don't pass them again.")
+                if content is None and name == "draft_decision" and args.get("claim_id") == run_claim and check:
+                    hold = await presearch_draft(args)
+                    if hold:
+                        content, refused = hold, True
                 if content is None:
                     try:
                         content = await invoke(name, args)
@@ -757,7 +805,7 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             out.append(ToolMessage(content=content, tool_call_id=call["id"], name=name))
         return {"messages": out, "declined": {}, "search_cache": cache, "gap_attempts": attempts,
                 "blocked_streak": streak, "unattributed_searches": unattr, "writes": writes, "ignored_ids": ignored, "effective_args": effective,
-                "free_evidence": free}
+                "free_evidence": free, "reply_evidence": reply_found}
 
     def exhausted(state: State, gaps: list[str], n: int) -> bool:
         att = state.get("gap_attempts", {})
