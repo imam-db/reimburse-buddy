@@ -149,6 +149,7 @@ class State(TypedDict, total=False):
     instructions: list[dict]  # explicit reviewer instructions not yet carried out (see parse_instructions)
     graph_proposals: list[dict]  # gated actions the graph proposed itself: {"tool", "args", "id", "approved", "from"}
     unattributed_searches: int  # raw mailbox searches that named no single open gap
+    reply_evidence: list[str]  # IDs the graph's own reply search found and check_claim accepted
     tokens_used: int  # model input+output tokens this run (provider usage, else a chars/4 estimate)
 
 
@@ -735,6 +736,48 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                 return False
         return True
 
+    def awaiting_reply(state: State, gaps: list[str]) -> list[str]:
+        """Document gaps the employee was asked about with no search since the ask and the post-ask search
+        still unused: the reply may already be in the mailbox, so the gap is not exhausted yet."""
+        att = state.get("gap_attempts", {})
+        out = []
+        for k in gaps:
+            a = att.get(k, {})
+            if k.split(":", 1)[1] not in FREE_EVIDENCE_GAPS or a.get("request") is None:
+                continue
+            if (a.get("search") is None or a["search"] < a["request"]) and a.get("searches", 0) < gap_limit(a):
+                out.append(k)
+        return out
+
+    async def reply_search(state: State):
+        """The graph's own post-ask search (outside model history: no tool-call message, just state): one
+        mailbox search per awaited gap for "<claim> <item>", then check_claim decides which hits are real."""
+        n, check_id, data = check_position(state["messages"], run_claim)
+        att = {k: dict(v) for k, v in state.get("gap_attempts", {}).items()}
+        emp = data.get("employee_id")
+        found: list[str] = []
+        here = len(state["messages"])
+        for k in awaiting_reply(state, open_gaps(data)):
+            item = k.split(":", 1)[0]
+            try:
+                hits = _as_json(await invoke(SEARCH_TOOL, {"employee_id": emp, "query": f"{run_claim} {item}"}))
+            except Exception:
+                hits = []
+            att[k]["searches"] = att[k].get("searches", 0) + 1
+            att[k]["search"] = here
+            found += [h["id"] for h in hits or [] if isinstance(h, dict) and h.get("id") and h["id"] not in found]
+        ignored = dict(state.get("ignored_ids", {}))
+        prev = [e for e in (state.get("effective_args", {}).get(check_id, {}).get("evidence_ids") or []) if e not in ignored]
+        keep: list[str] = []
+        if found:
+            try:
+                fresh = _jsonish(await invoke("check_claim", {"claim_id": run_claim, "evidence_ids": [*prev, *found]})) or {}
+            except Exception:
+                fresh = {}
+            bad = {r.get("id") for r in fresh.get("ignored_evidence", []) or [] if isinstance(r, dict)}
+            keep = [e for e in found if e not in bad and e not in prev]
+        return {"gap_attempts": att, "reply_evidence": [*state.get("reply_evidence", []), *keep]}
+
     def after_tools(state: State):
         """To a draft once the latest check is clean, once every open gap was searched for and asked about
         (employee for document gaps, reviewer for the rest) before a check that still shows it, or once
@@ -750,8 +793,10 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         if "error" in data:
             return "agent"
         gaps = open_gaps(data)
-        if not gaps or exhausted(state, gaps, n):
+        if not gaps:
             return "auto_draft"
+        if exhausted(state, gaps, n):
+            return "reply_search" if SEARCH_TOOL in by_name and awaiting_reply(state, gaps) else "auto_draft"
         if state.get("blocked_streak", 0) >= MAX_BLOCKED:
             att = state.get("gap_attempts", {})
             left = [k for k in gaps if k.split(":", 1)[1] in FREE_EVIDENCE_GAPS and att.get(k, {}).get("request") is None]
@@ -766,6 +811,7 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         _n, check_id, _data = check_position(state["messages"], run_claim)
         ev = [e for e in (state.get("effective_args", {}).get(check_id, {}).get("evidence_ids") or [])
               if e not in state.get("ignored_ids", {})]
+        ev += [e for e in state.get("reply_evidence", []) if e not in ev]  # replies the graph's own search found
         hd = trusted_decisions(state, run_claim)
         args = {"claim_id": run_claim, **({"evidence_ids": ev} if ev else {}), **({"human_decisions": hd} if hd else {})}
         try:
@@ -907,12 +953,14 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
     g.add_node("gate", gate)
     g.add_node("tools", run_tools)
     g.add_node("auto_draft", auto_draft)
+    g.add_node("reply_search", reply_search)
+    g.add_edge("reply_search", "auto_draft")
     g.add_node("graph_actions", graph_actions)
     g.add_edge(START, "intake")
     g.add_edge("intake", "agent")
     g.add_conditional_edges("agent", route, ["gate", "graph_actions", END])
     g.add_edge("gate", "tools")
-    g.add_conditional_edges("tools", after_tools, ["auto_draft", "agent"])
+    g.add_conditional_edges("tools", after_tools, ["auto_draft", "reply_search", "agent"])
     g.add_conditional_edges("auto_draft", lambda s: "graph_actions" if s.get("instructions") else END,
                             ["graph_actions", END])
     g.add_edge("graph_actions", END)
