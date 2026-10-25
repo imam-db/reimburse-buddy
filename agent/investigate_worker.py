@@ -286,7 +286,8 @@ async def _run(a) -> int:
                 decisions = clean_decisions(ans.get("decisions"))
                 reply = str(ans.get("reply") or "").strip() or "Reviewer: decisions submitted in the form."
                 emit({"type": "reply_applied", "question_id": qid, "decisions": decisions, "reply": reply})
-                payload = {"messages": [("user", reply)], **({"reviewer_decisions": decisions} if decisions else {})}
+                payload = {"messages": [("user", reply)],
+                           **({"reviewer_decisions": decisions, "decisions_source": "form"} if decisions else {})}
                 continue
             req = state.interrupts[0].value
             approval_id = uuid.uuid4().hex  # ours, not the model's tool_call_id (may repeat across providers)

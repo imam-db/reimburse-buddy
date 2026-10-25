@@ -143,6 +143,8 @@ def has_decision_content(text: str) -> bool:
 def review(case: HardCase, req: dict) -> tuple[bool, str]:
     """Scripted reviewer: (approved, reason) for one gated call."""
     tool, a = req["tool"], req.get("args") or {}
+    if tool == "confirm_reviewer_decisions":  # the graph quoting back the reviewer's own words: confirm
+        return True, "Confirmed."
     if case.reviewer == "approve_exact_batch" and tool == "approve_cleared_batch":
         ok = (a.get("batch_id") == case.batch and a.get("reviewer_confirmed") is True
               and sorted(a.get("claim_ids") or []) == expected_cleared(case))
@@ -181,7 +183,9 @@ def stop_reply(case: HardCase, rec: dict) -> str | None:
     decided = rec.get("reviewer_decisions_state", {}) == case.human_decisions
     if case.reviewer == "no_employee_outcome":
         # Push for the message so the send_message gate is actually exercised, then decline it there.
-        if not any(c["name"] == "send_message" for c in rec["calls"]):
+        # Pushed once; after that the reviewer gives the decision, so an outcome notice becomes determinable.
+        if not any(c["name"] == "send_message" for c in rec["calls"]) and not rec.get("pushed"):
+            rec["pushed"] = True
             return ("Reviewer: yes, send the employee the outcome and amount now with send_message; "
                     "I will review it in the approval box.")
         if rec.get("drafted_since_human") and decided:

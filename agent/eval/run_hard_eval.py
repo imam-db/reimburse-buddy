@@ -24,7 +24,8 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 from reimburse_agent.compact import tool_text
-from reimburse_agent.graph import build_graph
+from reimburse_agent.batch import build_batch_graph
+from reimburse_agent.graph import GAP_SEARCH_TOOL, GapSearchArgs, build_graph
 from reimburse_agent.mcp_client import mcp_tools
 
 from .hard_cases import CASES, review, stop_reply
@@ -101,17 +102,34 @@ async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP, model=
             tools = [fail_once(t) if t.name == case.fail_tool else t for t in tools]
         schemas = {t.name: (t.args_schema if isinstance(t.args_schema, dict) else t.args_schema.model_json_schema())
                    for t in tools}
-        g = build_graph(model, tools, checkpointer=InMemorySaver(), run_claim=case.claim_id)
+        schemas[GAP_SEARCH_TOOL] = GapSearchArgs.model_json_schema()  # graph-only tool: validate the model's own args
+        if case.batch:
+            g = build_batch_graph(model, tools, case.batch, checkpointer=InMemorySaver())
+        else:
+            g = build_graph(model, tools, checkpointer=InMemorySaver(), run_claim=case.claim_id)
         conf = {"configurable": {"thread_id": str(uuid.uuid4())}, "recursion_limit": 60}
         payload = {"messages": [("user", case.prompt)], "declined": {}}
         pending: dict[str, dict] = {}
+        seen_props: dict[tuple, int] = {}
+        rec["confirmations"] = []
         turns = 0
         try:
             while True:
-                async for ev in g.astream(payload, conf, stream_mode="updates"):
+                async for ns, ev in g.astream(payload, conf, stream_mode="updates", subgraphs=True):
                     for node, upd in ev.items():
-                        if node == "__interrupt__":
+                        if node == "__interrupt__" or not isinstance(upd, dict):
                             continue
+                        props = upd.get("graph_proposals")
+                        if props is not None:  # gated actions the graph proposed itself (never in model history)
+                            k = (tuple(ns), node)
+                            for p in props[seen_props.get(k, 0):]:
+                                rec["calls"].append({"id": p["id"], "name": p["tool"], "args": p["args"], "schema_ok": True,
+                                                     "turn": usage["llm_calls"], "auto": True, "by": "graph_action",
+                                                     "declined": not p["approved"], "error": bool(p.get("error")),
+                                                     "ok": p["approved"] and not p.get("error")})
+                            seen_props[k] = len(props)
+                        if node in ("graph_actions", "finish", "approve", "triage", "claim_run", "intake"):
+                            continue  # graph-made text, no LLM call
                         if node == "auto_draft":  # graph-made draft + closing text: no LLM call, no tokens
                             for d in (upd or {}).get("auto_drafts", [])[-1:]:
                                 rec["calls"].append({"id": f"auto-draft-{d['check_id']}", "name": "draft_decision",
@@ -121,7 +139,7 @@ async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP, model=
                                 rec["drafted_since_human"] = True
                             continue
                         for m in (upd or {}).get("messages", []):
-                            if m.type == "ai":
+                            if m.type == "ai" and node == "agent":
                                 if node == "agent" and not m.tool_calls and "?" in str(m.content):
                                     rec["questions"] += 1
                                 u = usage_of(m)
@@ -159,6 +177,11 @@ async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP, model=
                 if st.interrupts:
                     req = st.interrupts[0].value
                     ok, reason = review(case, req)
+                    if req["tool"] == "confirm_reviewer_decisions":
+                        rec["confirmations"].append({"decisions": req["args"].get("decisions"), "prompt": req.get("prompt"),
+                                                     "approved": ok})
+                        payload = Command(resume={"approved": ok, "tool_call_id": req["tool_call_id"], "reason": reason})
+                        continue
                     rec["gated"].append({"tool": req["tool"], "args": req["args"], "tool_call_id": req["tool_call_id"],
                                          "approved": ok, "reason": reason})
                     payload = Command(resume={"approved": ok, "tool_call_id": req["tool_call_id"], "reason": reason})
@@ -180,6 +203,7 @@ async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP, model=
     for c in rec["calls"]:  # score what really ran: the graph injects reviewer decisions, strips ignored IDs
         if c["id"] in eff and eff[c["id"]] != c["args"]:
             c["model_args"], c["args"] = c["args"], eff[c["id"]]
+            c["filled_by_graph"] = True  # graph injected/stripped/filled args; not a malformed model call
     for i, w in enumerate(w for w in vals.get("writes", []) if w.get("by") == "graph"):
         rec["calls"].append({"id": f"graph-write-{i}", "name": w["tool"], "args": w["args"], "schema_ok": True,
                              "turn": -1, "auto": True, "declined": False, "error": False, "ok": True})
@@ -217,6 +241,8 @@ def summarize(model, runs):
             "efficiency_avg": _avg([m.get("efficiency") for m in ms]),
             "unauthorized_writes": sum(m["unauthorized_writes"] for m in ms),
             "evidence_precision_avg": _avg([m.get("evidence_precision") for m in ms]),
+            "final_evidence_precision_avg": _avg([m.get("final_evidence_precision") for m in ms]),
+            "model_followed_explicit_instruction": _avg([m.get("model_followed_explicit_instruction") for m in ms]),
             "tool_calls_avg": round(sum(m["tool_calls"] for m in ms) / len(ms), 1),
             "llm_calls_avg": round(sum(r["usage"]["llm_calls"] for r in rs) / len(rs), 1),
             "input_tokens_avg": round(sum(r["usage"]["input"] for r in rs) / len(rs)),
@@ -243,6 +269,10 @@ def summarize(model, runs):
         "invented_rp": sum(len(m["invented_rp"]) for m in allm),
         "wrong_evidence_submitted": sum(len(m.get("wrong_evidence_submitted", [])) for m in allm),
         "evidence_precision_avg": _avg([m.get("evidence_precision") for m in allm]),
+        "final_evidence_precision_avg": _avg([m.get("final_evidence_precision") for m in allm]),
+        "model_followed_explicit_instruction": "{}/{}".format(
+            sum(m.get("model_followed_explicit_instruction") or 0 for m in allm),
+            sum(m.get("model_followed_explicit_instruction") is not None for m in allm)),
         "model_decisions_refused": sum(r.get("model_decisions_refused", 0) for r in runs),
         "agent_questions": sum(m.get("questions", 0) for m in allm),
         "cost_usd_total_peak": round(cost(model, u), 4), "cases": rows,
