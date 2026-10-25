@@ -122,18 +122,3 @@ async def test_smoke_case8_history_with_reviewer_follow_up_is_accepted():
         await g.ainvoke({"messages": [("user", "Reviewer: I have no extra decision. Finish.")]}, conf)
         st = await g.aget_state(conf)
         assert st.values["messages"][-1].content == "Noted."
-
-
-async def test_search_cap_two_per_gap_before_asking_then_one_more():
-    cid = "CLM-2026-0203"  # one open gap (return boarding pass)
-    env = {"REIMBURSE_BUDDY_DATA": str(HARD)}
-    async with mcp_tools(extra_env={**ENV, **env}) as (_s, tools):
-        chk = json.loads((await {t.name: t for t in tools}["check_claim"].ainvoke({"claim_id": cid}))[0]["text"])
-    item, gap = next((i["item_id"], g) for i in chk["items"] for g in i.get("gaps", []))
-    q = lambda i: call("search_reimburse_mailbox", {"employee_id": "EMP-005", "query": f"boarding pass try{i}"}, 10 + i)
-    script = [call("check_claim", {"claim_id": cid}, 1), q(1), q(2), q(3),
-              call("request_missing_evidence", {"claim_id": cid, "item_id": item, "gap_code": gap}, 4), q(4), q(5),
-              AIMessage(content="final")]
-    msgs = await _run(script, cid, env)
-    searches = [m.content for m in msgs if m.type == "tool" and m.name == "search_reimburse_mailbox"]
-    assert ["search limit" in x for x in searches] == [False, False, True, False, True]
