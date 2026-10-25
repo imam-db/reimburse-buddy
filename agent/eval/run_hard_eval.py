@@ -110,14 +110,16 @@ async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP):
                     for node, upd in ev.items():
                         if node == "__interrupt__":
                             continue
-                        for m in (upd or {}).get("messages", []):
-                            auto = m.type == "ai" and any(str(c["id"]).startswith("auto-draft") for c in m.tool_calls or [])
-                            if m.type == "ai" and auto:  # graph-made draft call: no LLM call, no tokens
-                                for c in m.tool_calls:
-                                    pending[c["id"]] = {"id": c["id"], "name": c["name"], "args": c["args"],
-                                                        "schema_ok": True, "turn": usage["llm_calls"], "auto": True}
+                        if node == "auto_draft":  # graph-made draft + closing text: no LLM call, no tokens
+                            for d in (upd or {}).get("auto_drafts", [])[-1:]:
+                                rec["calls"].append({"id": f"auto-draft-{d['check_id']}", "name": "draft_decision",
+                                                     "args": d["args"], "schema_ok": True, "turn": usage["llm_calls"],
+                                                     "auto": True, "declined": False, "error": False, "ok": False})
+                                tool_texts.append(d["content"])
                                 rec["drafted_since_human"] = True
-                            elif m.type == "ai":
+                            continue
+                        for m in (upd or {}).get("messages", []):
+                            if m.type == "ai":
                                 u = usage_of(m)
                                 usage["llm_calls"] += 1
                                 for k in ("input", "output", "cache_hit"):
