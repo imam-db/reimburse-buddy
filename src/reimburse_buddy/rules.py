@@ -18,6 +18,7 @@ from .messages import render
 from .models import ClaimCheck, Decision, Finding, IgnoredEvidence, ItemResult, ItemStatus
 
 HUMAN_CHOICES = {"approve_full", "approve_capped", "reject"}
+USE_RECEIPT = "use:"  # human_decisions value "use:MSG-xxxx" names the receipt to pay when several disagree
 NEEDS = ItemStatus.NEEDS_EVIDENCE
 
 
@@ -51,6 +52,25 @@ SHAPE_HELP = ('Expected evidence_ids as a list of strings, e.g. ["MSG-1234", "EV
               'Choices: approve_full, approve_capped, reject.')
 
 
+def _content_key(eid: str, a: dict) -> tuple:
+    """Same receipt = same receipt number, else same file hash, else same message and file name."""
+    if a.get("receipt_no"):
+        return ("no", a["receipt_no"])
+    if a.get("sha256"):
+        return ("sha", a["sha256"])
+    return ("att", eid, a.get("name"))
+
+
+def _dedupe(pairs: list[tuple]) -> list[tuple]:
+    out, seen = [], set()
+    for e, a in pairs:
+        k = _content_key(e, a)
+        if k not in seen:
+            seen.add(k)
+            out.append((e, a))
+    return out
+
+
 def _validate_shapes(evidence_ids, human_decisions) -> None:
     if evidence_ids is not None and (not isinstance(evidence_ids, list)
                                      or not all(isinstance(e, str) for e in evidence_ids)):
@@ -60,7 +80,7 @@ def _validate_shapes(evidence_ids, human_decisions) -> None:
                                                    for k, v in human_decisions.items())):
         raise ValueError(f"human_decisions has the wrong shape ({type(human_decisions).__name__}). {SHAPE_HELP}")
     for item_id, choice in (human_decisions or {}).items():
-        if choice not in HUMAN_CHOICES:
+        if choice not in HUMAN_CHOICES and not (choice.startswith(USE_RECEIPT) and len(choice) > len(USE_RECEIPT)):
             raise ValueError(f"human_decisions[{item_id!r}] = {choice!r} is not a valid choice. {SHAPE_HELP}")
 
 
@@ -127,6 +147,18 @@ def check_claim(
         if a.get("type") == "receipt":
             all_receipts.setdefault((a.get("claim_id"), a.get("item_id")), []).append((eid, a))
     receipts = {k: v[0] for k, v in all_receipts.items()}
+    amount_required = bool(policy.get("receipt_amount_required"))
+    # Every receipt in the employee's mailbox for this claim, whatever evidence was passed.
+    mailbox: dict[tuple, list] = {(claim_id, i["id"]): [] for i in claim["items"]}
+    receipt_items: dict[tuple, set] = {}
+    for m in store.inbox:
+        if m.get("owner_id") != emp:
+            continue
+        for a in m.get("attachments", []):
+            if a.get("type") == "receipt" and a.get("claim_id") == claim_id and (claim_id, a.get("item_id")) in mailbox:
+                mailbox[(claim_id, a["item_id"])].append((m["id"], a))
+                if not a.get("receipt_no"):  # numbered receipts reused across items are caught as duplicates below
+                    receipt_items.setdefault(_content_key(m["id"], a), set()).add(a["item_id"])
 
     # Effective receipt numbers (from the claim or from receipts found in the inbox).
     receipt_no: dict[str, str | None] = {}
@@ -162,24 +194,45 @@ def check_claim(
             rejected = True
 
         # Receipt required (a receipt found in the inbox counts)
+        receipt_cap = None  # what a receipt supports; approve_capped / use:MSG pay at most this
+        options: dict[str, int | None] = {}  # receipt choices for multiple_receipts, by message ID
         if cat in policy["receipt_required_categories"] and not item.get("receipt"):
             found = receipts.get((claim_id, iid))
-            several = all_receipts.get((claim_id, iid), [])
-            if len(several) > 1:
-                # Two or more different receipts for one item: never pick one silently.
-                res.evidence_used += [e for e, _ in several]
-                gap("receipt_required", G.MULTIPLE_RECEIPTS, "multiple_receipts", srcs=", ".join(e for e, _ in several))
-            elif found and found[1].get("amount") is not None and _d(found[1]["amount"]) != amount:
-                # Exact match, no tolerance: a receipt states the exact amount paid, and the claim
-                # amount is meant to be copied from it. Receipts without an amount are not compared.
-                res.evidence_used.append(found[0])
-                gap("receipt_required", G.RECEIPT_AMOUNT_MISMATCH, "receipt_amount_mismatch", src=found[0],
-                    receipt_amount=_d(found[1]["amount"]), item_amount=amount)
-            elif found:
-                res.evidence_used.append(found[0])
-                res.findings.append(F("receipt_required", ItemStatus.OK, "receipt_found", src=found[0]))
-            else:
+            if not found:
                 gap("receipt_required", G.RECEIPT_MISSING, "receipt_missing")
+            else:
+                res.evidence_used += [e for e, _ in all_receipts[(claim_id, iid)] if e not in res.evidence_used]
+                # Compare against every receipt the mailbox holds for this item, not only the ones passed in.
+                uniq = _dedupe(all_receipts[(claim_id, iid)] + mailbox[(claim_id, iid)])
+                need_amount = amount_required or any(a.get("amount_required") for _, a in uniq)
+                bad = [(e, a) for e, a in uniq if a.get("amount_error")]
+                missing = [e for e, a in uniq if a.get("amount") is None and not a.get("amount_error")]
+                amounts = sorted({a["amount"] for _, a in uniq if a.get("amount") is not None})
+                shared = [e for e, a in uniq if len(receipt_items.get(_content_key(e, a), ())) > 1]
+                for e, a in bad:
+                    gap("receipt_required", G.RECEIPT_AMOUNT_MISMATCH, "receipt_amount_unreadable", src=e, why=a["amount_error"])
+                if need_amount and missing:
+                    gap("receipt_required", G.RECEIPT_AMOUNT_MISMATCH, "receipt_amount_missing", srcs=", ".join(missing))
+                if shared:
+                    others = sorted(set().union(*(receipt_items[_content_key(e, a)] for e, a in uniq if e in shared)) - {iid})
+                    gap("receipt_required", G.RECEIPT_SHARED, "receipt_shared", srcs=", ".join(shared), others=", ".join(others))
+                if len(amounts) > 1:
+                    # Receipts that disagree: never pick one silently; the reviewer names one (use:MSG-xxxx).
+                    options = {e: a.get("amount") for e, a in uniq}
+                    gap("receipt_required", G.MULTIPLE_RECEIPTS, "multiple_receipts", srcs=", ".join(e for e, _ in uniq))
+                elif amounts:
+                    r = _d(amounts[0])
+                    src = next(e for e, a in uniq if a.get("amount") == amounts[0])
+                    receipt_cap = r
+                    if amount > r:  # claiming more than the receipt shows
+                        gap("receipt_required", G.RECEIPT_AMOUNT_MISMATCH, "receipt_amount_mismatch", src=src,
+                            receipt_amount=r, item_amount=amount)
+                    elif amount < r:  # claiming less than paid is fine, but note it
+                        res.findings.append(F("receipt_required", ItemStatus.OK, "receipt_higher", src=src,
+                                              receipt_amount=r, item_amount=amount))
+                if not res.gaps or all(g == G.DUPLICATE_SUSPECTED for g in res.gaps):
+                    if not any(f.key == "receipt_higher" for f in res.findings):
+                        res.findings.append(F("receipt_required", ItemStatus.OK, "receipt_found", src=found[0]))
 
         # Duplicates: same receipt number is a hard duplicate; same category/date/amount
         # without distinct receipt numbers is only suspected.
@@ -275,7 +328,25 @@ def check_claim(
             res.status, res.approvable = ItemStatus.REJECTED, Decimal(0)
             if choice == "reject" and not rejected:
                 res.findings.append(F("human_decision", ItemStatus.REJECTED, "human_rejected"))
+        elif res.gaps and choice and choice.startswith(USE_RECEIPT):
+            picked = choice[len(USE_RECEIPT):]
+            if picked not in options:
+                raise ValueError(f"human_decisions[{iid!r}] = {choice!r}: use:<message ID> only settles "
+                                 f"multiple_receipts and must name one of {sorted(options) or 'no receipts'}.")
+            res.human_decision = choice
+            pick = options[picked]
+            res.approvable = min(allowed, _d(pick)) if pick is not None else allowed
+            res.status = ItemStatus.OK if res.approvable == amount else ItemStatus.PARTIAL
+            for f in res.findings:
+                if f.status == NEEDS:
+                    f.resolved_by = choice
+            res.findings.append(F("human_decision", res.status, "human_resolved", choice=choice))
         elif res.gaps and choice in ("approve_full", "approve_capped"):
+            if G.MULTIPLE_RECEIPTS in res.gaps:
+                raise ValueError(f"human_decisions[{iid!r}] = {choice!r}: {iid} has receipts that disagree; "
+                                 f"name the one to pay with use:<message ID>, one of {sorted(options)}.")
+            if receipt_cap is not None:
+                allowed = min(allowed, receipt_cap)
             res.human_decision = choice
             res.approvable = amount if choice == "approve_full" else allowed
             res.status = ItemStatus.OK if res.approvable == amount else ItemStatus.PARTIAL

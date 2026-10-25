@@ -16,6 +16,14 @@ T = {
     "receipt_missing": ("Receipt missing.", "Bukti pembayaran tidak ada."),
     "receipt_amount_mismatch": ("Receipt in {src} shows {receipt_amount}, but the item claims {item_amount}. Needs review.",
                                 "Bukti di {src} menunjukkan {receipt_amount}, tetapi item diklaim {item_amount}. Perlu ditinjau."),
+    "receipt_amount_unreadable": ("Receipt in {src} has an amount that cannot be read ({why}). Needs review.",
+                                  "Nominal pada struk di {src} tidak terbaca ({why}). Perlu ditinjau."),
+    "receipt_amount_missing": ("Receipt in {srcs} does not state an amount. Needs review.",
+                               "Struk di {srcs} tidak mencantumkan nominal. Perlu ditinjau."),
+    "receipt_higher": ("Receipt found in {src} ({receipt_amount}); the item claims less ({item_amount}).",
+                       "Struk ditemukan di {src} ({receipt_amount}); item mengklaim lebih kecil ({item_amount})."),
+    "receipt_shared": ("The receipt in {srcs} is also attached to {others}. Needs review.",
+                       "Struk di {srcs} juga dilampirkan untuk {others}. Perlu ditinjau."),
     "multiple_receipts": ("Several receipts were submitted for this item ({srcs}). Needs review: which one is right?",
                           "Ada beberapa bukti untuk item ini ({srcs}). Perlu ditinjau: mana yang benar?"),
     "category_not_allowed": ("Category '{category}' is not allowed by the policy (allowed: {allowed}).",
@@ -69,5 +77,5 @@ def render(key: str, params: dict, lang: str = "en") -> str:
     idx = 0 if lang == "en" else 1
     p = {k: (rupiah(v) if k in MONEY else v) for k, v in params.items()}
     if lang != "en" and "choice" in p:
-        p["choice"] = CHOICES_ID.get(p["choice"], p["choice"])
+        p["choice"] = CHOICES_ID.get(p["choice"], p["choice"].replace("use:", "pakai struk "))
     return T[key][idx].format(**p)

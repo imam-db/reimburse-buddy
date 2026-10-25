@@ -153,6 +153,10 @@ def test_unreadable_evidence_needs_explicit_acceptance(client):
     assert "approve_full" not in admin
     client.post(f"/admin/claims/{cid}/evidence/MSG-W002/review", data={"verdict": "accept"})
     assert web.pending_items(cid) == {}
+    # Accepted, but the file shows no amount: web uploads require one, so finance settles the item.
+    it2 = next(i for i in web.run_check(cid).items if i.item_id == "IT-2")
+    assert it2.gaps == ["receipt_amount_mismatch"]
+    client.post(f"/admin/claims/{cid}/decide", data={"item_id": "IT-2", "choice": "approve_full"})
     assert web.run_check(cid).decision.value == "approve"
     log = web.review(cid)["evidence_log"]
     assert log[-1] | {"at": ""} == {"at": "", "evidence_id": "MSG-W002", "item_id": "IT-2",

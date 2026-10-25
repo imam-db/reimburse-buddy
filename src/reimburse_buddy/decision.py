@@ -41,7 +41,7 @@ def _item_text(r, lang: str) -> str:
             continue
         text = render(f.key, f.params, lang).rstrip(".")
         if f.resolved_by:
-            choice = f.resolved_by if lang == "en" else CHOICES_ID[f.resolved_by]
+            choice = f.resolved_by if lang == "en" else CHOICES_ID.get(f.resolved_by, f.resolved_by.replace("use:", "pakai struk "))
             text = RESOLVED_PREFIX[idx].format(choice=choice) + (text if text.startswith("Rp") else text[0].lower() + text[1:])
         if f.key == "human_resolved" and any(x.resolved_by for x in r.findings):
             continue  # already shown as the resolved prefix
