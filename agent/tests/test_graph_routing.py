@@ -122,3 +122,25 @@ async def test_smoke_case8_history_with_reviewer_follow_up_is_accepted():
         await g.ainvoke({"messages": [("user", "Reviewer: I have no extra decision. Finish.")]}, conf)
         st = await g.aget_state(conf)
         assert st.values["messages"][-1].content == "Noted."
+
+
+async def test_graph_initiated_action_keeps_history_valid_for_the_provider():
+    # Review 5: the graph proposes a gated update_claim_status the reviewer asked for. It runs via invoke()
+    # outside the model history (plain-text note only), so the next model call passes provider validation.
+    from langgraph.types import Command
+    cid = "CLM-2026-0111"
+    script = iter([thought("check_claim", {"claim_id": cid}, 1),
+                   AIMessage(content="Recorded.", additional_kwargs={"reasoning_content": "..."})])
+    async with mcp_tools(extra_env={**ENV, "REIMBURSE_BUDDY_DATA": str(HARD)}) as (_s, tools):
+        g = build_graph(ThinkingProvider(messages=script), tools, checkpointer=InMemorySaver(), run_claim=cid)
+        conf = {"configurable": {"thread_id": str(uuid.uuid4())}}
+        await g.ainvoke({"messages": [("user", f"Review claim {cid}, then call update_claim_status to record it.")],
+                         "declined": {}}, conf)
+        req = (await g.aget_state(conf)).interrupts[0].value
+        assert req["by"] == "graph" and req["tool"] == "update_claim_status" and "update_claim_status" in req["from"]
+        await g.ainvoke(Command(resume={"approved": True, "tool_call_id": req["tool_call_id"]}), conf)
+        msgs = (await g.aget_state(conf)).values["messages"]
+        assert msgs[-1].content.startswith("Done: update_claim_status") and not msgs[-1].tool_calls
+        assert all("reasoning_content" in m.additional_kwargs for m in msgs if m.type == "ai" and m.tool_calls)
+        await g.ainvoke({"messages": [("user", "Reviewer: thanks.")]}, conf)
+        assert (await g.aget_state(conf)).values["messages"][-1].content == "Recorded."

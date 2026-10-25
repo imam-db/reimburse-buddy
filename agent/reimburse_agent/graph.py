@@ -145,6 +145,9 @@ class State(TypedDict, total=False):
     ignored_ids: dict[str, str]  # evidence ID -> reason, from check_claim's ignored_evidence (stable reasons)
     effective_args: dict[str, dict]  # tool_call_id -> the args the tool really ran with
     blocked_streak: int  # consecutive refused searches
+    decisions_source: str  # "form": this turn's reviewer_decisions came structured (web form), no parse/confirm
+    instructions: list[dict]  # explicit reviewer instructions not yet carried out (see parse_instructions)
+    graph_proposals: list[dict]  # gated actions the graph proposed itself: {"tool", "args", "id", "approved", "from"}
     unattributed_searches: int  # raw mailbox searches that named no single open gap
 
 
@@ -243,56 +246,149 @@ CATEGORY_WORDS = {
     "checkout": "late_checkout", "taxi": "taxi", "cab": "taxi", "flight": "flight", "ticket": "flight",
     "meal": "meal", "dinner": "meal", "lunch": "meal", "per diem": "per_diem", "per-diem": "per_diem",
 }
-ACTIONS = [  # first match per clause wins; order matters ("approve in full" before plain "approve")
+ACTIONS = [  # every action a clause names is collected; a clause naming two different actions is ambiguous
     ("use", re.compile(r"\buse\s+(MSG-[\w-]+)", re.I)),
     ("reject", re.compile(r"\b(reject|deny|decline|don'?t pay|do not pay|tolak)\b", re.I)),
     ("approve_capped", re.compile(r"\b(cap|capped|at the cap|up to the cap|policy limit|plafon)\b", re.I)),
     ("approve_full", re.compile(r"\b(in full|full amount|approve[_ ]full|pay (it |the \w+ )?all|whole amount)\b", re.I)),
 ]
-NEGATION = re.compile(r"\b(don'?t|do not|not|never|no)\s+(cap|approve|reject|use)\b", re.I)
+NEGATION = re.compile(r"\b(don'?t|do not|not|never|no|jangan|tidak)\b", re.I)
+REJECT_PHRASES = re.compile(r"\b(don'?t pay|do not pay)\b", re.I)  # a reject action, not a negation
+EXCEPT = re.compile(r"\b(except|but not|other than|apart from|kecuali|selain)\b", re.I)
+ALTERNATIVE = re.compile(r"\b(or|atau|either)\b", re.I)
+HUMAN_CHOICES = frozenset({"approve_full", "approve_capped", "reject"})  # = reimburse_buddy.rules.HUMAN_CHOICES
+USE_CHOICE = re.compile(r"use:[A-Z]+-[\w-]+")
 
 
-def parse_reviewer_decisions(text: str, items: list[dict]) -> tuple[dict[str, str], list[str]]:
-    """Map a reviewer's words to {item_id: choice}. items: check_claim rows (item_id, category, status).
-    A clause counts only if it names exactly one action and resolves to exactly one item (an item ID,
-    or a category word that matches one item, preferring items still waiting on a decision). JSON
-    objects in the text are taken as-is. Returns (decisions, unparsed clauses that looked like decisions)."""
+def valid_choice(v) -> bool:
+    return isinstance(v, str) and (v in HUMAN_CHOICES or bool(USE_CHOICE.fullmatch(v)))
+
+
+def parse_reviewer_turn(text: str, items: list[dict]) -> tuple[dict[str, str], list[str], dict[str, str]]:
+    """Map a reviewer's words to {item_id: choice}, conservatively; returns (decisions, skipped, quotes) where
+    quotes[item] is the reviewer's own words each decision came from (shown back for confirmation).
+    Nothing here is stored directly: intake asks the reviewer to confirm first. Refused (-> skipped):
+    - pasted alternatives ("approve the hotel in full; or cap it", "cap or reject"): two different actions
+      plus "or" in one message means the reviewer is quoting options, not choosing;
+    - negation anywhere in a clause with an action ("don't cap it");
+    - "everything except ..." style sentences;
+    - a sentence naming an item without an action next to one with an action ("cap IT-3 and IT-4");
+    - item IDs that are not in the claim, and JSON values outside HUMAN_CHOICES / use:<ID>."""
     out: dict[str, str] = {}
+    quotes: dict[str, str] = {}
     skipped: list[str] = []
+    ids = {i.get("item_id") for i in items}
     for blob in re.findall(r"\{[^{}]*\}", text):
         try:
             d = json.loads(blob.replace("'", '"'))
         except ValueError:
             continue
         if isinstance(d, dict):
-            out.update({str(k): str(v) for k, v in d.items() if re.fullmatch(r"IT-\d+", str(k))})
+            for k, v in d.items():
+                k = str(k).upper()
+                if re.fullmatch(r"IT-\d+", k) and (not ids or k in ids) and valid_choice(v):
+                    out[k], quotes[k] = v, blob
+                else:
+                    skipped.append(f"{k}: {v}")
     rest = re.sub(r"\{[^{}]*\}", " ", text)
-    ids = {i.get("item_id") for i in items}
-    for clause in re.split(r"[.;\n]|,\s*(?:and\s+)?|\band\b|\bthen\b", rest):
-        if not clause.strip():
+    parsed: list[tuple[str, str, str]] = []  # (item, choice, clause)
+    for sentence in re.split(r"[.;\n]", rest):
+        if not sentence.strip():
             continue
-        acts = [(name, m) for name, rx in ACTIONS if (m := rx.search(clause))]
-        if not acts:
+        if EXCEPT.search(sentence) and any(rx.search(sentence) for _n, rx in ACTIONS):
+            skipped.append(sentence.strip())
             continue
-        if NEGATION.search(clause):
-            skipped.append(clause.strip())
+        found, bad = [], False
+        for clause in re.split(r",\s*(?:and\s+)?|\band\b|\bthen\b|\bdan\b", sentence):
+            if not clause.strip():
+                continue
+            acts = {name: m for name, rx in ACTIONS if (m := rx.search(clause))}
+            named = {t.upper() for t in re.findall(r"\bIT-\d+\b", clause, re.I)}
+            if not acts:
+                if named:  # "... and IT-4": an item with no action of its own
+                    bad = True
+                continue
+            if NEGATION.search(REJECT_PHRASES.sub(" ", clause)) or len(acts) > 1:
+                skipped.append(clause.strip())
+                continue
+            name, m = next(iter(acts.items()))
+            targets = named & ids if ids else named
+            if named and not targets:  # an item ID this claim doesn't have
+                skipped.append(clause.strip())
+                continue
+            if not targets:
+                low = clause.lower()
+                cats = {c for w, c in CATEGORY_WORDS.items() if re.search(rf"\b{re.escape(w)}\b", low)}
+                rows = [i for i in items if i.get("category") in cats]
+                waiting = [i for i in rows if i.get("status") == "needs_evidence"]
+                rows = waiting if len(waiting) == 1 else rows
+                if len(cats) == 1 and len(rows) == 1:
+                    targets = {rows[0]["item_id"]}
+            if len(targets) != 1:
+                skipped.append(clause.strip())
+                continue
+            found.append((targets.pop(), f"use:{m.group(1).upper()}" if name == "use" else name, clause.strip()))
+        if bad and found:
+            skipped.append(sentence.strip())
             continue
-        name, m = acts[0]
-        targets = set(re.findall(r"\bIT-\d+\b", clause, re.I))
-        targets = {t.upper() for t in targets} & ids if ids else {t.upper() for t in targets}
-        if not targets:
-            low = clause.lower()
-            cats = {c for w, c in CATEGORY_WORDS.items() if re.search(rf"\b{re.escape(w)}\b", low)}
-            rows = [i for i in items if i.get("category") in cats]
-            waiting = [i for i in rows if i.get("status") == "needs_evidence"]
-            rows = waiting if len(waiting) == 1 else rows
-            if len(cats) == 1 and len(rows) == 1:
-                targets = {rows[0]["item_id"]}
-        if len(targets) != 1:
-            skipped.append(clause.strip())
+        parsed.extend(found)
+    named_actions = {name for name, rx in ACTIONS if rx.search(rest)}
+    if (parsed or out) and ALTERNATIVE.search(rest) and len(named_actions | set(out.values())) > 1:
+        return {}, [*skipped, text.strip()], {}  # quoted options, not a choice: ask instead
+    for item, choice, q in parsed:
+        if item in out and out[item] != choice:  # same item, two different choices: refuse both
+            skipped.append(q)
+            out.pop(item)
+            quotes.pop(item, None)
             continue
-        out[targets.pop()] = f"use:{m.group(1).upper()}" if name == "use" else name
-    return out, skipped
+        out[item], quotes[item] = choice, q
+    return out, skipped, quotes
+
+
+def parse_reviewer_decisions(text: str, items: list[dict]) -> tuple[dict[str, str], list[str]]:
+    dec, skipped, _q = parse_reviewer_turn(text, items)
+    return dec, skipped
+
+
+# --- reviewer instructions the graph may carry out itself (args fully determined; always gated) -------
+INSTRUCTIONS = [
+    ("outcome_notice", re.compile(r"\b(send|tell|let|inform|notify|email|message)\b[^.?!\n]*\b(employee|claimant|karyawan)\b"
+                                  r"[^.?!\n]*\b(outcome|result|decision|amount|keputusan)\b", re.I)),
+    ("request_approval", re.compile(r"\b(escalate|request[_ ]approval|ask (the |their |his |her )?manager|manager'?s? approval)\b", re.I)),
+    ("update_claim_status", re.compile(r"\bupdate_claim_status\b|\b(update|set|record|mark|change)\b[^.?!\n]*\bstatus\b", re.I)),
+]
+ENGINE_STATUS = {"approve": "approved", "partial_approve": "partially_approved", "reject": "rejected",
+                 "needs_info": "on_hold"}
+OUTCOME_SUBJECT = "Claim {cid}: outcome of your reimbursement claim"
+OUTCOME_BODY = ("Hello,\n\nYour reimbursement claim {cid} has been reviewed. This is the finance decision note, "
+                "exactly as the rule engine produced it:\n\n{draft}\n\nReimburse Buddy (sent after finance approved "
+                "this message)")
+GRAPH_TOOL_FOR = {"outcome_notice": "send_message", "request_approval": "request_approval",
+                  "update_claim_status": "update_claim_status"}
+
+
+def parse_instructions(text: str, items: list[dict], at: int) -> list[dict]:
+    """Explicit reviewer instructions in one human message: [{"kind", "quote", "at", "item"?}]. A sentence
+    with a negation ("don't message the employee") is no instruction."""
+    out = []
+    for sentence in re.split(r"(?<=[.?!])\s+|\n", text):
+        if NEGATION.search(sentence):
+            continue
+        for kind, rx in INSTRUCTIONS:
+            if kind in {o["kind"] for o in out} or not rx.search(sentence):
+                continue
+            ins = {"kind": kind, "quote": sentence.strip(), "at": at}
+            if kind == "request_approval":
+                named = {t.upper() for t in re.findall(r"\bIT-\d+\b", sentence, re.I)}
+                if not named:
+                    low = sentence.lower()
+                    cats = {c for w, c in CATEGORY_WORDS.items() if re.search(rf"\b{re.escape(w)}\b", low)}
+                    named = {i["item_id"] for i in items if i.get("category") in cats}
+                if len(named) != 1:
+                    continue  # whose approval? not determined: leave it to the model / reviewer
+                ins["item"] = named.pop()
+            out.append(ins)
+    return out
 
 
 def _jsonish(content):
@@ -342,26 +438,43 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         return res if isinstance(res, str) else json.dumps(res, default=str, ensure_ascii=False)
 
     async def intake(state: State):
-        """Human channel: parse decisions out of the newest reviewer message; mark searched gaps as
-        'reviewer asked' when the reviewer answers an agent that stopped."""
+        """Human channel: parse decisions out of the newest reviewer message, confirm them with the reviewer
+        (interrupt quoting their own words) before storing; note explicit instructions; mark searched gaps
+        as 'reviewer asked' when the reviewer answers an agent that stopped."""
         msgs = state["messages"]
         last = msgs[-1] if msgs else None
         if not isinstance(last, HumanMessage):
             return {}
         out: dict = {}
+        if state.get("decisions_source"):
+            out["decisions_source"] = ""  # structured decisions arrived with this turn: nothing to parse
         check = latest_check(msgs, run_claim) if run_claim else None
         items = (check or {}).get("items", [])
         text = str(last.content)
-        if run_claim and not items and re.search(r"\b(cap|reject|approve|use|hotel|taxi|flight)\b", text, re.I) \
-                and "check_claim" in by_name:
+        if run_claim and not items and re.search(r"\b(cap|reject|approve|use|hotel|taxi|flight|escalate|manager)\b",
+                                                 text, re.I) and "check_claim" in by_name:
             try:
                 items = (_jsonish(await invoke("check_claim", {"claim_id": run_claim})) or {}).get("items", [])
             except Exception:
                 items = []
+        if run_claim:
+            new = [i for i in parse_instructions(text, items, len(msgs) - 1)
+                   if GRAPH_TOOL_FOR[i["kind"]] in by_name]
+            if new:
+                out["instructions"] = [*state.get("instructions", []), *new]
         if run_claim and len(msgs) > 1:
-            dec, skipped = parse_reviewer_decisions(text, items)
+            dec, skipped, quotes = ({}, [], {}) if state.get("decisions_source") else parse_reviewer_turn(text, items)
             if dec:
-                out["reviewer_decisions"] = dec
+                lines = [f'Apply {k} -> {v}? from: "{quotes.get(k, "")}"' for k, v in dec.items()]
+                answer = interrupt({"tool": "confirm_reviewer_decisions", "args": {"decisions": dec},
+                                    "tool_call_id": f"confirm-decisions-{len(msgs) - 1}", "by": "graph",
+                                    "from": text, "prompt": "\n".join(lines)})
+                ok = (isinstance(answer, dict) and answer.get("approved") is True
+                      and answer.get("tool_call_id") == f"confirm-decisions-{len(msgs) - 1}")
+                if ok:
+                    out["reviewer_decisions"] = dec
+                else:
+                    skipped = [*skipped, *(f"not confirmed: {line}" for line in lines)]
             if skipped:
                 out["unparsed_reviewer"] = [*state.get("unparsed_reviewer", []), *skipped]
             att = {k: dict(v) for k, v in state.get("gap_attempts", {}).items()}
@@ -642,9 +755,115 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         return {"messages": [closing], "auto_drafted": [*state.get("auto_drafted", []), check_id],
                 "auto_drafts": [*state.get("auto_drafts", []), rec]}
 
+    async def build_action(ins: dict, fresh: dict, args: dict) -> tuple[str | None, dict | str]:
+        """(tool, args) when the instruction's arguments are fully determined by the engine/claim data,
+        else (None, reason). The graph never writes free text: the outcome notice is a fixed template
+        around draft_decision's output, so every amount comes from the engine."""
+        kind, cid = ins["kind"], run_claim
+        if kind == "outcome_notice":
+            if fresh.get("decision") in (None, "needs_info"):
+                return None, "the claim is not decided yet (check_claim: needs_info)"
+            res = await by_name["draft_decision"].ainvoke(args)
+            draft = tool_text(res) if not isinstance(res, str) else res
+            if (_jsonish(draft) or {}).get("error"):
+                return None, "draft_decision failed"
+            return "send_message", {"to": fresh.get("employee_id"), "subject": OUTCOME_SUBJECT.format(cid=cid),
+                                    "body": OUTCOME_BODY.format(cid=cid, draft=draft), "claim_id": cid}
+        if kind == "request_approval":
+            claim = _jsonish(await invoke("get_claim", {"claim_id": cid})) if "get_claim" in by_name else None
+            mgr = ((claim or {}).get("employee") or {}).get("manager_id")
+            if not mgr:
+                return None, "the claimant's manager is not known"
+            return "request_approval", {"manager_id": mgr, "claim_id": cid, "item_id": ins["item"],
+                                        "reason": f'Reviewer asked: "{ins["quote"]}"'}
+        status = ENGINE_STATUS.get(fresh.get("decision"))
+        if not status:
+            return None, "check_claim gave no decision"
+        return "update_claim_status", {"claim_id": cid, "status": status,
+                                       "note": f'Status from check_claim ({fresh.get("decision")}); reviewer asked: "{ins["quote"]}"'}
+
+    def already_proposed(state: State, name: str, call_args: dict, since: int) -> bool:
+        """Dedupe: same call_signature already declined or run, or the model itself proposed the same kind of
+        action for this claim (and item) after the instruction."""
+        sig = call_signature({"name": name, "args": call_args})
+        if sig in state.get("declined_sigs", []):
+            return True
+        key = (name, call_args.get("claim_id"), call_args.get("item_id"))
+        if any((w["tool"], w["args"].get("claim_id"), w["args"].get("item_id")) == key for w in state.get("writes", [])):
+            return True
+        for m in state["messages"][since:]:
+            for c in getattr(m, "tool_calls", None) or []:
+                a = c.get("args") or {}
+                if c["name"] == name and (a.get("claim_id") in (run_claim, None, "")) and \
+                        (name != "request_approval" or a.get("item_id") == call_args.get("item_id")):
+                    return True
+        return False
+
+    async def graph_actions(state: State):
+        """Carry out explicit reviewer instructions whose arguments are now fully determined. Each one is
+        gated (interrupt quoting the reviewer's sentence), runs via invoke() OUTSIDE the model history (no
+        AIMessage with tool_calls is ever inserted) and leaves a plain-text note."""
+        pend = [dict(i) for i in state.get("instructions", [])]
+        if not pend:
+            return {}
+        pos = check_position(state["messages"], run_claim)
+        ev = [e for e in (state.get("effective_args", {}).get(pos[1], {}).get("evidence_ids") or [])
+              if e not in state.get("ignored_ids", {})] if pos else []
+        hd = trusted_decisions(state, run_claim)
+        args = {"claim_id": run_claim, **({"evidence_ids": ev} if ev else {}), **({"human_decisions": hd} if hd else {})}
+        try:
+            fresh = _jsonish(await invoke("check_claim", args)) or {}
+        except Exception:
+            fresh = {}
+        notes, keep = [], []
+        writes = list(state.get("writes", []))
+        sigs = list(state.get("declined_sigs", []))
+        props = list(state.get("graph_proposals", []))
+        count = state.get("gated_count", 0)
+        for ins in pend:
+            name, call_args = await build_action(ins, fresh, args)
+            if name is None:
+                keep.append(ins)  # not determined yet; try again at the end of a later turn
+                continue
+            if already_proposed({**state, "writes": writes, "declined_sigs": sigs}, name, call_args, ins.get("at", 0)):
+                continue
+            if count >= max_gated:
+                notes.append(f"Not proposed: {name} (limit of {max_gated} approval requests reached).")
+                continue
+            count += 1
+            tcid = f"graph-{name}-{len(props)}"
+            answer = interrupt({"tool": name, "args": call_args, "tool_call_id": tcid, "by": "graph",
+                                "from": ins["quote"], "prompt": f'Proposed by the graph because you asked: "{ins["quote"]}"'})
+            ok = isinstance(answer, dict) and answer.get("approved") is True and answer.get("tool_call_id") == tcid
+            rec = {"tool": name, "args": call_args, "id": tcid, "approved": ok, "from": ins["quote"]}
+            if ok:
+                try:
+                    res = _jsonish(await invoke(name, call_args))
+                    failed = res is not None and "error" in res
+                except Exception as exc:
+                    res, failed = {"error": str(exc)}, True
+                rec["error"] = bool(failed)
+                if failed:
+                    notes.append(f"{name} for {run_claim} failed: {(res or {}).get('error')}")
+                else:
+                    writes.append({"tool": name, "args": call_args, "by": "graph_action"})
+                    notes.append(f'Done: {name} for {run_claim} (you asked: "{ins["quote"]}").')
+            else:
+                reason = (answer.get("reason") if isinstance(answer, dict) else "") or "no reason given"
+                sigs.append(call_signature({"name": name, "args": call_args}))
+                notes.append(f"Not done: {name} for {run_claim}; you declined it ({reason}).")
+            props.append(rec)
+        out = {"instructions": keep, "writes": writes, "declined_sigs": sigs, "graph_proposals": props,
+               "gated_count": count}
+        if notes:
+            out["messages"] = [AIMessage(content=" ".join(notes))]
+        return out
+
     def route(state: State):
         last = state["messages"][-1]
-        return "gate" if isinstance(last, AIMessage) and last.tool_calls else END
+        if isinstance(last, AIMessage) and last.tool_calls:
+            return "gate"
+        return "graph_actions" if run_claim and state.get("instructions") else END
 
     g = StateGraph(State)
     g.add_node("intake", intake)
@@ -652,10 +871,13 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
     g.add_node("gate", gate)
     g.add_node("tools", run_tools)
     g.add_node("auto_draft", auto_draft)
+    g.add_node("graph_actions", graph_actions)
     g.add_edge(START, "intake")
     g.add_edge("intake", "agent")
-    g.add_conditional_edges("agent", route, ["gate", END])
+    g.add_conditional_edges("agent", route, ["gate", "graph_actions", END])
     g.add_edge("gate", "tools")
     g.add_conditional_edges("tools", after_tools, ["auto_draft", "agent"])
-    g.add_edge("auto_draft", END)
+    g.add_conditional_edges("auto_draft", lambda s: "graph_actions" if s.get("instructions") else END,
+                            ["graph_actions", END])
+    g.add_edge("graph_actions", END)
     return g.compile(checkpointer=checkpointer)

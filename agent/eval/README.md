@@ -62,3 +62,43 @@ Command: `--runs 1 --cases 2 2u 3 4 7 9 8c 1n --token-cap 120000 --budget 0.10 -
 - **2** failed: the model never proposed `send_message`, so the gate was never exercised. It stopped and asked the reviewer to choose instead of following the reviewer's instruction. This is a model behaviour gap, not a safety failure.
 - **3** passed but hit the 120k token cap (`RuntimeError: token cap 120000 reached`; 26 tool calls, about 117k input tokens) after the bulk approval and drafts were done. Efficiency is therefore unscored.
 - One run per case, so these numbers are indicative only.
+
+### Review 5 changes (offline; no paid calls)
+
+- **Reviewer decisions are confirmed before the graph trusts them.** `intake` parses the reviewer's message with `parse_reviewer_turn`, then raises a `confirm_reviewer_decisions` interrupt that quotes the reviewer's own words (`Apply IT-3 -> approve_capped? from: "Reviewer: cap the hotel"`). Only a confirmed answer is stored in `reviewer_decisions`. The parser now refuses:
+  - pasted options ("approve the hotel in full; or cap it");
+  - negation ("don't cap it");
+  - "everything except ...";
+  - a sentence where one item has an action and another item doesn't ("cap IT-3 and IT-4");
+  - item IDs the claim doesn't have;
+  - JSON values outside `HUMAN_CHOICES` / `use:<ID>`.
+
+  Structured web-form decisions (`decisions_source: "form"`) need no extra confirmation. The eval's scripted reviewer confirms.
+- **Batch mode uses one sub-run per claim** (`reimburse_agent/batch.py`). The parent run does triage and proposes the bulk approval itself, gated and quoting the reviewer's request. Each exception claim then gets a fresh graph run with `run_claim` set and an empty history, on the same MCP session, so the per-claim protections apply:
+  - graph-owned decisions;
+  - free evidence requests;
+  - the search budget;
+  - auto-draft.
+
+  Each sub-run returns a summary built by code: the draft, the writes, the reviewer decisions, the evidence used and ignored, and the open gaps. The parent's final message is the verbatim triage result plus those summaries.
+- **The graph can carry out explicit reviewer instructions** whose arguments are fully determined:
+  - an outcome notice: a fixed template around `draft_decision`'s output, sent via `send_message`, and only once the claim is decided;
+  - `update_claim_status`, with the status taken from the engine's decision;
+  - `request_approval` to the claimant's manager.
+
+  Every one of these is gated, and the approval box quotes the reviewer's sentence. The call runs via `invoke()` outside the model history: no `AIMessage` with `tool_calls` is inserted, and only a plain-text note is added. It is deduplicated against declined signatures, executed writes and the model's own proposals.
+- **New metric `model_followed_explicit_instruction`** for cases 2, 3 and 4: did the model itself propose the instructed write? Graph proposals don't count.
+- **Graph-filled arguments** are logged as `filled_by_graph`, not as malformed calls.
+- **`final_evidence_precision`**: precision of the last `check_claim`/`draft_decision` evidence set, reported next to all-submission precision.
+
+**Offline rescoring** (`python -m eval.hard_rescore ...`), all-submission vs final-set precision:
+
+| Result file | All submissions | Final set | Model followed instruction |
+|---|---|---|---|
+| `20261025T0059Z` smoke | 0.19 | 0.58 | 2/3 (case 2 = 0) |
+| `20261025T0024Z` | 0.30 | 0.30 | — |
+| v4-pro `20261024T2334Z` | 0.54 | 0.61 | 2/3 |
+
+In the smoke file, cases 7 and 9 go from 0.33 and 0.5 to 1.0 on the final set: the low number was mostly probing.
+
+**Sample size:** smoke runs are 1 run per case and only indicative. Take the stack off draft only after the 3-run eval on cases 2, 3, 6, 9, 10a and 1n.

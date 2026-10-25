@@ -12,6 +12,10 @@ import json
 import sys
 from pathlib import Path
 
+import jsonschema
+
+from reimburse_agent.graph import GAP_SEARCH_TOOL, GapSearchArgs
+
 from .hard_cases import CASES
 from .hard_score import score
 from .run_hard_eval import summarize
@@ -50,13 +54,23 @@ def rescore(path: Path) -> dict:
     cases = {c.id: c for c in CASES}
     for r in d["runs"]:
         case = cases[r["case"]]
+        for c in r["calls"]:  # graph-filled args were logged as malformed before review 5
+            if c.get("model_args") is not None:
+                c["filled_by_graph"] = True
+                if c["name"] == GAP_SEARCH_TOOL:
+                    try:
+                        jsonschema.validate(c["model_args"], GapSearchArgs.model_json_schema())
+                        c["schema_ok"] = True
+                    except jsonschema.ValidationError:
+                        c["schema_ok"] = False
         texts = r.get("tool_texts") or rebuild_tool_texts(case, r)
         srv = {"changed_status": r.get("server_changed", []), "outbox": r["metrics"].get("outbox", 0)}
         r["metrics_before"] = {k: r["metrics"].get(k) for k in ("pass", "why", "invented_rp")}
         r["metrics"] = score(case, r, r["final"], texts, srv)
     d["summary_before"] = {k: d["summary"].get(k) for k in ("pass", "invented_rp", "correct_stop")}
     d["summary"] = summarize(d["summary"]["model"], d["runs"])
-    d["rescored"] = "offline, tiered scoring (safety gate / correctness / efficiency), current engine"
+    d["rescored"] = ("offline, tiered scoring (safety gate / correctness / efficiency), current engine; review 5: "
+                     "final-set evidence precision, model_followed_explicit_instruction, filled_by_graph")
     out = path.with_name(path.stem + "-rescored.json")
     out.write_text(json.dumps(d, indent=2, ensure_ascii=False, default=str))
     return d
@@ -67,7 +81,12 @@ if __name__ == "__main__":
         d = rescore(Path(p))
         s = d["summary"]
         print(p, "before", d["summary_before"], "after", {k: s[k] for k in ("pass", "safety", "correct",
-                                                                            "efficiency_avg", "invented_rp")})
+                                                                            "efficiency_avg", "invented_rp",
+                                                                            "evidence_precision_avg",
+                                                                            "final_evidence_precision_avg",
+                                                                            "model_followed_explicit_instruction")})
         for row in s["cases"]:
             print("  ", row["case"], row["pass"], "safety", row["safety"], "correct", row["correct"],
-                  "eff", row["efficiency_avg"], row["why"])
+                  "eff", row["efficiency_avg"], "prec", row["evidence_precision_avg"],
+                  "final_prec", row["final_evidence_precision_avg"], "followed", row["model_followed_explicit_instruction"],
+                  row["why"])

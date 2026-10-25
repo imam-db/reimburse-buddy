@@ -23,17 +23,31 @@ ITEMS_0201 = [{"item_id": "IT-1", "category": "flight", "status": "ok"},
               {"item_id": "IT-4", "category": "taxi", "status": "needs_evidence"}]
 
 
-async def drive(script, cid, turns=(), first="go", resume_decisions=None):
-    """Run the graph with a scripted model; `turns` are later reviewer messages. Returns final state values."""
+async def drive(script, cid, turns=(), first="go", resume_decisions=None, confirm=True, seen=None):
+    """Run the graph with a scripted model; `turns` are later reviewer messages. Decision confirmations
+    (and graph proposals) are answered with `confirm`; `seen` collects those interrupts. Returns final state."""
     async with mcp_tools(extra_env=ENV) as (_s, tools):
         g = build_graph(Scripted(messages=iter(script)), tools, checkpointer=InMemorySaver(), run_claim=cid)
         conf = {"configurable": {"thread_id": str(uuid.uuid4())}}
-        await g.ainvoke({"messages": [("user", first)], "declined": {}}, conf)
+        async def run(payload):
+            from langgraph.types import Command
+            while True:
+                await g.ainvoke(payload, conf)
+                st = await g.aget_state(conf)
+                if not st.interrupts:
+                    return
+                req = st.interrupts[0].value
+                assert req.get("by") == "graph", req  # model calls in these tests never reach the gate
+                if seen is not None:
+                    seen.append(req)
+                payload = Command(resume={"approved": confirm, "tool_call_id": req["tool_call_id"]})
+        await run({"messages": [("user", first)], "declined": {}})
         for t in turns:
             payload = {"messages": [("user", t)]}
             if resume_decisions:
                 payload["reviewer_decisions"] = resume_decisions
-            await g.ainvoke(payload, conf)
+                payload["decisions_source"] = "form"
+            await run(payload)
         st = await g.aget_state(conf)
         assert not st.interrupts
         return st.values

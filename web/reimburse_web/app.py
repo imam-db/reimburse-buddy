@@ -522,7 +522,7 @@ def investigation_page(rid: str):
     pending_html = ""
     if pend:
         pending_html = f"""<div class="box" id=pending><h2>Pending write: awaiting your approval</h2>
-<p><code>{e(pend['tool'])}</code></p><pre>{e(json.dumps(pend['args'], ensure_ascii=False, indent=2))}</pre>
+<p><code>{e(pend['tool'])}</code></p>{('<p><strong>' + e(pend['prompt']) + '</strong></p>') if pend.get('prompt') else ''}<pre>{e(json.dumps(pend['args'], ensure_ascii=False, indent=2))}</pre>
 {decision_box(pend.get('current_decision'))}
 <p class=note>This call runs only if you click Approve. Read-only lookups, and a plain evidence request to the claim's owner (no amounts), run without asking; every other write or message waits here. Unanswered approvals are declined automatically.</p>
 <form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=approval_id value="{e(pend['approval_id'])}"><input type=hidden name=approved value=true><button>Approve</button></form>
