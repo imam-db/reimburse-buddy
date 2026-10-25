@@ -23,6 +23,7 @@ from langgraph.graph.message import add_messages
 from langgraph.types import interrupt
 
 from .compact import compact as _compact, tool_text
+from .judge import get_judge, review_flags
 from .retrieval import (clean_query, contradiction_hits, find_messages as ranked_find, message_pool,
                         pool_version)
 
@@ -631,6 +632,17 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         # Messages the check was given are excluded: the engine already read them (it applies a meeting
         # update from a message to the event itself), so they cannot be an unseen contradiction.
         hits = [h for h in contradiction_hits(res) if h["id"] not in set(given or [])]
+        judge = get_judge()  # off by default (RB_JUDGE=jev): may only add flags, one message per request
+        if judge.name != "null" and evs:
+            ev = evs[0]
+            ctx = {"meeting": {"title": ev.get("title"), "scheduled_time": f"{ev.get('start')}-{ev.get('end')}"}}
+            for r in res.get("results", []):
+                if r["id"] in {h["id"] for h in hits} or r["id"] in set(given or []):
+                    continue
+                for f in await review_flags(judge, r, "late_checkout", ctx):
+                    if f["question"] in ("meeting_moved", "meeting_cancelled"):
+                        hits.append({"id": r["id"], "similarity": r.get("similarity"), "term": None, "judge": f})
+                        break
         unavailable = "mailbox pool possibly incomplete (a probe hit the 5-result cap)" if res.get("possibly_incomplete") else None
         return {"gap": k, "query": query, "hits": hits, "unavailable": unavailable, "ranker": res.get("ranker"),
                 "flag": bool(hits or unavailable)}
