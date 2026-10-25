@@ -40,6 +40,7 @@ flowchart LR
 | `get_claim(claim_id)` | Claim, trip, items and employee |
 | `get_policy()` | Travel policy: city tiers, hotel caps, per diem, receipt rules |
 | `search_reimburse_mailbox(employee_id, query)` | Search the shared reimburse@ mailbox that employees forward evidence to (boarding passes, receipts, schedule changes). Personal inboxes are never read. |
+| `list_messages(employee_id, offset, limit)` | Opt-in (set `REIMBURSE_ENABLE_LIST_MESSAGES=1`): page through every message an employee has in the reimburse@ mailbox, oldest first, so an agent can see the whole mailbox instead of probing it with searches. Not part of the default 15-tool server. |
 | `approve_cleared_batch(batch_id, claim_ids, reviewer_confirmed)` | (Mock write) Bulk-approve the claims triage cleared, only with explicit reviewer confirmation and the exact cleared list |
 | `get_calendar(employee_id, date_from, date_to)` | Mock calendar |
 | `find_approval_memo(employee_id, city, date)` | Hotel-cap exception memos |

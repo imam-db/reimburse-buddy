@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from mcp.server.fastmcp import FastMCP
 
 from .data_store import DataStore
@@ -47,6 +49,15 @@ def search_reimburse_mailbox(employee_id: str, query: str = "") -> list[dict]:
     sender and attachment names; returns the top 5 as summaries (id, subject, snippet, attachments).
     Pass promising IDs to check_claim; it reports IDs that match no item as no_matching_item."""
     return store.search_reimburse_mailbox(employee_id, query)
+
+
+def list_messages(employee_id: str, offset: int = 0, limit: int = 20) -> dict:
+    """List one employee's reimburse@ mailbox messages, oldest first, with pagination."""
+    return store.list_messages(employee_id, offset, limit)
+
+
+if os.environ.get("REIMBURSE_ENABLE_LIST_MESSAGES") == "1":
+    mcp.tool()(list_messages)
 
 
 @mcp.tool()

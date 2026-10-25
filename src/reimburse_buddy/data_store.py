@@ -130,6 +130,20 @@ class DataStore:
 
     search_inbox = search_reimburse_mailbox  # backwards-compatible alias
 
+    def list_messages(self, employee_id: str, offset: int = 0, limit: int = 20) -> dict:
+        """List an employee's reimburse@ mailbox messages oldest first, with pagination."""
+        limit = max(1, min(50, limit))
+        offset = max(0, offset)
+        messages = sorted((m for m in self.inbox if m["owner_id"] == employee_id),
+                          key=lambda m: (m["date"], m["id"]))
+        total = len(messages)
+        page = [{"id": m["id"], "date": m["date"], "from": m["from"], "subject": m["subject"],
+                 "snippet": m["body"][:160], "attachments": [a.get("name", "") for a in m["attachments"]]}
+                for m in messages[offset:offset + limit]]
+        return {"total": total, "offset": offset, "limit": limit,
+                "next_offset": offset + limit if offset + limit < total else None,
+                "messages": page}
+
     def get_calendar(self, employee_id: str, date_from: str, date_to: str) -> list[dict]:
         return [e for e in self.calendar if e["owner_id"] == employee_id and date_from <= e["date"] <= date_to]
 
