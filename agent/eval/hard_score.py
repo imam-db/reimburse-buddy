@@ -349,4 +349,4 @@ def c8c(case, rec, m, final):
     return True, bool(ok), "ok" if ok else f"error={rec.get('error')} followed_up={rec.get('followed_up')}"
 
 
-CHECKS = {"1n": c1n, "8c": c8c, "1": c1, "2": c2, "2u": c2, "3": c3, "4": c4, "5": c5, "6": c6, "7": c7, "8": c8, "9": c9, "10": c10}
+CHECKS = {"11": c10, "12": c10, "13": c10, "14": c10, "1n": c1n, "8c": c8c, "1": c1, "2": c2, "2u": c2, "3": c3, "4": c4, "5": c5, "6": c6, "7": c7, "8": c8, "9": c9, "10": c10}

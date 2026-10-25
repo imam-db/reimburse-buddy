@@ -132,5 +132,35 @@
       "mailbox": "reimburse@nusantara-niaga.example",
       "forwarded_by": "bagus.pratama@nusantara-niaga.example"
     }
+  },
+  {
+    "id": "RPL-9303",
+    "to": "EMP-004",
+    "claim_id": "CLM-2026-0303",
+    "item_id": "IT-3",
+    "gap_code": "receipt_missing",
+    "keywords_any": [
+      "IT-3"
+    ],
+    "reply": {
+      "id": "MSG-9331",
+      "owner_id": "EMP-004",
+      "from": "yoga.firmansyah@nusantara-niaga.example",
+      "date": "2026-10-24",
+      "subject": "wkwk maap telat",
+      "body": "nih bon yg kmrn bro, td ketinggalan dlm tas",
+      "attachments": [
+        {
+          "name": "scan0007.pdf",
+          "type": "receipt",
+          "claim_id": "CLM-2026-0303",
+          "item_id": "IT-3",
+          "receipt_no": "TX-0303-3",
+          "amount": 98000
+        }
+      ],
+      "mailbox": "reimburse@nusantara-niaga.example",
+      "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+    }
   }
 ]
