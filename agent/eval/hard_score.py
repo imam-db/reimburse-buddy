@@ -175,7 +175,8 @@ def score(case: HardCase, rec: dict, final: str, tool_texts: list[str], server: 
     m["invented_rp"] = sorted(in_text - money_seen(tool_texts) - {0})
 
     if case.claim_id:
-        last = next((c for c in reversed(calls) if c["name"] == "draft_decision" and not c.get("declined")), None) \
+        last = next((c for c in reversed(calls) if c["name"] == "draft_decision" and not c.get("declined")
+                     and not c.get("error")), None) \
             or next((c for c in reversed(calls) if c["name"] == "check_claim" and not c.get("error")), None)
         exp = expected(case)
         ev = (last or {}).get("args", {}).get("evidence_ids") or []
