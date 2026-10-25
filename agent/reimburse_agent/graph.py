@@ -124,10 +124,16 @@ class State(TypedDict, total=False):
     search_cache: dict[str, str]  # normalised mailbox query -> result, until an employee message goes out
     gap_attempts: dict[str, dict[str, int]]  # "item:gap" -> {"search"|"request": message index of the attempt}
     auto_drafted: list[str]  # check_claim tool_call_ids already turned into a draft by the graph
+    auto_drafts: list[dict]  # {"args", "content", "open_gaps"} for each graph-made draft (for logs / eval)
+    searches_since_request: int  # mailbox searches since the last message to the employee
+    asked_employee: bool  # any message to the employee went out this run
 
 
 SEARCH_TOOL = "search_reimburse_mailbox"
 EMPLOYEE_MESSAGE_TOOLS = frozenset({EVIDENCE_TOOL, "send_message"})
+SEARCHES_PER_GAP = 2  # per open gap before asking the employee; 1 more per gap after the ask (SKILL.md: 3 in all)
+SEARCH_LIMIT = ("search limit: {n} mailbox searches since the last request for {g} open gap(s). Ask the employee "
+                "with request_missing_evidence (one more search is fine after that), or draft the decision.")
 ALREADY_SEARCHED = ("already searched: an equivalent query ran earlier in this run and no message has gone to "
                     "the employee since, so the mailbox is unchanged. Do not repeat it.")
 
@@ -211,6 +217,8 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         cache = dict(state.get("search_cache", {}))
         attempts = {k: dict(v) for k, v in state.get("gap_attempts", {}).items()}
         here = len(state["messages"])
+        searches = state.get("searches_since_request", 0)
+        asked = state.get("asked_employee", False)
         gaps_now = open_gaps(latest_check(state["messages"], run_claim)) if run_claim else []
         for call in last.tool_calls:
             name, args = call["name"], call.get("args", {})
@@ -224,6 +232,9 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                     attempts.setdefault(k, {})["request"] = here
             if call["id"] in state.get("declined", {}):
                 content = json.dumps({"error": "reviewer_declined", "reason": state["declined"][call["id"]]})
+            elif name == SEARCH_TOOL and run_claim and gaps_now and searches >= (1 if asked else SEARCHES_PER_GAP) * len(gaps_now) \
+                    and search_key(args) not in cache:
+                content = json.dumps({"note": SEARCH_LIMIT.format(n=searches, g=len(gaps_now))})
             elif name == SEARCH_TOOL and name in by_name and search_key(args) in cache:
                 content = json.dumps({"note": ALREADY_SEARCHED, "results": json.loads(cache[search_key(args)])},
                                      ensure_ascii=False)
@@ -237,13 +248,16 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                     else:
                         content = res if isinstance(res, str) else json.dumps(res, default=str, ensure_ascii=False)
                     if name == SEARCH_TOOL:
+                        searches += 1
                         cache[search_key(args)] = json.dumps(_as_json(content), ensure_ascii=False)
                     elif name in EMPLOYEE_MESSAGE_TOOLS:
                         cache = {}  # a reply may land in the mailbox now
+                        searches, asked = 0, True
                 except Exception as exc:  # surface tool errors to the model, don't crash the run
                     content = json.dumps({"error": str(exc)})
             out.append(ToolMessage(content=content, tool_call_id=call["id"], name=call["name"]))
-        return {"messages": out, "declined": {}, "search_cache": cache, "gap_attempts": attempts}
+        return {"messages": out, "declined": {}, "search_cache": cache, "gap_attempts": attempts,
+                "searches_since_request": searches, "asked_employee": asked}
 
     def after_tools(state: State):
         """Straight to a draft once the latest check is clean, or once every open gap was searched for and
@@ -264,23 +278,28 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         return "auto_draft" if not gaps or exhausted else "agent"
 
     async def auto_draft(state: State):
+        """Draft with the latest check's arguments and END the turn with a deterministic closing message.
+
+        No synthetic tool-call message is inserted and no model call follows, so the history the provider
+        sees only ever contains assistant messages the model produced itself (plus this final text-only one).
+        Providers that require per-message fields on tool-call turns (e.g. DeepSeek thinking mode's
+        reasoning_content) therefore never see a message they didn't generate."""
         n, check_id, data = check_position(state["messages"], run_claim)
         call_args = next((c["args"] for m in state["messages"] if isinstance(m, AIMessage)
                           for c in m.tool_calls if c["id"] == check_id), {"claim_id": run_claim})
         args = {k: v for k, v in call_args.items() if k in ("claim_id", "evidence_ids", "human_decisions")}
-        cid = f"auto-draft-{check_id}"
         try:
             res = await by_name["draft_decision"].ainvoke(args)
-            content = _compact(tool_text(res)) if compact else (res if isinstance(res, str) else json.dumps(res, default=str))
+            draft = tool_text(res) if not isinstance(res, str) else res
         except Exception as exc:
-            content = json.dumps({"error": str(exc)})
+            draft = json.dumps({"error": str(exc)})
         gaps = open_gaps(data)
-        if gaps:
-            content = json.dumps({"note": "every open gap was searched for and requested; drafting with these items "
-                                          "still open: " + ", ".join(gaps), "draft": content}, ensure_ascii=False)
-        msgs = [AIMessage(content="", tool_calls=[{"name": "draft_decision", "args": args, "id": cid, "type": "tool_call"}]),
-                ToolMessage(content=content, tool_call_id=cid, name="draft_decision")]
-        return {"messages": msgs, "auto_drafted": [*state.get("auto_drafted", []), check_id]}
+        head = (f"Every open gap was searched for and requested; drafted with these items still open: {', '.join(gaps)}."
+                if gaps else "check_claim shows no open gaps, so the decision note was drafted.")
+        closing = AIMessage(content=f"{head}\n\n{draft}\n\nNo writes were made. Tell me if you want any change.")
+        rec = {"args": args, "content": draft, "open_gaps": gaps, "check_id": check_id}
+        return {"messages": [closing], "auto_drafted": [*state.get("auto_drafted", []), check_id],
+                "auto_drafts": [*state.get("auto_drafts", []), rec]}
 
     def route(state: State):
         last = state["messages"][-1]
@@ -295,5 +314,5 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
     g.add_conditional_edges("agent", route, ["gate", END])
     g.add_edge("gate", "tools")
     g.add_conditional_edges("tools", after_tools, ["auto_draft", "agent"])
-    g.add_edge("auto_draft", "agent")
+    g.add_edge("auto_draft", END)
     return g.compile(checkpointer=checkpointer)
