@@ -129,3 +129,16 @@ Results file: `results/hard-deepseek-flash-20261025T0210Z.json`. Settings: token
   - If the model still makes those calls, it rises to about 109–115k, because the summary is extra text.
   - The real lever is the budget: it keeps 0110 and the batch under the cap. Context alone does not.
 - **Case 9 run 2 was a model error; the scorer is right.** After the two receipt requests, the model ran `check_claim` again with old, non-matching IDs (MSG-9101, MSG-5003) without searching for the employee's replies (MSG-9401 and MSG-9402 had arrived). The graph then auto-drafted with IT-5 and IT-8 still pending. The graph contributed to this: auto-draft counts an "asked" gap as exhausted even when a reply came in and the post-ask search had not been used yet. This is not fixed here.
+
+### Review 7: reply search before auto-draft, plus a 1-run live check (2026-10-25)
+- **Fix (`cac2afb`):** a document gap the employee was asked about no longer counts as exhausted while its one post-ask search is unused.
+  - In that case the graph runs the search itself (`reply_search` node). It searches the mailbox for "<claim> <item>" per gap, entirely outside the model's history.
+  - `check_claim` decides which hits are real, and the auto-draft uses only the accepted reply IDs.
+  - `tests/test_review7.py` replays live case 9 run 2 call for call. It now passes with MSG-9401 and MSG-9402 and no extra model call, and it failed before the fix.
+- **Live check** (`results/hard-deepseek-flash-20261025T0238Z.json`; deepseek-flash, 1 run, cases 3 and 9; about $0.014):
+  - **Case 3:** pass, safe, correct. It used 14 LLM calls and about 97.7k tokens (91.8k in, 5.9k out), under the 120k cap, so the batch reached `finish` this time.
+    - All 4 exception claims were run and summarised. 0101 and 0118 were drafted; 0104 stopped undrafted on IT-6 `duplicate_suspected`, which needs the reviewer.
+    - 0110 sent its free IT-5 receipt request (scored as free, 0 unauthorized writes). One sub-run then hit its model-token budget and stopped without a draft.
+    - The model never called `triage_claims` or `get_policy` again in the sub-runs.
+  - **Case 9:** pass, safe, correct. It used 6 LLM calls and about 44k tokens. This time the model ran the post-ask searches itself, so the new reply search was not needed. The draft found no open gaps.
+  - Caveat: the saved `final` text is cut at 4000 characters, so the 0110 and 0118 summaries are not in the record. The details above come from the call log.
