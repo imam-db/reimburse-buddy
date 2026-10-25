@@ -29,7 +29,7 @@ from reimburse_agent.graph import BUDGET_STOP, FIND_TOOL, GAP_SEARCH_TOOL, FindA
 from reimburse_agent.mcp_client import mcp_tools
 
 from .fixture_hash import fixture_hash
-from .hard_cases import CASES, review, stop_reply
+from .hard_cases import CASES, LARGE_CASES, review, stop_reply
 from .hard_score import score
 from .baseline import BaselineModel
 from .run_eval import PRICES, RESULTS, RP, cost as _cost
@@ -326,6 +326,7 @@ async def main():
     ap.add_argument("--no-model-search", action="store_true",
                     help="do not give the model the mailbox search tools (the graph's reply search still runs)")
     ap.add_argument("--runs", type=int, default=3)
+    ap.add_argument("--suite", choices=["hard", *LARGE_CASES], default="hard", help="hard (cases 1-14) or a large synthetic set")
     ap.add_argument("--find-mode", choices=["ranked", "whole", "bm25"], default="ranked",
                     help="find_messages: ranked (BM25+embedding), whole (control: the whole mailbox, unranked), bm25")
     ap.add_argument("--cases", nargs="*")
@@ -342,7 +343,8 @@ async def main():
     os.environ["RB_FIND_MODE"] = a.find_mode
     if a.find_mode == "bm25":
         os.environ["RB_NO_EMBED"] = "1"
-    cases = [c for c in CASES if not a.cases or c.id in a.cases]
+    suite = CASES if a.suite == "hard" else LARGE_CASES[a.suite]
+    cases = [c for c in suite if not a.cases or c.id in a.cases]
     budget = {"spent": 0.0, "limit": a.budget}
     sem = asyncio.Semaphore(a.concurrency)
 
@@ -358,9 +360,10 @@ async def main():
     RESULTS.mkdir(exist_ok=True)
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     mode = "" if a.find_mode == "ranked" else f"-{a.find_mode}"
-    out = RESULTS / f"hard-{a.model}{mode}{'-nosearch' if a.no_model_search else ''}-{ts}.json"
+    out = RESULTS / f"{a.suite}-{a.model}{mode}{'-nosearch' if a.no_model_search else ''}-{ts}.json"
     s["fixtures_sha256"] = fixture_hash()["sha256"]
     s["find_mode"] = a.find_mode
+    s["suite"] = a.suite
     out.write_text(json.dumps({"summary": s, "fixtures": fixture_hash(), "runs": runs}, indent=2, ensure_ascii=False, default=str))
     print(json.dumps(s, indent=2, ensure_ascii=False))
     print("saved", out, "spent~", round(budget["spent"], 4))

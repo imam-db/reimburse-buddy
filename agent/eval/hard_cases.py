@@ -218,3 +218,22 @@ def stop_reply(case: HardCase, rec: dict) -> str | None:
     if case.human_decisions and not decided:
         return f"{case.reviewer_says} Then finish with draft_decision."
     return "Reviewer: I have no extra decision. Use the tools and evidence, then finish with draft_decision."
+
+
+# Claude review 8, step 4b: larger frozen synthetic mailboxes (eval/large_fixtures.py). Set A tunes, set B reports.
+def _large_cases(data: Path, tag: str) -> list[HardCase]:
+    import json
+    truth = json.loads((data / "truth.json").read_text())
+    out = []
+    for fam, t in truth.items():
+        good = [x for x in (t["event"], t["needed"]) if x]
+        if fam == "reschedule_earlier":
+            out.append(HardCase(f"{tag}-{fam}", f"large set {tag}: {fam}", t["claim_id"], data, _p(t["claim_id"]), good, [],
+                                {"IT-4": "reject"}, reviewer="decide_if_asked", reviewer_says="Reviewer: reject the late checkout."))
+        else:
+            out.append(HardCase(f"{tag}-{fam}", f"large set {tag}: {fam}", t["claim_id"], data, _p(t["claim_id"]), good))
+    return out
+
+
+LARGE_CASES = {"large_a": _large_cases(Path(__file__).parent / "fixtures" / "large_a", "A"),
+               "large_b": _large_cases(Path(__file__).parent / "fixtures" / "large_b", "B")}

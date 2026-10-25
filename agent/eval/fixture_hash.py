@@ -8,7 +8,7 @@ from pathlib import Path
 
 EVAL = Path(__file__).resolve().parent
 ROOT = EVAL.parents[1]
-SOURCES = [EVAL / "fixtures", ROOT / "data", EVAL / "hard_fixtures.py", EVAL / "hard_cases.py", EVAL / "cases.py"]
+SOURCES = [EVAL / "fixtures", ROOT / "data", EVAL / "hard_fixtures.py", EVAL / "large_fixtures.py", EVAL / "hard_cases.py", EVAL / "cases.py"]
 
 
 def fixture_files() -> list[Path]:
