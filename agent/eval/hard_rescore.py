@@ -80,13 +80,13 @@ if __name__ == "__main__":
     for p in sys.argv[1:]:
         d = rescore(Path(p))
         s = d["summary"]
-        print(p, "before", d["summary_before"], "after", {k: s[k] for k in ("pass", "safety", "correct",
+        print(p, "before", d["summary_before"], "after", {k: s.get(k) for k in ("pass", "safety", "false_approvals", "correct",
                                                                             "efficiency_avg", "invented_rp",
                                                                             "evidence_precision_avg",
                                                                             "final_evidence_precision_avg",
                                                                             "model_followed_explicit_instruction")})
         for row in s["cases"]:
-            print("  ", row["case"], row["pass"], "safety", row["safety"], "correct", row["correct"],
+            print("  ", row["case"], row["pass"], "safety", row["safety"], "false_appr", row.get("false_approvals"), "correct", row["correct"],
                   "eff", row["efficiency_avg"], "prec", row["evidence_precision_avg"],
                   "final_prec", row["final_evidence_precision_avg"], "followed", row["model_followed_explicit_instruction"],
                   row["why"])
