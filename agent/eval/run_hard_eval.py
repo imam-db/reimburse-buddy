@@ -25,7 +25,7 @@ from langgraph.types import Command
 
 from reimburse_agent.compact import tool_text
 from reimburse_agent.batch import build_batch_graph
-from reimburse_agent.graph import GAP_SEARCH_TOOL, GapSearchArgs, build_graph
+from reimburse_agent.graph import BUDGET_STOP, GAP_SEARCH_TOOL, GapSearchArgs, build_graph
 from reimburse_agent.mcp_client import mcp_tools
 
 from .hard_cases import CASES, review, stop_reply
@@ -139,6 +139,9 @@ async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP, model=
                                 rec["drafted_since_human"] = True
                             continue
                         for m in (upd or {}).get("messages", []):
+                            if m.type == "ai" and node == "agent" and m.name == BUDGET_STOP:
+                                rec["budget_stops"] = rec.get("budget_stops", 0) + 1  # graph text, no LLM call
+                                continue
                             if m.type == "ai" and node == "agent":
                                 if node == "agent" and not m.tool_calls and "?" in str(m.content):
                                     rec["questions"] += 1
@@ -208,6 +211,9 @@ async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP, model=
         rec["calls"].append({"id": f"graph-write-{i}", "name": w["tool"], "args": w["args"], "schema_ok": True,
                              "turn": -1, "auto": True, "declined": False, "error": False, "ok": True})
     rec["reviewer_decisions"] = vals.get("reviewer_decisions", {})
+    # [claim, item, gap] evidence requests the graph's gate let through as free (free_evidence_request);
+    # the scorer exempts exactly these, in single-claim runs and in batch sub-runs alike.
+    rec["free_evidence"] = [list(x) for x in vals.get("free_evidence", [])]
     rec["unparsed_reviewer"] = vals.get("unparsed_reviewer", [])
     rec["model_decisions_refused"] = sum("human_decisions_not_from_reviewer" in t for t in tool_texts)
     rec["server_changed"] = server["changed_status"]
