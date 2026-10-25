@@ -12,7 +12,7 @@ dependencies = [
 
 [project.optional-dependencies]
 embed = [
-    "fastembed>=0.9.1",
+    "fastembed==0.9.1",
 ]
 
 [dependency-groups]
