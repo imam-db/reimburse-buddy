@@ -28,6 +28,30 @@ from .graph import (MAX_GATED_CALLS, _compact, _jsonish, build_graph, call_signa
 SUBRUN_TOKEN_BUDGET = 35000
 BATCH_TOKEN_BUDGET = 105000
 APPROVE_WORDS = re.compile(r"\b(approve|approval|setujui)\b", re.I)
+# Fixed, smaller tool set for every sub-run: the parent already ran triage and policy and owns the bulk
+# approval, and a claim run never needs to list claims. Static per build, so the bound list never changes.
+SUBRUN_DROP = frozenset({"triage_claims", "get_policy", "list_claims", "approve_cleared_batch"})
+CLAIM_ID = re.compile(r"\bCLM-\d{4}-\d{4}\b")
+RP = re.compile(r"Rp\s?(\d[\d.,]*\d|\d)")
+
+
+def rp_figures(text: str) -> set[int]:
+    out = set()
+    for x in RP.findall(text or ""):
+        digits = re.sub(r"[.,]", "", x)
+        if digits.isdigit():
+            out.add(int(digits))
+    return out
+
+
+def fair_share(remaining: int, queue: list[str], triage_text: str, cap: int | None) -> int:
+    """This claim's slice of what is left of the batch budget: remaining split over the claims still queued,
+    weighted by 1 + the number of open gaps triage reported for each, never above cap."""
+    data = _jsonish(triage_text) or {}
+    gaps = {r.get("claim_id"): len(r.get("gaps") or []) for r in data.get("exceptions") or []}
+    w = [1 + gaps.get(c, 0) for c in queue] or [1]
+    share = remaining * w[0] // sum(w)
+    return min(cap, share) if cap is not None else share
 
 
 def _merge(a, b):
@@ -48,6 +72,9 @@ class BatchState(TypedDict, total=False):
     gated_count: int
     graph_proposals: list[dict]
     effective_args: Annotated[dict[str, dict], _merge]
+    rp_unsupported: list[int]
+    threads: Annotated[dict[str, dict], _merge]  # claim -> {"thread_id", "state"}: each sub-run's own state, kept
+    # in the parent checkpoint so a later reviewer reply naming that claim continues that sub-run
 
 
 def claim_summary(cid: str, v: dict) -> dict:
@@ -60,13 +87,11 @@ def claim_summary(cid: str, v: dict) -> dict:
     pos = check_position(msgs, cid)
     eff = v.get("effective_args", {})
     used = list(eff.get(pos[1], {}).get("evidence_ids") or []) if pos else []
-    last_ai = next((str(m.content) for m in reversed(msgs) if getattr(m, "type", "") == "ai" and not m.tool_calls), "")
     return {"claim_id": cid, "draft": draft, "writes": list(v.get("writes", [])),
             "writes_text": describe_writes(v.get("writes", [])),
             "reviewer_decisions": dict(v.get("reviewer_decisions", {})),
             "evidence_used": used, "evidence_ignored": dict(v.get("ignored_ids", {})),
-            "open_gaps": open_gaps(pos[2]) if pos else None,
-            "stopped_with": None if draft else last_ai[:1500]}
+            "open_gaps": open_gaps(pos[2]) if pos else None}
 
 
 def summary_text(s: dict) -> str:
@@ -79,7 +104,7 @@ def summary_text(s: dict) -> str:
     if s["evidence_ignored"]:
         parts.append("Evidence ignored: " + ", ".join(f"{k} ({r})" for k, r in s["evidence_ignored"].items()))
     parts.append(s["writes_text"])
-    parts.append(s["draft"] if s["draft"] else f"No draft yet. The claim run stopped with: {s['stopped_with']}")
+    parts.append(s["draft"] if s["draft"] else "No draft: the claim run stopped before a draft (needs human).")
     return "\n".join(parts)
 
 
@@ -142,44 +167,81 @@ def build_batch_graph(model, tools, batch_id: str, system_prompt: str | None = N
         return {"writes": writes, "gated_count": state.get("gated_count", 0) + 1,
                 "graph_proposals": [*state.get("graph_proposals", []), rec]}
 
+    sub_tools = [t for t in tools if t.name not in SUBRUN_DROP] if slim else tools
+
+    def budget_for(state: BatchState, queue: list[str]) -> int | None:
+        spent = state.get("tokens_used", 0)
+        if batch_token_budget is None:
+            return subrun_token_budget
+        return fair_share(max(0, batch_token_budget - spent), queue, state.get("triage_text", ""), subrun_token_budget)
+
+    def merged(state: BatchState, cid: str, v: dict, before: dict | None = None) -> dict:
+        """Parent update from a finished sub-run state v. before: the claim's previous sub-run state (a
+        reviewer reply continues it), so only what is new in v is added to the batch totals."""
+        before = before or {}
+        s = claim_summary(cid, v)
+        new_writes = s["writes"][len(before.get("writes", [])):]
+        new_free = v.get("free_evidence", [])[len(before.get("free_evidence", [])):]
+        summaries = [x for x in state.get("summaries", []) if x["claim_id"] != cid] + [s]
+        return {"summaries": summaries, "writes": [*state.get("writes", []), *new_writes],
+                "gated_count": state.get("gated_count", 0) + v.get("gated_count", 0) - before.get("gated_count", 0),
+                "free_evidence": [*state.get("free_evidence", []), *new_free],
+                "tokens_used": state.get("tokens_used", 0) + v.get("tokens_used", 0) - before.get("tokens_used", 0),
+                "effective_args": v.get("effective_args", {}),
+                "threads": {cid: {"thread_id": f"claim:{cid}", "state": v}}}
+
     async def claim_run(state: BatchState):
-        """One exception claim: a fresh graph run (empty history, run_claim set). The sub-graph has no
-        checkpointer of its own, so it is scoped to this call and its interrupts surface in the parent."""
+        """One exception claim: a fresh graph run (empty history, run_claim set) on its own per-claim state
+        slot. Nothing before sub.ainvoke has a side effect: on resume after an interrupt this node re-runs
+        from the top and the sub-run resumes from its checkpoint under the parent's checkpointer."""
         cid = state["queue"][0]
         left = max(0, max_gated - state.get("gated_count", 0))
-        spent = state.get("tokens_used", 0)
-        caps = [b for b in (subrun_token_budget, None if batch_token_budget is None else max(0, batch_token_budget - spent))
-                if b is not None]
-        budget = min(caps) if caps else None
-        served = None if not slim else {"triage_claims": ({"batch": batch_id}, state.get("triage_text", ""))}
-        if slim and state.get("policy_text"):
-            served["get_policy"] = ({}, state["policy_text"])
-        sub = build_graph(model, tools, system_prompt=system_prompt, compact=compact, max_gated=left, run_claim=cid,
-                          served=served, token_budget=budget)
+        sub = build_graph(model, sub_tools, system_prompt=system_prompt, compact=compact, max_gated=left,
+                          run_claim=cid, served=None, token_budget=budget_for(state, state["queue"]))
         first = next((m for m in state["messages"] if isinstance(m, HumanMessage)), None)
-        # Triage and policy are already known: hand them in so the model need not call for them again
-        # (if it does, the sub-run serves the held text; the tool list is unchanged).
+        # Triage and policy are already known: hand them in (the sub-run's tool set has no triage/policy tools).
         prompt = (f"Review claim {cid} and draft the decision note. It is an exception in batch {batch_id} "
                   f"(the reviewer's request: \"{first.content if first else ''}\")."
-                  + (f"\n\nTriage row for {cid} (already run, do not call triage_claims again):\n{triage_row(state.get('triage_text', ''), cid)}"
+                  + (f"\n\nTriage row for {cid} (already run by the batch):\n{triage_row(state.get('triage_text', ''), cid)}"
                      if slim else "")
-                  + (f"\n\nPolicy summary (already loaded, do not call get_policy again):\n{policy_summary(state['policy_text'])}"
+                  + (f"\n\nPolicy summary (already loaded by the batch):\n{policy_summary(state['policy_text'])}"
                      if slim and state.get("policy_text") else ""))
         v = await sub.ainvoke({"messages": [HumanMessage(prompt)], "declined": {}})
-        s = claim_summary(cid, v)
-        return {"queue": state["queue"][1:], "summaries": [*state.get("summaries", []), s],
-                "writes": [*state.get("writes", []), *s["writes"]],
-                "gated_count": state.get("gated_count", 0) + v.get("gated_count", 0),
-                "free_evidence": [*state.get("free_evidence", []), *v.get("free_evidence", [])],
-                "tokens_used": spent + v.get("tokens_used", 0),
-                "effective_args": v.get("effective_args", {})}
+        return {"queue": state["queue"][1:], **merged(state, cid, v)}
+
+    def reply_target(state: BatchState) -> str | None:
+        """The one sub-run claim a later reviewer message names, if exactly one."""
+        last = state["messages"][-1] if state.get("messages") else None
+        if not isinstance(last, HumanMessage) or len([m for m in state["messages"] if isinstance(m, HumanMessage)]) < 2:
+            return None
+        named = set(CLAIM_ID.findall(str(last.content))) & set(state.get("threads", {}))
+        return named.pop() if len(named) == 1 else None
+
+    async def claim_reply(state: BatchState):
+        """Route a reviewer reply that names one claim to that claim's sub-run, continuing its own state."""
+        cid = reply_target(state)
+        prev = state["threads"][cid]["state"]
+        left = max(0, max_gated - state.get("gated_count", 0))
+        budget = budget_for(state, [cid])
+        sub = build_graph(model, sub_tools, system_prompt=system_prompt, compact=compact, max_gated=left + prev.get("gated_count", 0),
+                          run_claim=cid, served=None,
+                          token_budget=None if budget is None else prev.get("tokens_used", 0) + budget)
+        v = await sub.ainvoke({**prev, "messages": [*prev.get("messages", []), state["messages"][-1]]})
+        out = merged(state, cid, v, before=prev)
+        s = next(x for x in out["summaries"] if x["claim_id"] == cid)
+        text = summary_text(s)
+        tail = next((str(m.content) for m in reversed(v.get("messages", [])) if isinstance(m, AIMessage) and not m.tool_calls), "")
+        if tail and tail not in text:
+            text = f"{tail}\n\n{text}"
+        return {**out, "messages": [AIMessage(content=text)]}
 
     def finish(state: BatchState):
         if state["messages"] and isinstance(state["messages"][-1], AIMessage):
             return {}
         if len([m for m in state["messages"] if isinstance(m, HumanMessage)]) > 1:
-            return {"messages": [AIMessage(content=f"Batch {batch_id} is already processed in this run; "
-                                                    "start a claim run to continue on one claim.")]}
+            ids = ", ".join(state.get("threads", {})) or "none"
+            return {"messages": [AIMessage(content=f"Batch {batch_id} is already processed in this run. Name one "
+                                                    f"claim to continue its review (claim runs: {ids}).")]}
         props = state.get("graph_proposals", [])
         bulk = next((p for p in props if p["tool"] == "approve_cleared_batch"), None)
         head = ("Bulk approval: not proposed." if bulk is None else
@@ -188,7 +250,15 @@ def build_batch_graph(model, tools, batch_id: str, system_prompt: str | None = N
                    "failed." if bulk["approved"] else f"declined ({bulk.get('reason')})."))
         body = [f"## Batch {batch_id}", "Triage (verbatim):", state.get("triage_text", ""), head,
                 *(summary_text(s) for s in state.get("summaries", [])), describe_writes(state.get("writes", []))]
-        return {"messages": [AIMessage(content="\n\n".join(body))]}
+        text = "\n\n".join(body)
+        # Invented-Rp guard on the code-built text: every figure must come from triage, policy or an engine draft.
+        known = rp_figures(state.get("triage_text", "")) | rp_figures(state.get("policy_text", ""))
+        for x in state.get("summaries", []):
+            known |= rp_figures(x.get("draft") or "")
+        bad = sorted(rp_figures(text) - known)
+        if bad:
+            text += f"\n\nWarning: amounts not found in any engine output: {bad}. Check before using this summary."
+        return {"messages": [AIMessage(content=text)], "rp_unsupported": bad}
 
     def next_step(state: BatchState):
         return "claim_run" if state.get("queue") else "finish"
@@ -199,8 +269,10 @@ def build_batch_graph(model, tools, batch_id: str, system_prompt: str | None = N
     g.add_node("claim_run", claim_run)
     g.add_node("finish", finish)
     g.add_edge(START, "triage")
-    g.add_conditional_edges("triage", lambda s: "finish" if len(
-        [m for m in s["messages"] if isinstance(m, HumanMessage)]) > 1 else "approve", ["approve", "finish"])
+    g.add_node("claim_reply", claim_reply)
+    g.add_conditional_edges("triage", lambda s: ("claim_reply" if reply_target(s) else "finish") if len(
+        [m for m in s["messages"] if isinstance(m, HumanMessage)]) > 1 else "approve", ["approve", "finish", "claim_reply"])
+    g.add_edge("claim_reply", END)
     g.add_conditional_edges("approve", next_step, ["claim_run", "finish"])
     g.add_conditional_edges("claim_run", next_step, ["claim_run", "finish"])
     g.add_edge("finish", END)

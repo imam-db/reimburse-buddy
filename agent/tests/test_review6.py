@@ -128,8 +128,10 @@ async def test_token_budget_stops_with_plain_text_and_the_runner_does_not_count_
         conf = {"configurable": {"thread_id": str(uuid.uuid4())}, "recursion_limit": 80}
         v = await g.ainvoke({"messages": [("user", f"Review {cid}")], "declined": {}}, conf)
     ai = [m for m in v["messages"] if m.type == "ai"]
-    assert ai[-1].name == BUDGET_STOP and not ai[-1].tool_calls and "model budget" in ai[-1].content
-    assert len(ai) < 20 and v["tokens_used"] >= 3000
+    # review 6 (Claude): the graph's stop text is followed by an engine draft, not left undrafted
+    assert ai[-2].name == BUDGET_STOP and not ai[-2].tool_calls and "model budget" in ai[-2].content
+    assert ai[-1].content.startswith("needs human: model budget used; open gaps: IT-1:boarding_pass_missing")
+    assert v["auto_drafts"][-1]["budget"] and len(ai) < 20 and v["tokens_used"] >= 3000
 
 
 async def test_batch_budget_still_finishes_with_every_claim_summarised():

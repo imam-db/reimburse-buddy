@@ -10,6 +10,7 @@ decision, so the reviewer must answer before it runs. Resume with
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Annotated, Any, TypedDict
@@ -419,13 +420,39 @@ def describe_writes(writes: list[dict]) -> str:
     return "Writes made in this run: " + "; ".join(parts) + "."
 
 
-def message_tokens(m) -> int:
-    """Provider-reported input+output tokens of one model reply; 0 when the provider gave none."""
-    um = getattr(m, "usage_metadata", None) or {}
-    if um.get("total_tokens"):
-        return int(um["total_tokens"])
+log = logging.getLogger("reimburse_agent")
+
+
+def message_usage(m) -> dict:
+    """Provider-reported tokens of one model reply: input, cache_hit (DeepSeek prompt_cache_hit_tokens, or the
+    OpenAI-style cached/cache_read count) and output. All 0 when the provider gave none."""
     tu = (getattr(m, "response_metadata", None) or {}).get("token_usage") or {}
-    return int((tu.get("prompt_tokens") or 0) + (tu.get("completion_tokens") or 0))
+    um = getattr(m, "usage_metadata", None) or {}
+    inp = int(tu.get("prompt_tokens") or um.get("input_tokens") or 0)
+    out = int(tu.get("completion_tokens") or um.get("output_tokens") or 0)
+    hit = int(tu.get("prompt_cache_hit_tokens") or (tu.get("prompt_tokens_details") or {}).get("cached_tokens")
+              or (um.get("input_token_details") or {}).get("cache_read") or 0)
+    return {"input": inp, "cache_hit": min(hit, inp), "output": out}
+
+
+def message_tokens(m) -> int:
+    """Budgeted tokens of one model reply: cache-MISS input plus output (cache hits are ~10x cheaper on
+    DeepSeek, so they do not count against a run's budget). 0 when the provider gave no usage."""
+    u = message_usage(m)
+    return u["input"] - u["cache_hit"] + u["output"]
+
+
+def token_split(system_text: str, tools, served: dict | None) -> dict:
+    """Rough (chars/4) size of what every model call carries: SKILL.md, the version B addendum, the bound
+    tool schemas, and any served text. Logged once per build_graph."""
+    schemas = []
+    for t in tools:
+        sch = t.args_schema if isinstance(t.args_schema, dict) else t.args_schema.model_json_schema()
+        schemas.append({"name": t.name, "description": t.description, "parameters": sch})
+    add = PROMPT_ADDENDUM if system_text.endswith(PROMPT_ADDENDUM) else ""
+    return {"skill_md": (len(system_text) - len(add)) // 4, "addendum": len(add) // 4,
+            "tool_schemas": len(json.dumps(schemas, default=str)) // 4, "tools": len(schemas),
+            "served_text": sum(len(v[1]) for v in (served or {}).values()) // 4}
 
 
 def estimate_tokens(msgs) -> int:
@@ -455,6 +482,8 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         tools = [*tools, gap_search_tool()]  # bound once for the whole run: the tool list never changes
         by_name[GAP_SEARCH_TOOL] = tools[-1]
     bound = model.bind_tools(tools)
+    split = token_split(system.content, tools, served)
+    log.info("token split (est. tokens per call): %s", split)
 
     async def invoke(name: str, args: dict) -> str:
         if served and name in served:
@@ -517,8 +546,7 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         used = state.get("tokens_used", 0)
         if token_budget is not None and used >= token_budget:
             return {"messages": [AIMessage(name=BUDGET_STOP, content=(
-                f"Stopped: this claim run used its model budget ({used} of {token_budget} tokens). "
-                "No draft was written by the model; see the open gaps."))]}
+                f"Stopped: this claim run used its model budget ({used} of {token_budget} tokens)."))]}
         prompt = [system, *state["messages"]]
         reply = await bound.ainvoke(prompt)
         n = message_tokens(reply) or estimate_tokens(prompt) + estimate_tokens([reply])
@@ -808,7 +836,14 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         """Re-check and draft with the latest check's evidence and the reviewer's decisions from state (never
         model-supplied decisions), then END the turn with a deterministic closing message built from the
         writes that actually ran. No synthetic tool-call message is inserted and no model call follows."""
-        _n, check_id, _data = check_position(state["messages"], run_claim)
+        budget_hit = isinstance(state["messages"][-1], AIMessage) and state["messages"][-1].name == BUDGET_STOP
+        pos = check_position(state["messages"], run_claim)
+        if pos is None:  # budget spent before any check: the engine checks with no evidence
+            try:
+                pos = (None, "budget-no-check", _jsonish(await invoke("check_claim", {"claim_id": run_claim})) or {})
+            except Exception as exc:
+                pos = (None, "budget-no-check", {"error": str(exc)})
+        _n, check_id, _data = pos
         ev = [e for e in (state.get("effective_args", {}).get(check_id, {}).get("evidence_ids") or [])
               if e not in state.get("ignored_ids", {})]
         ev += [e for e in state.get("reply_evidence", []) if e not in ev]  # replies the graph's own search found
@@ -825,7 +860,9 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             draft = json.dumps({"error": str(exc)})
         gaps = open_gaps(fresh) if fresh else open_gaps(_data)
         need_reviewer = [k for k in gaps if k.split(":", 1)[1] not in FREE_EVIDENCE_GAPS]
-        head = ("check_claim shows no open gaps, so the decision note was drafted." if not gaps else
+        head = (f"needs human: model budget used; open gaps: {', '.join(gaps) or 'none'}. The graph drafted from "
+                "the engine's check (no model call)." if budget_hit else
+                "check_claim shows no open gaps, so the decision note was drafted." if not gaps else
                 f"Drafted with these items still open: {', '.join(gaps)}. Every open gap was searched for, and "
                 "asked about where possible." + (f" Still needs your decision: {', '.join(need_reviewer)}."
                                                  if need_reviewer else ""))
@@ -833,7 +870,8 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             head += f" Reviewer decisions applied: {json.dumps(hd)}."
         writes = list(state.get("writes", []))
         closing = AIMessage(content=f"{head}\n\n{draft}\n\n{describe_writes(writes)} Tell me if you want any change.")
-        rec = {"args": args, "content": draft, "open_gaps": gaps, "check_id": check_id, "writes": writes}
+        rec = {"args": args, "content": draft, "open_gaps": gaps, "check_id": check_id, "writes": writes,
+               "budget": budget_hit}
         return {"messages": [closing], "auto_drafted": [*state.get("auto_drafted", []), check_id],
                 "auto_drafts": [*state.get("auto_drafts", []), rec]}
 
@@ -945,6 +983,12 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         last = state["messages"][-1]
         if isinstance(last, AIMessage) and last.tool_calls:
             return "gate"
+        if isinstance(last, AIMessage) and last.name == BUDGET_STOP and run_claim and "draft_decision" in by_name:
+            pos = check_position(state["messages"], run_claim)
+            drafted = pos and (pos[1] in state.get("auto_drafted", []) or any(
+                getattr(m, "type", "") == "tool" and m.name == "draft_decision" for m in state["messages"][pos[0]:]))
+            if not drafted:
+                return "auto_draft"  # zero model tokens: the engine drafts with what the run found
         return "graph_actions" if run_claim and state.get("instructions") else END
 
     g = StateGraph(State)
@@ -958,10 +1002,12 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
     g.add_node("graph_actions", graph_actions)
     g.add_edge(START, "intake")
     g.add_edge("intake", "agent")
-    g.add_conditional_edges("agent", route, ["gate", "graph_actions", END])
+    g.add_conditional_edges("agent", route, ["gate", "graph_actions", "auto_draft", END])
     g.add_edge("gate", "tools")
     g.add_conditional_edges("tools", after_tools, ["auto_draft", "reply_search", "agent"])
     g.add_conditional_edges("auto_draft", lambda s: "graph_actions" if s.get("instructions") else END,
                             ["graph_actions", END])
     g.add_edge("graph_actions", END)
-    return g.compile(checkpointer=checkpointer)
+    compiled = g.compile(checkpointer=checkpointer)
+    compiled.token_split = split
+    return compiled

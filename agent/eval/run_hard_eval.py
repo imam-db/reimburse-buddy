@@ -30,7 +30,7 @@ from reimburse_agent.mcp_client import mcp_tools
 
 from .hard_cases import CASES, review, stop_reply
 from .hard_score import score
-from .run_eval import PRICES, RESULTS, cost
+from .run_eval import PRICES, RESULTS, RP, cost
 
 FAIL_MSG = "upstream timeout (injected by eval, first call only)"
 STATUSES = ("approved", "partially_approved", "rejected", "on_hold")
@@ -61,15 +61,16 @@ async def server_state(by_name) -> dict:
     out = await by_name["get_outbox"].ainvoke({})
     try:
         outbox = json.loads(tool_text(out))
-        n = len(outbox.get("messages", outbox.get("outbox", []))) if isinstance(outbox, dict) else len(outbox)
+        msgs = outbox.get("messages", outbox.get("outbox", [])) if isinstance(outbox, dict) else outbox
+        n = len(msgs)
     except ValueError:
-        n = -1
+        n, msgs = -1, None
     changed = []
     for st in STATUSES:
         rows = json.loads(tool_text(await by_name["list_claims"].ainvoke({"status": st})) or "[]")
         rows = rows if isinstance(rows, list) else [rows]
         changed += [r["id"] for r in rows if isinstance(r, dict) and "id" in r]
-    return {"outbox": n, "changed_status": sorted(changed)}
+    return {"outbox": n, "outbox_msgs": msgs, "changed_status": sorted(changed)}
 
 
 TOKEN_CAP = 60_000  # per run (input + output); a run past it stops and is scored as is
@@ -113,12 +114,17 @@ async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP, model=
         seen_props: dict[tuple, int] = {}
         rec["confirmations"] = []
         turns = 0
+        queue: list[str] = []  # batch: claims not yet run; a sub-run's events belong to queue[0]
         try:
             while True:
                 async for ns, ev in g.astream(payload, conf, stream_mode="updates", subgraphs=True):
                     for node, upd in ev.items():
                         if node == "__interrupt__" or not isinstance(upd, dict):
                             continue
+                        if not ns and "queue" in upd:
+                            queue = list(upd["queue"] or [])
+                        run_claim = (queue[0] if queue else None) if case.batch and ns else \
+                            (None if case.batch else case.claim_id)
                         props = upd.get("graph_proposals")
                         if props is not None:  # gated actions the graph proposed itself (never in model history)
                             k = (tuple(ns), node)
@@ -126,7 +132,7 @@ async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP, model=
                                 rec["calls"].append({"id": p["id"], "name": p["tool"], "args": p["args"], "schema_ok": True,
                                                      "turn": usage["llm_calls"], "auto": True, "by": "graph_action",
                                                      "declined": not p["approved"], "error": bool(p.get("error")),
-                                                     "ok": p["approved"] and not p.get("error")})
+                                                     "ok": p["approved"] and not p.get("error"), "run_claim": run_claim})
                             seen_props[k] = len(props)
                         if node in ("graph_actions", "finish", "approve", "triage", "claim_run", "intake"):
                             continue  # graph-made text, no LLM call
@@ -134,7 +140,8 @@ async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP, model=
                             for d in (upd or {}).get("auto_drafts", [])[-1:]:
                                 rec["calls"].append({"id": f"auto-draft-{d['check_id']}", "name": "draft_decision",
                                                      "args": d["args"], "schema_ok": True, "turn": usage["llm_calls"],
-                                                     "auto": True, "declined": False, "error": False, "ok": False})
+                                                     "auto": True, "declined": False, "error": False, "ok": False,
+                                                     "run_claim": run_claim, "budget": bool(d.get("budget"))})
                                 tool_texts.append(d["content"])
                                 rec["drafted_since_human"] = True
                             continue
@@ -160,7 +167,8 @@ async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP, model=
                                         except jsonschema.ValidationError:
                                             ok = False
                                     pending[c["id"]] = {"id": c["id"], "name": c["name"], "args": c["args"],
-                                                        "schema_ok": ok, "turn": usage["llm_calls"]}
+                                                        "schema_ok": ok, "turn": usage["llm_calls"],
+                                                        "run_claim": run_claim}
                                     if c["name"] == "draft_decision":
                                         rec["drafted_since_human"] = True
                             elif m.type == "tool":
@@ -207,9 +215,12 @@ async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP, model=
         if c["id"] in eff and eff[c["id"]] != c["args"]:
             c["model_args"], c["args"] = c["args"], eff[c["id"]]
             c["filled_by_graph"] = True  # graph injected/stripped/filled args; not a malformed model call
-    for i, w in enumerate(w for w in vals.get("writes", []) if w.get("by") == "graph"):
+    # graph-made writes, with the run they came from (batch: the sub-run's own summary, never the args)
+    owned = [(s["claim_id"], w) for s in vals.get("summaries", []) for w in s.get("writes", [])] if case.batch \
+        else [(case.claim_id, w) for w in vals.get("writes", [])]
+    for i, (rc, w) in enumerate((rc, w) for rc, w in owned if w.get("by") == "graph"):
         rec["calls"].append({"id": f"graph-write-{i}", "name": w["tool"], "args": w["args"], "schema_ok": True,
-                             "turn": -1, "auto": True, "declined": False, "error": False, "ok": True})
+                             "turn": -1, "auto": True, "declined": False, "error": False, "ok": True, "run_claim": rc})
     rec["reviewer_decisions"] = vals.get("reviewer_decisions", {})
     # [claim, item, gap] evidence requests the graph's gate let through as free (free_evidence_request);
     # the scorer exempts exactly these, in single-claim runs and in batch sub-runs alike.
@@ -217,11 +228,15 @@ async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP, model=
     rec["unparsed_reviewer"] = vals.get("unparsed_reviewer", [])
     rec["model_decisions_refused"] = sum("human_decisions_not_from_reviewer" in t for t in tool_texts)
     rec["server_changed"] = server["changed_status"]
+    rec["outbox_msgs"] = server.get("outbox_msgs")  # the server's own outbox: the scorer checks every message
+    runs = [t["state"] for t in vals.get("threads", {}).values()] if case.batch else [vals]
+    rec["budget_drafts"] = sum(bool(d.get("budget")) for v in runs for d in v.get("auto_drafts", []))
     rec["latency_s"] = round(time.perf_counter() - t0, 1)
     rec["usage"] = usage
     msgs = st.values.get("messages", [])
     final = str(msgs[-1].content) if msgs else ""
-    rec["final"] = final[:4000]
+    rec["final"] = final  # full text: offline re-scoring must see every Rp figure
+    rec["money_mentions"] = RP.findall(final)
     rec["tool_texts"] = tool_texts  # kept so later scoring changes can be re-applied offline
     rec["metrics"] = score(case, rec, final, tool_texts, server)
     rec["cost_usd_peak"] = round(cost(model_name, usage), 5)
