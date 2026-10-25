@@ -8,11 +8,13 @@ The policy only reads structured tool output (JSON) and never reads free text fo
      check-out moved/reschedul/diundur), plus get_calendar for the trip (late check-out) and
      find_approval_memo for the trip city (hotel over cap);
   3. check_claim with every ID those returned (the engine keeps what matches);
-  4. request_missing_evidence (fixed template) for each pure document gap still open, then one
-     "<claim> <item>" search for the reply and a re-check;
+  4. request_missing_evidence (fixed template) for each pure document gap still open, then one search for
+     the reply (find_messages with claim, item and item words when offered, else "<claim> <item>") and a
+     re-check;
   5. a gap that needs a reviewer: a fixed question; the reviewer answers through a structured form
      (reviewer_decisions, no language parsing);
-  6. draft_decision with the evidence the engine used.
+  6. draft_decision with the evidence the engine used; if the graph holds the draft with new_evidence_ids,
+     one re-check with those IDs and one more draft.
 Batch cases use the batch graph unchanged; each sub-run runs this same policy."""
 
 from __future__ import annotations
@@ -151,8 +153,12 @@ class BaselineModel(BaseChatModel):
                                                       **({"evidence_ids": used} if used else {})}) for i, g in to_ask])
 
         last_ask = max((c[0] for c in calls if c[1] == "request_missing_evidence"), default=-1)
-        if last_ask >= 0 and not any(c[1] == "search_for_gap" and c[0] > last_ask for c in calls):
+        if last_ask >= 0 and not any(c[1] in ("search_for_gap", "find_messages") and c[0] > last_ask for c in calls):
             open_asked = [(i, g) for i, g in gaps if (i, g) in asked]
+            if open_asked and "find_messages" in self._tool_names:  # ranked: the reply may not name claim or item
+                return mk(*[("find_messages", {"employee_id": emp, "query": " ".join(x for x in (
+                    cid, i, items.get(i, {}).get("description"), CAT_WORDS.get(items.get(i, {}).get("category", ""), ""),
+                    GAP_WORDS.get(g, "")) if x)}) for i, g in open_asked])
             if open_asked:
                 return mk(*[("search_for_gap", {"item_id": i, "gap_code": g, "query": f"{cid} {i}"})
                             for i, g in open_asked])
@@ -161,6 +167,16 @@ class BaselineModel(BaseChatModel):
         if need_reviewer and len(humans) == 1:
             listed = ", ".join(f"{i} {g}" for i, g in need_reviewer)
             return AIMessage(content=f"Reviewer decision needed (use the decision form) for: {listed}?")
+
+        # 6a. a held draft (structured error with new IDs): re-check with them once, then draft again
+        drafts = [c for c in calls if c[1] == "draft_decision"]
+        held = _json(results.get(drafts[-1][3], "")) if drafts else None
+        if isinstance(held, dict) and held.get("new_evidence_ids") and last_check < drafts[-1][0]:
+            extra = [e for e in held["new_evidence_ids"] if e not in passed]
+            if extra:
+                return mk(("check_claim", {"claim_id": cid, "evidence_ids": [*used, *extra]}))
+        if drafts and last_check > drafts[-1][0] and held and held.get("error"):
+            return mk(("draft_decision", {"claim_id": cid, **({"evidence_ids": used} if used else {})}))
 
         if not any(c[1] == "draft_decision" for c in after_human):
             return mk(("draft_decision", {"claim_id": cid, **({"evidence_ids": used} if used else {})}))

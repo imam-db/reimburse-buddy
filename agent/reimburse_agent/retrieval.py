@@ -109,21 +109,50 @@ def doc_text(m: dict) -> str:
     return " ".join([m.get("subject", ""), m.get("snippet", ""), m.get("from", ""), *m.get("attachments", [])])
 
 
-async def message_pool(search: Callable[[dict], Awaitable[list[dict]]], employee_id: str) -> list[dict]:
+SEARCH_CAP = 5  # the server's top-N; a probe that returns this many may have hidden more
+
+
+async def message_pool(search: Callable[[dict], Awaitable[list[dict]]], employee_id: str) -> tuple[list[dict], bool]:
+    """(messages, possibly_incomplete). possibly_incomplete: at least one probe hit the server's cap, so a
+    message could be missing from the pool. Callers that need "no message contradicts X" must treat an
+    incomplete pool as "check unavailable" and fail toward review."""
     pool: dict[str, dict] = {}
+    capped = False
     for ch in PROBES:
-        for r in await search({"employee_id": employee_id, "query": ch}):
+        rows = await search({"employee_id": employee_id, "query": ch})
+        capped |= len(rows) >= SEARCH_CAP
+        for r in rows:
             if isinstance(r, dict) and r.get("id"):
                 pool.setdefault(r["id"], r)
-    return list(pool.values())
+    return list(pool.values()), capped
+
+
+def pool_version(rows: list[dict]) -> str:
+    import hashlib
+    return hashlib.sha256(",".join(sorted(r["id"] for r in rows)).encode()).hexdigest()[:12]
+
+
+# Schedule-change words (Indonesian, English, common slang). A contradiction scan hit containing one of these
+# sends a calendar-only item to review even when its similarity is low.
+SCHEDULE_TERMS = re.compile(
+    r"\b(?:dimajukan|dimajuin|majuin|maju|diundur|diundurin|undur|dipindah|dipindahin|pindah|digeser|geser|"
+    r"batal|dibatalkan|dibatalin|cancel(?:led|ed)?|reschedul\w*|moved?|postponed?|brought forward|"
+    r"pushed (?:back|forward)|called off|ganti jadwal|jadwal baru|jadwalnya berubah)\b", re.I)
+SIMILARITY_THRESHOLD = 0.55  # cosine, paraphrase-multilingual-MiniLM; tuned on set A (eval/fixtures/large)
 
 
 async def find_messages(search, employee_id: str, query: str, date_from: str | None = None,
                         date_to: str | None = None, k: int = TOP_K) -> dict:
     """Top-k messages for query among the employee's messages dated in [date_from, date_to]."""
-    pool = await message_pool(search, employee_id)
+    pool, incomplete = await message_pool(search, employee_id)
     cand = [m for m in pool if (not date_from or m.get("date", "") >= date_from)
             and (not date_to or m.get("date", "") <= date_to)]
+    if os.environ.get("RB_FIND_MODE") == "whole":  # eval control: every message in the window, newest first, unranked
+        cand.sort(key=lambda m: m.get("date", ""), reverse=True)
+        return {"results": [{**{kk: m.get(kk) for kk in ("id", "date", "from", "subject", "snippet", "attachments")},
+                             "similarity": None} for m in cand],
+                "ranker": "whole mailbox (control, unranked)", "pool_size": len(pool), "in_window": len(cand),
+                "possibly_incomplete": incomplete}
     docs = [doc_text(m) for m in cand]
     lex = bm25(query, docs)
     sem = cosine_scores(query, docs)
@@ -134,6 +163,19 @@ async def find_messages(search, employee_id: str, query: str, date_from: str | N
         score, ranker = rrf(lex, sem), f"bm25+embedding rrf ({EMBED_MODEL.split('/')[-1]})"
         keep = list(range(len(cand)))
     order = sorted(keep, key=lambda i: (-score[i], cand[i].get("date", "")), reverse=False)[:k]
-    results = [{kk: cand[i].get(kk) for kk in ("id", "date", "from", "subject", "snippet", "attachments")}
-               for i in order]
-    return {"results": results, "ranker": ranker, "pool_size": len(pool), "in_window": len(cand)}
+    results = [{**{kk: cand[i].get(kk) for kk in ("id", "date", "from", "subject", "snippet", "attachments")},
+                "similarity": None if sem is None else round(sem[i], 3)} for i in order]
+    return {"results": results, "ranker": ranker, "pool_size": len(pool), "in_window": len(cand),
+            "possibly_incomplete": incomplete}
+
+
+def contradiction_hits(res: dict, threshold: float = SIMILARITY_THRESHOLD) -> list[dict]:
+    """Results that may contradict a calendar event: similarity >= threshold, or a schedule-change term."""
+    out = []
+    for r in res.get("results", []):
+        text = doc_text(r)
+        term = SCHEDULE_TERMS.search(text)
+        sim = r.get("similarity")
+        if term or (sim is not None and sim >= threshold):
+            out.append({"id": r["id"], "similarity": sim, "term": term.group(0) if term else None})
+    return out

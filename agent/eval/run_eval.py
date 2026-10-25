@@ -247,7 +247,7 @@ async def main():
     runs = [r for r in await asyncio.gather(*[go(c) for _ in range(a.runs) for c in cases]) if r]
     s = summarize(a.model, runs, not a.raw)
     RESULTS.mkdir(exist_ok=True)
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%MZ")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out = RESULTS / f"{a.model}-{'raw' if a.raw else 'compact'}-{ts}.json"
     s["fixtures_sha256"] = fixture_hash()["sha256"]
     out.write_text(json.dumps({"summary": s, "fixtures": fixture_hash(), "runs": runs}, indent=2, ensure_ascii=False))
