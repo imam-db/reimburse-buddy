@@ -22,6 +22,8 @@ from .hard_cases import CASES
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from reimburse_buddy.data_store import DataStore  # noqa: E402
+from reimburse_agent import retrieval  # noqa: E402
+from reimburse_agent.retrieval import clean_query, embedder, find_messages  # noqa: E402
 
 
 class _Scripted(GenericFakeChatModel):
@@ -101,15 +103,34 @@ def budget_ok(turns) -> bool:
     return all(b <= 2 and a <= 1 for b, a, _ in per.values())
 
 
-def probe(case, queries, needed, search=None) -> dict[str, bool]:
-    """query -> needed message in lexical search's top 5 (the server's own matcher, fixture data)."""
+def _store(case):
     s = DataStore(case.data)
     for r in s.replies:  # replies already delivered: the probe asks "would the search find it"
         if r.get("claim_id") == case.claim_id:
             s.inbox.append(dict(r["reply"]))
-    emp = s.get_claim(case.claim_id)["employee_id"]
-    search = search or (lambda q: [h["id"] for h in s.search_reimburse_mailbox(emp, q)])
-    return {q: needed in search(q) for q in queries}
+    return s, s.get_claim(case.claim_id)["employee_id"]
+
+
+def probe(case, queries, needed, search=None) -> dict[str, bool]:
+    """query -> needed message in lexical search's top 5 (the server's own matcher on the wrapper's cleaned
+    query, fixture data). search: optional (store, employee_id, query) -> list of IDs."""
+    s, emp = _store(case)
+    search = search or (lambda st, e, q: [h["id"] for h in st.search_reimburse_mailbox(e, clean_query(q))])
+    return {q: needed in search(s, emp, q) for q in queries}
+
+
+async def probe_find(case, queries, needed) -> dict[str, bool]:
+    """query -> rank of the needed message in find_messages' full ranking (no date window) / mailbox size."""
+    s, emp = _store(case)
+
+    async def raw(a):
+        return s.search_reimburse_mailbox(a["employee_id"], a["query"])
+    out = {}
+    for q in queries:
+        res = await find_messages(raw, emp, q, k=99)
+        ids = [r["id"] for r in res["results"]]
+        out[q] = f"rank {ids.index(needed) + 1}/{res['in_window']}" if needed in ids else f"miss/{res['in_window']}"
+    return out
 
 
 async def run_oracles(cases=("11", "12", "13", "14")) -> dict:
@@ -123,6 +144,8 @@ async def run_oracles(cases=("11", "12", "13", "14")) -> dict:
         out[cid] = {"pass": m["pass"], "why": m["why"], "severity": m["severity"], "budget_ok": budget_ok(turns),
                     "searches": sum(c["name"] == "search_for_gap" for c in rec["calls"]),
                     "oracle_query (hindsight)": oq, "plausible_queries_hit": probe(case, plausible, needed),
+                    "find_messages_rank (top 5 = hit)": await probe_find(case, plausible, needed),
+                    "find_messages_ranker": "bm25+embedding rrf" if embedder() else f"bm25 only ({retrieval._EMBED_ERR})",
                     "error": rec["error"]}
     return out
 

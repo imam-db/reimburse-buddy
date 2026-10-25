@@ -3,7 +3,7 @@ model. python -m eval.run_hard_eval --model baseline (no key, $0).
 
 The policy only reads structured tool output (JSON) and never reads free text for meaning:
   1. get_claim + check_claim with no evidence;
-  2. per open gap, up to two mailbox searches built from the item's fields (flight no, description words,
+  2. per open gap, one mailbox search (find_messages when the graph offers it, else search_for_gap) built from the item's fields (flight no, description words,
      category words, date) plus fixed keywords (receipt/struk/kuitansi, boarding pass, folio, and for a late
      check-out moved/reschedul/diundur), plus get_calendar for the trip (late check-out) and
      find_approval_memo for the trip city (hotel over cap);
@@ -29,7 +29,7 @@ from pydantic import PrivateAttr
 CLAIM = re.compile(r"\bCLM-\d{4}-\d{4}\b")
 IDS = re.compile(r'"id"\s*:\s*"((?:MSG|EVT|MEMO)-[\w-]+)"')
 FREE = ("receipt_missing", "boarding_pass_missing", "hotel_nights_mismatch")
-SEARCH_TOOLS = ("search_for_gap", "search_reimburse_mailbox", "get_calendar", "find_approval_memo")
+SEARCH_TOOLS = ("search_for_gap", "find_messages", "search_reimburse_mailbox", "get_calendar", "find_approval_memo")
 CAT_WORDS = {"taxi": "taxi taksi", "flight": "flight", "hotel": "hotel", "meal": "meal",
              "late_checkout": "late checkout hotel"}
 GAP_WORDS = {"receipt_missing": "receipt struk kuitansi", "boarding_pass_missing": "boarding pass",
@@ -118,7 +118,10 @@ class BaselineModel(BaseChatModel):
                 words = " ".join(x for x in (it.get("flight_no"), it.get("description"),
                                               CAT_WORDS.get(it.get("category", ""), ""), GAP_WORDS.get(gap, ""),
                                               it.get("date")) if x)
-                out.append(("search_for_gap", {"item_id": item_id, "gap_code": gap, "query": words}))
+                if "find_messages" in self._tool_names:  # version B ranked search; same per-gap budget
+                    out.append(("find_messages", {"employee_id": emp, "query": words}))
+                else:
+                    out.append(("search_for_gap", {"item_id": item_id, "gap_code": gap, "query": words}))
                 if gap == "late_checkout_unjustified":
                     out.append(("get_calendar", {"employee_id": emp, "date_from": trip.get("start_date", it.get("date")),
                                                  "date_to": trip.get("end_date", it.get("date"))}))

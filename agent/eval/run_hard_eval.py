@@ -25,7 +25,7 @@ from langgraph.types import Command
 
 from reimburse_agent.compact import tool_text
 from reimburse_agent.batch import build_batch_graph
-from reimburse_agent.graph import BUDGET_STOP, GAP_SEARCH_TOOL, GapSearchArgs, build_graph
+from reimburse_agent.graph import BUDGET_STOP, FIND_TOOL, GAP_SEARCH_TOOL, FindArgs, GapSearchArgs, build_graph
 from reimburse_agent.mcp_client import mcp_tools
 
 from .fixture_hash import fixture_hash
@@ -112,7 +112,8 @@ async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP, model=
             tools = [fail_once(t) if t.name == case.fail_tool else t for t in tools]
         schemas = {t.name: (t.args_schema if isinstance(t.args_schema, dict) else t.args_schema.model_json_schema())
                    for t in tools}
-        schemas[GAP_SEARCH_TOOL] = GapSearchArgs.model_json_schema()  # graph-only tool: validate the model's own args
+        schemas[GAP_SEARCH_TOOL] = GapSearchArgs.model_json_schema()
+        schemas[FIND_TOOL] = FindArgs.model_json_schema()  # graph-only tool: validate the model's own args
         if case.batch:
             g = build_batch_graph(model, tools, case.batch, checkpointer=InMemorySaver())
         else:
