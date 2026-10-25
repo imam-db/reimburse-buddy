@@ -28,7 +28,8 @@
           "type": "receipt",
           "claim_id": "CLM-2026-0104",
           "item_id": "IT-6",
-          "receipt_no": "TX-90022"
+          "receipt_no": "TX-90022",
+          "amount": 120000
         }
       ],
       "mailbox": "reimburse@nusantara-niaga.example",
@@ -64,7 +65,8 @@
           "type": "receipt",
           "claim_id": "CLM-2026-0110",
           "item_id": "IT-5",
-          "receipt_no": "TX-30577"
+          "receipt_no": "TX-30577",
+          "amount": 230000
         }
       ],
       "mailbox": "reimburse@nusantara-niaga.example",
@@ -93,7 +95,8 @@
           "type": "receipt",
           "claim_id": "CLM-2026-0204",
           "item_id": "IT-5",
-          "receipt_no": "TX-0204-IT-5"
+          "receipt_no": "TX-0204-IT-5",
+          "amount": 95000
         }
       ],
       "mailbox": "reimburse@nusantara-niaga.example",
@@ -122,7 +125,8 @@
           "type": "receipt",
           "claim_id": "CLM-2026-0204",
           "item_id": "IT-8",
-          "receipt_no": "TX-0204-IT-8"
+          "receipt_no": "TX-0204-IT-8",
+          "amount": 87000
         }
       ],
       "mailbox": "reimburse@nusantara-niaga.example",

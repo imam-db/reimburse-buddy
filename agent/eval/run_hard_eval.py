@@ -71,7 +71,20 @@ async def server_state(by_name) -> dict:
     return {"outbox": n, "changed_status": sorted(changed)}
 
 
-async def run_one(model_name, case, api_key, budget):
+TOKEN_CAP = 60_000  # per run (input + output); a run past it stops and is scored as is
+
+
+def use_sqlite_cache(path: str) -> None:
+    """Optional LangChain LLM cache (temperature 0 + byte-identical system prompt => repeat prompts hit it)."""
+    try:
+        from langchain_community.cache import SQLiteCache
+    except ImportError as exc:  # optional dependency
+        raise SystemExit("--cache needs langchain-community: uv pip install langchain-community") from exc
+    from langchain_core.globals import set_llm_cache
+    set_llm_cache(SQLiteCache(database_path=path))
+
+
+async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP):
     model = ChatOpenAI(model=model_name, api_key=api_key, base_url="https://api.deepseek.com",
                        temperature=0, timeout=180, max_retries=2)
     t0 = time.perf_counter()
@@ -98,12 +111,20 @@ async def run_one(model_name, case, api_key, budget):
                         if node == "__interrupt__":
                             continue
                         for m in (upd or {}).get("messages", []):
-                            if m.type == "ai":
+                            auto = m.type == "ai" and any(str(c["id"]).startswith("auto-draft") for c in m.tool_calls or [])
+                            if m.type == "ai" and auto:  # graph-made draft call: no LLM call, no tokens
+                                for c in m.tool_calls:
+                                    pending[c["id"]] = {"id": c["id"], "name": c["name"], "args": c["args"],
+                                                        "schema_ok": True, "turn": usage["llm_calls"], "auto": True}
+                                rec["drafted_since_human"] = True
+                            elif m.type == "ai":
                                 u = usage_of(m)
                                 usage["llm_calls"] += 1
                                 for k in ("input", "output", "cache_hit"):
                                     usage[k] += u[k]
                                 budget["spent"] += cost(model_name, u)
+                                if usage["input"] + usage["output"] > token_cap:
+                                    raise RuntimeError(f"token cap {token_cap} reached")
                                 for c in m.tool_calls or []:
                                     ok = c["name"] in schemas
                                     if ok:
@@ -126,6 +147,8 @@ async def run_one(model_name, case, api_key, budget):
                                 rec["calls"].append(call)
                 if budget["spent"] > budget["limit"]:
                     raise RuntimeError("budget limit reached")
+                if usage["input"] + usage["output"] > token_cap:
+                    raise RuntimeError(f"token cap {token_cap} reached")
                 st = await g.aget_state(conf)
                 if st.interrupts:
                     req = st.interrupts[0].value
@@ -151,9 +174,15 @@ async def run_one(model_name, case, api_key, budget):
     msgs = st.values.get("messages", [])
     final = str(msgs[-1].content) if msgs else ""
     rec["final"] = final[:4000]
+    rec["tool_texts"] = tool_texts  # kept so later scoring changes can be re-applied offline
     rec["metrics"] = score(case, rec, final, tool_texts, server)
     rec["cost_usd_peak"] = round(cost(model_name, usage), 5)
     return rec
+
+
+def _avg(xs):
+    xs = [x for x in xs if x is not None]
+    return round(sum(xs) / len(xs), 2) if xs else None
 
 
 def summarize(model, runs):
@@ -165,6 +194,9 @@ def summarize(model, runs):
         ms = [r["metrics"] for r in rs]
         rows.append({
             "case": cid, "pass": f"{sum(m['pass'] for m in ms)}/{len(ms)}",
+            "safety": f"{sum(m.get('safety', False) for m in ms)}/{len(ms)}",
+            "correct": f"{sum(m.get('correct', False) for m in ms)}/{len(ms)}",
+            "efficiency_avg": _avg([m.get("efficiency") for m in ms]),
             "unauthorized_writes": sum(m["unauthorized_writes"] for m in ms),
             "tool_calls_avg": round(sum(m["tool_calls"] for m in ms) / len(ms), 1),
             "llm_calls_avg": round(sum(r["usage"]["llm_calls"] for r in rs) / len(rs), 1),
@@ -180,10 +212,15 @@ def summarize(model, runs):
     u = {k: sum(r["usage"][k] for r in runs) for k in ("input", "cache_hit", "output")}
     return {
         "model": model, "runs": len(runs), "pass": f"{sum(m['pass'] for m in allm)}/{len(allm)}",
+        "safety": f"{sum(m.get('safety', False) for m in allm)}/{len(allm)}",
+        "correct": f"{sum(m.get('correct', False) for m in allm)}/{len(allm)}",
+        "efficiency_avg": _avg([m.get("efficiency") for m in allm]),
         "unauthorized_writes": sum(m["unauthorized_writes"] for m in allm),
         "injection_success": f"{sum(bool(m.get('injection_followed')) for m in inj)}/{len(inj)}",
         "decline_respected": f"{sum(not m.get('writes_after_decline') for m in dec)}/{len(dec)}",
         "correct_stop": f"{sum(m['pass'] for m in stop)}/{len(stop)}",
+        "proposed_employee_writes_unforced": sum(m.get("proposed_employee_writes", 0)
+                                                 for r, m in zip(runs, allm) if r["case"] == "2u"),
         "invented_rp": sum(len(m["invented_rp"]) for m in allm),
         "wrong_evidence_submitted": sum(len(m.get("wrong_evidence_submitted", [])) for m in allm),
         "cost_usd_total_peak": round(cost(model, u), 4), "cases": rows,
@@ -197,7 +234,11 @@ async def main():
     ap.add_argument("--cases", nargs="*")
     ap.add_argument("--budget", type=float, default=1.0, help="stop when estimated USD spend exceeds this")
     ap.add_argument("--concurrency", type=int, default=4)
+    ap.add_argument("--token-cap", type=int, default=TOKEN_CAP, help="per-run input+output token cap")
+    ap.add_argument("--cache", help="SQLite path for an optional LangChain LLM cache")
     a = ap.parse_args()
+    if a.cache:
+        use_sqlite_cache(a.cache)
     key = os.environ.get("DEEPSEEK_API_KEY")
     if not key:
         raise SystemExit("set DEEPSEEK_API_KEY")
@@ -209,7 +250,7 @@ async def main():
         async with sem:
             if budget["spent"] > budget["limit"]:
                 return None
-            return await run_one(a.model, case, key, budget)
+            return await run_one(a.model, case, key, budget, a.token_cap)
 
     runs = [r for r in await asyncio.gather(*[go(c) for _ in range(a.runs) for c in cases]) if r]
     s = summarize(a.model, runs)
