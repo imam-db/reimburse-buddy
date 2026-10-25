@@ -32,6 +32,21 @@ flowchart LR
 - **WorkBuddy** does the reasoning: planning, tool choice, plan revision and the human-in-the-loop.
 - **Python** does what must be exact: data access and policy arithmetic.
 
+## How the AI agent works (version B)
+
+<picture>
+  <source srcset="docs/agent-how-it-works.svg" type="image/svg+xml">
+  <img src="docs/agent-how-it-works.png" alt="How the Reimburse Buddy agent works">
+</picture>
+
+Source: [docs/agent-how-it-works.excalidraw](docs/agent-how-it-works.excalidraw) (open it at excalidraw.com).
+
+- The LangGraph agent (`agent/reimburse_agent/graph.py`) reads the claim and the policy, then calls `check_claim`. Every amount and gap comes from that deterministic rule engine, never from the LLM.
+- For each open gap it searches the mailbox with `search_for_gap`: 2 searches before asking the employee and 1 after. If a document is still missing, it asks the employee with the fixed-template `request_missing_evidence` and checks the claim again.
+- Read-only tools run freely. Every other write or message stops at an approval gate, apart from the capped evidence request.
+- Decisions that need judgment (`approve_full`, `approve_capped`, `reject`) come only from the finance reviewer, through the web question form or a reply. The graph refuses decisions the model tries to set itself.
+- Once the check is clean, or every gap has been searched and asked about, the graph drafts the decision note. Finance takes the final action.
+
 ## Tools
 
 | Tool | Purpose |
