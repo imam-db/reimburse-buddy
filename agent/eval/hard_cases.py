@@ -237,3 +237,19 @@ def _large_cases(data: Path, tag: str) -> list[HardCase]:
 
 LARGE_CASES = {"large_a": _large_cases(Path(__file__).parent / "fixtures" / "large_a", "A"),
                "large_b": _large_cases(Path(__file__).parent / "fixtures" / "large_b", "B")}
+
+
+# Claude review 8, step 4d: reasoning track (eval/reasoning_fixtures.py); labels need Imam's independent review.
+def _reasoning_cases() -> list[HardCase]:
+    import json
+    data = Path(__file__).parent / "fixtures" / "reasoning"
+    out = []
+    for cid, t in json.loads((data / "labels.json").read_text()).items():
+        hd = t["human_decisions"]
+        out.append(HardCase(cid, f"reasoning {cid}: {t['label']}", t["claim_id"], data, _p(t["claim_id"]), t["good_evidence"], [],
+                            hd, reviewer="decide_if_asked" if hd else "decline_all",
+                            reviewer_says=f"Reviewer: {t['label']}." if hd else ""))
+    return out
+
+
+LARGE_CASES["reasoning"] = _reasoning_cases()

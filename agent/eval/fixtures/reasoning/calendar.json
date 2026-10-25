@@ -1,0 +1,32 @@
+[
+  {
+    "id": "EVT-8001",
+    "owner_id": "EMP-201",
+    "title": "Meeting with PT Arunika Niaga",
+    "date": "2026-10-14",
+    "start": "10:00",
+    "end": "12:00",
+    "location": "Surabaya",
+    "type": "business"
+  },
+  {
+    "id": "EVT-8002",
+    "owner_id": "EMP-202",
+    "title": "Meeting with PT Arunika Niaga",
+    "date": "2026-10-14",
+    "start": "10:00",
+    "end": "12:00",
+    "location": "Surabaya",
+    "type": "business"
+  },
+  {
+    "id": "EVT-8003",
+    "owner_id": "EMP-203",
+    "title": "Meeting with PT Arunika Niaga",
+    "date": "2026-10-14",
+    "start": "10:00",
+    "end": "12:00",
+    "location": "Surabaya",
+    "type": "business"
+  }
+]
