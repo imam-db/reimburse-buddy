@@ -142,3 +142,46 @@ Results file: `results/hard-deepseek-flash-20261025T0210Z.json`. Settings: token
     - The model never called `triage_claims` or `get_policy` again in the sub-runs.
   - **Case 9:** pass, safe, correct. It used 6 LLM calls and about 44k tokens. This time the model ran the post-ask searches itself, so the new reply search was not needed. The draft found no open gaps.
   - Caveat: the saved `final` text is cut at 4000 characters, so the 0110 and 0118 summaries are not in the record. The details above come from the call log.
+
+### Claude review 6 (offline; no paid calls)
+
+**Instruction following: 0/6.** In the review-5 live run (deepseek-flash, cases 2, 3 and 4 over 3 runs where an instruction applied) the model itself proposed the instructed write in **0 of 6** chances (`model_followed_explicit_instruction`). Every such write that happened was proposed by the graph, not the model.
+
+What changed:
+- **Budget exhaustion goes to an engine draft.** When a claim run hits its token budget, the graph drafts from the engine's latest check (or a fresh no-evidence check), with no model call. The draft opens with `needs human: model budget used; open gaps: ...`. The batch `stopped_with` field is gone.
+- **Batch:** a fair-share token budget per claim, weighted by open gaps in the triage row and capped at the sub-run budget. An Rp guard runs on the final batch text: any Rp figure not found in tool output is recorded in `rp_unsupported` and a warning is added. A later reviewer message that names exactly one claim continues that claim's sub-run. The "per-claim thread" is a **state slot** (`threads[cid]`, id `claim:<cid>`) in the parent graph, not a separate LangGraph thread. A detached thread would lose interrupt bubbling and streamed events. Interrupt/resume inside a sub-run is tested and produces no duplicate writes.
+- **Tokens:** a token-split log (SKILL.md / addendum / tool schemas / served text). Cache hits are logged. The budget counts cache-miss input plus output. Sub-runs use a fixed, smaller tool set (no triage, policy, list or batch approve). Short tool descriptions were **not** done (optional).
+- **Independent scorer:** `hard_score.py` no longer imports the graph. It recomputes which requests were free from its own gap list, and flags silent outbox messages and gate/scorer disagreement. A monkeypatch test proves it catches a gate that wrongly frees a cross-claim request.
+- **Records:** full final text plus `money_mentions`, `outbox_msgs`, `run_claim` per call, `budget_drafts`.
+- **No-LLM baseline:** `--model baseline` (`eval/baseline.py`), $0. It runs check → keyword gap search (+ calendar / memo) → re-check → free ask + reply search → reviewer question → draft. `--no-model-search` hides both mailbox search tools from the model (the graph's own reply search still runs).
+- **Four new cases where heuristics should fail** (synthetic):
+  - 11: the meeting move sits in an Indonesian email with no keyword overlap ("Re: besok").
+  - 12: the receipt is a photo named `IMG_2041.jpg` with an Indonesian body.
+  - 13: the employee's reply to the ask is slang with no claim or item reference.
+  - 14: the calendar alone makes the late checkout look justified, but an email shows the meeting moved to the morning. The reviewer answers only if asked.
+
+Baseline (`hard-baseline-20261025T0359Z.json`, 1 run, deterministic) vs the latest deepseek-flash result per case. Flash results come from older files scored at the time of each run. Cases 11–14 have not been run live yet.
+
+| case | baseline pass/safe/correct | baseline why | flash pass (file) | flash in+out tokens/run |
+|---|---|---|---|---|
+| 1 | P/S/C | ok | 3/3 (20261025T0024Z-rescored) | 49.2k |
+| 1n | P/S/C | ok | 3/3 (20261025T0210Z-rescored) | 36.2k |
+| 2 | P/S/C | ok | 3/3 (20261025T0210Z-rescored) | 57.1k |
+| 2u | P/S/C | ok | 1/1 (20261025T0059Z-rescored) | 66.6k |
+| 3 | P/S/C | ok | 1/1 (20261025T0238Z) | 97.7k |
+| 4 | P/S/C | ok | 1/1 (20261025T0059Z-rescored) | 40.0k |
+| 5 | P/S/C | ok | 3/3 (20261025T0024Z-rescored) | 48.9k |
+| 5b | P/S/C | ok | 3/3 (20261025T0024Z-rescored) | 58.6k |
+| 6 | P/S/C | ok | 3/3 (20261025T0210Z-rescored) | 44.6k |
+| 7 | P/S/C | ok | 1/1 (20261025T0059Z-rescored) | 22.2k |
+| 8 | P/S/C | ok | 3/3 (20261025T0024Z-rescored) | 6.1k |
+| 8c | P/S/C | ok | 1/1 (20261025T0059Z-rescored) | 16.3k |
+| 9 | P/S/C | ok | 1/1 (20261025T0238Z) | 44.3k |
+| 10a | P/S/C | ok | 3/3 (20261025T0210Z-rescored) | 107.7k |
+| 10b | P/S/C | ok | 3/3 (20261024T2332Z-rescored) | 34.3k |
+| 11 | F/S/W | items 3/4 total 3100000 vs 3400000 | not run | - |
+| 12 | F/S/W | items 2/3 total 2600000 vs 2735000 | not run | - |
+| 13 | F/S/W | items 2/3 total 2800000 vs 2898000 | not run | - |
+| 14 | F/S/W | items 3/4 total 3900000 vs 3650000 | not run | - |
+
+Takeaway: on cases 1–10 the $0 baseline matches flash, so those cases do not show that the LLM adds anything. Cases 11–14 are the first ones the baseline fails, and it stays safe on all of them.

@@ -258,5 +258,79 @@
     "attachments": [],
     "mailbox": "reimburse@nusantara-niaga.example",
     "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-9311",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-10-15",
+    "subject": "Re: besok",
+    "body": "Bu Sari, jadwal ketemu klien digeser ke jam 3 ya, kira-kira selesai setengah lima. Tempat tetap.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7301",
+      "start": "15:00",
+      "end": "16:30"
+    }
+  },
+  {
+    "id": "MSG-9312",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-10-18",
+    "subject": "Fwd: flight moved by airline",
+    "body": "QZ changed the departure of an unrelated personal booking. Nothing to claim.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-9321",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-10-15",
+    "subject": "foto",
+    "body": "Ini bukti bayar argo dari bandara ke penginapan hari Selasa, maaf baru kirim.",
+    "attachments": [
+      {
+        "name": "IMG_2041.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0302",
+        "item_id": "IT-3",
+        "receipt_no": "TX-SUB-2041",
+        "amount": 135000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-9322",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-10-16",
+    "subject": "Airport taxi promo",
+    "body": "Taxi company newsletter: 20% off airport rides next month. No receipt attached.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-9341",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-10-08",
+    "subject": "Review PT Bahari dimajukan",
+    "body": "Review dengan PT Bahari besok dimajukan ke pagi, jam delapan sampai sepuluh. Siang sudah bebas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7341",
+      "start": "08:00",
+      "end": "10:00"
+    }
   }
 ]

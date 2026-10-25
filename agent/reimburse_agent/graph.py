@@ -466,23 +466,27 @@ BUDGET_STOP = "graph_budget_stop"  # AIMessage.name of the graph's own stop text
 
 def build_graph(model, tools, system_prompt: str | None = None, checkpointer=None, compact: bool = True,
                 max_gated: int = MAX_GATED_CALLS, run_claim: str | None = None,
-                served: dict[str, tuple[dict, str]] | None = None, token_budget: int | None = None):
+                served: dict[str, tuple[dict, str]] | None = None, token_budget: int | None = None,
+                model_search: bool = True):
     """model: any LangChain chat model with bind_tools. tools: LangChain tools (e.g. from MCP).
     compact: shrink tool outputs before the model sees them (see compact.py); False = raw.
     run_claim: the claim this run investigates; without it every evidence request is gated, reviewer
     decisions are not injected and there is no gap search budget or auto-draft.
     served: tool name -> (args it holds, output) the caller already has (batch: triage_claims, get_policy). The tool stays
     in the bound list; a call to it just returns the held text instead of hitting the server again.
-    token_budget: model tokens this run may use; once spent, the agent node stops with plain text
-    (no model call, no tool call) and the run ends the normal way (graph_actions or END)."""
+    token_budget: model tokens this run may use; once spent, the agent node stops and the graph drafts from
+    the engine's check with zero model tokens ("needs human: model budget used; open gaps: ...").
+    model_search=False: the model is not given the mailbox search tools (the graph's own post-ask reply search
+    still runs); an eval switch to measure what the graph's search does on its own."""
     system = SystemMessage(system_prompt if system_prompt is not None else load_system_prompt())
     tools = [t for t in tools if t.name not in HIDDEN_TOOLS]
     by_name = {t.name: t for t in tools}
     if run_claim and SEARCH_TOOL in by_name and GAP_SEARCH_TOOL not in by_name:
         tools = [*tools, gap_search_tool()]  # bound once for the whole run: the tool list never changes
         by_name[GAP_SEARCH_TOOL] = tools[-1]
-    bound = model.bind_tools(tools)
-    split = token_split(system.content, tools, served)
+    model_tools = tools if model_search else [t for t in tools if t.name not in (SEARCH_TOOL, GAP_SEARCH_TOOL)]
+    bound = model.bind_tools(model_tools)
+    split = token_split(system.content, model_tools, served)
     log.info("token split (est. tokens per call): %s", split)
 
     async def invoke(name: str, args: dict) -> str:

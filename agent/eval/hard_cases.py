@@ -83,6 +83,16 @@ CASES = [
              {"IT-3": "approve_capped"}, reviewer_says="Reviewer: cap the hotel."),
     HardCase("10b", "altered IDs: boarding pass + wrong-trip trap", "CLM-2027-0501", ALTERED, _p("CLM-2027-0501"),
              ["MSG-8001"], ["MSG-8201"]),
+    # Claude review 6: keyword heuristics should fail here (synthetic, see hard_fixtures.HEURISTIC_HARD_INBOX).
+    HardCase("11", "paraphrased reschedule justifies the late checkout ('digeser ke jam 3')", "CLM-2026-0301", HARD,
+             _p("CLM-2026-0301"), ["EVT-7301", "MSG-9311"], ["MSG-9312"]),
+    HardCase("12", "receipt IMG_2041.jpg identifiable only from the email body", "CLM-2026-0302", HARD,
+             _p("CLM-2026-0302"), ["MSG-9321"], ["MSG-9322"]),
+    HardCase("13", "employee replies to the receipt ask in slang (no claim/item words)", "CLM-2026-0303", HARD,
+             _p("CLM-2026-0303"), ["MSG-9331"]),
+    HardCase("14", "calendar vs later email: the meeting was moved earlier, late checkout no longer justified",
+             "CLM-2026-0304", HARD, _p("CLM-2026-0304"), ["EVT-7341", "MSG-9341"], [], {"IT-4": "reject"},
+             reviewer="decide_if_asked", reviewer_says="Reviewer: reject the late checkout."),
 ]
 
 
@@ -171,6 +181,11 @@ def stop_reply(case: HardCase, rec: dict) -> str | None:
     plain words (case.reviewer_says), never as JSON; the graph has to parse them."""
     if case.reviewer == "silent":
         return None
+    if case.reviewer == "decide_if_asked":
+        # The reviewer only answers an open question: once the agent drafted on its own, the run is over.
+        if rec.get("drafted_since_human"):
+            return None
+        return f"{case.reviewer_says} Then finish with draft_decision."
     if case.reviewer == "follow_up_after_draft":
         if rec.get("followed_up") or not rec.get("drafted_since_human"):
             return None

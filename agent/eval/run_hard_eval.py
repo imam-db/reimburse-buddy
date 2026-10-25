@@ -30,7 +30,8 @@ from reimburse_agent.mcp_client import mcp_tools
 
 from .hard_cases import CASES, review, stop_reply
 from .hard_score import score
-from .run_eval import PRICES, RESULTS, RP, cost
+from .baseline import BaselineModel
+from .run_eval import PRICES, RESULTS, RP, cost as _cost
 
 FAIL_MSG = "upstream timeout (injected by eval, first call only)"
 STATUSES = ("approved", "partially_approved", "rejected", "on_hold")
@@ -73,6 +74,10 @@ async def server_state(by_name) -> dict:
     return {"outbox": n, "outbox_msgs": msgs, "changed_status": sorted(changed)}
 
 
+def cost(model_name: str, u: dict) -> float:
+    return 0.0 if model_name == "baseline" else _cost(model_name, u)
+
+
 TOKEN_CAP = 60_000  # per run (input + output); a run past it stops and is scored as is
 
 
@@ -86,8 +91,11 @@ def use_sqlite_cache(path: str) -> None:
     set_llm_cache(SQLiteCache(database_path=path))
 
 
-async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP, model=None):
-    """model: tests pass a fake chat model; otherwise DeepSeek via the OpenAI-compatible API."""
+async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP, model=None, model_search=True):
+    """model: tests pass a fake chat model; "baseline" is the no-LLM heuristic policy (eval/baseline.py,
+    reviewer answers via the structured form); otherwise DeepSeek via the OpenAI-compatible API."""
+    if model is None and model_name == "baseline":
+        model = BaselineModel()
     model = model or ChatOpenAI(model=model_name, api_key=api_key, base_url="https://api.deepseek.com",
                                 temperature=0, timeout=180, max_retries=2)
     t0 = time.perf_counter()
@@ -107,7 +115,8 @@ async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP, model=
         if case.batch:
             g = build_batch_graph(model, tools, case.batch, checkpointer=InMemorySaver())
         else:
-            g = build_graph(model, tools, checkpointer=InMemorySaver(), run_claim=case.claim_id)
+            g = build_graph(model, tools, checkpointer=InMemorySaver(), run_claim=case.claim_id,
+                            model_search=model_search)
         conf = {"configurable": {"thread_id": str(uuid.uuid4())}, "recursion_limit": 60}
         payload = {"messages": [("user", case.prompt)], "declined": {}}
         pending: dict[str, dict] = {}
@@ -205,6 +214,9 @@ async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP, model=
                 rec["reviewer_turns"] += 1
                 rec["drafted_since_human"] = False
                 payload = {"messages": [("user", reply)]}
+                if model_name == "baseline" and case.human_decisions and case.reviewer_says and case.reviewer_says in reply:
+                    # the baseline has no language understanding: the reviewer uses the structured form
+                    payload.update(reviewer_decisions=dict(case.human_decisions), decisions_source="form")
         except Exception as exc:  # record, don't abort the whole eval
             rec["error"] = f"{type(exc).__name__}: {exc}"[:300]
             st = await g.aget_state(conf)
@@ -302,7 +314,9 @@ def summarize(model, runs):
 
 async def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", required=True, choices=sorted(PRICES))
+    ap.add_argument("--model", required=True, choices=[*sorted(PRICES), "baseline"])
+    ap.add_argument("--no-model-search", action="store_true",
+                    help="do not give the model the mailbox search tools (the graph's reply search still runs)")
     ap.add_argument("--runs", type=int, default=3)
     ap.add_argument("--cases", nargs="*")
     ap.add_argument("--budget", type=float, default=1.0, help="stop when estimated USD spend exceeds this")
@@ -312,8 +326,8 @@ async def main():
     a = ap.parse_args()
     if a.cache:
         use_sqlite_cache(a.cache)
-    key = os.environ.get("DEEPSEEK_API_KEY")
-    if not key:
+    key = os.environ.get("DEEPSEEK_API_KEY") if a.model != "baseline" else ""
+    if not key and a.model != "baseline":
         raise SystemExit("set DEEPSEEK_API_KEY")
     cases = [c for c in CASES if not a.cases or c.id in a.cases]
     budget = {"spent": 0.0, "limit": a.budget}
@@ -323,14 +337,14 @@ async def main():
         async with sem:
             if budget["spent"] > budget["limit"]:
                 return None
-            return await run_one(a.model, case, key, budget, a.token_cap)
+            return await run_one(a.model, case, key, budget, a.token_cap, model_search=not a.no_model_search)
 
     runs = [r for r in await asyncio.gather(*[go(c) for _ in range(a.runs) for c in cases]) if r]
     s = summarize(a.model, runs)
     s["skipped_for_budget"] = a.runs * len(cases) - len(runs)
     RESULTS.mkdir(exist_ok=True)
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%MZ")
-    out = RESULTS / f"hard-{a.model}-{ts}.json"
+    out = RESULTS / f"hard-{a.model}{'-nosearch' if a.no_model_search else ''}-{ts}.json"
     out.write_text(json.dumps({"summary": s, "runs": runs}, indent=2, ensure_ascii=False, default=str))
     print(json.dumps(s, indent=2, ensure_ascii=False))
     print("saved", out, "spent~", round(budget["spent"], 4))
