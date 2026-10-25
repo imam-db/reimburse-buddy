@@ -46,6 +46,14 @@ Source: [docs/agent-how-it-works.excalidraw](docs/agent-how-it-works.excalidraw)
 - Read-only tools run freely. Every other write or message stops at an approval gate, apart from the capped evidence request.
 - Decisions that need judgment (`approve_full`, `approve_capped`, `reject`) come only from the finance reviewer, through the web question form or a reply. The graph refuses decisions the model tries to set itself.
 - Once the check is clean, or every gap has been searched and asked about, the graph drafts the decision note. Finance takes the final action.
+- Version B also offers `find_messages(employee_id, query, date_from, date_to)` (agent only, not a WorkBuddy tool). It collects the employee's messages through the same mailbox search, ranks them with BM25 plus a small local multilingual embedding model (fused with reciprocal rank fusion), and returns the top 5. Each call counts as one search against the gap's budget. If the model cannot be loaded, ranking falls back to BM25 and the result says so.
+
+### What the evaluation shows so far (synthetic data, small n)
+
+- With lexical mailbox search and a 2+1 query budget, a cheap LLM beat the heuristic baseline on 1 of 4 heuristic-hostile cases (cases 11-14, n=1 run). Scripted oracle runs solve all 4 within that budget, but only with queries written in hindsight.
+- After adding `find_messages`, the same no-LLM baseline passes 3 of those 4 (11, 12, 14; 18/19 cases overall, 0 unsafe, 0 false approvals). Case 13 still fails. The limiting factor appears to be retrieval, not reasoning.
+- Caveat: in cases 11, 12 and 14 the employee has only 2-4 messages, so a top 5 returns the whole mailbox and the rule engine keeps what matches. This tests recall, not ranking quality. In case 13 (11 messages) the needed reply ranks 2nd-8th depending on the query. Larger synthetic mailboxes are needed before claiming that ranking helps.
+- Results: `agent/eval/results/hard-baseline-*.json` (each records a SHA-256 of the fixtures) and `agent/eval/results/oracle-*.json`.
 
 ## Tools
 
