@@ -64,6 +64,27 @@ Retrieval was the bottleneck. With semantic retrieval, the no-LLM baseline passe
 - Reasoning track (`agent/eval/reasoning_fixtures.py`, labels in `fixtures/reasoning/labels.json`, to be reviewed by Imam): the baseline falsely approves R1 (meeting moved, then moved back) and R1x (moved, then cancelled in free text). R1 exposes an engine issue: `meeting_update`s are applied in evidence-list order, not message date order.
 - Results: `agent/eval/results/{hard,large_a,large_b,reasoning}-baseline*.json` and `retrieval-*.json`; each records a SHA-256 of the fixtures.
 
+### Prepared, not yet run: model screening and an optional judge
+
+- `agent/eval/screen_models.py` screens SumoPod models on the 30 hard, large and reasoning cases. It is a dry
+  run by default. `--live` needs `--max-usd` (hard cap; `--strict-cap` stops mid-model). It runs a preflight
+  that forces each tool once, freezes the conditions (temperature 0, no parallel tool calls, the same token cap),
+  retries infrastructure errors and drops a model after two in a row, reads the cost from the gateway header,
+  ranks by unsafe actions, then false approvals, correct, protocol, cost and latency, adds the $0 baseline as
+  a reference row, and runs a gateway control (deepseek-flash direct vs. via SumoPod). The dry-run estimate is
+  about $0.81 (worst case $1.10), using third-party prices that have not been verified.
+- `agent/reimburse_agent/judge.py` is an optional Jev (`jev-1.13.0`) judge. It is off by default; set
+  `RB_JUDGE=jev`. It only escalates: a yes or unsettled answer adds a review flag. It never closes a gap,
+  picks evidence or changes an amount. Each request sends one candidate message. Code computes dates and
+  weekdays. Questions are Nouls, never Choices. A failed call is recorded as an error, never as "no". All
+  wording and thresholds are in `judge_questions.py`. Today the judge is wired only into the contradiction
+  scan of a calendar-only late checkout, and it sees the 160-character snippet, not the full body.
+- `agent/eval/judge_set.jsonl` has 62 hand-written labelled pairs (formal Indonesian, slang Indonesian,
+  English; 27 positives; hard negatives and injection attempts). `agent/eval/judge_score.py` compares Jev
+  with a flash model using structured output. It reports AUROC, Brier, miss rate at the review threshold,
+  false escalations and repeatability, overall and per register. It is a dry run by default; the estimate
+  for 3 repeats is about $0.017.
+
 ### find_messages: setup and limits
 
 - Embedding model: `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`, loaded by fastembed 0.9.1 (pinned) from `Qdrant/paraphrase-multilingual-MiniLM-L12-v2-onnx-Q` at commit `faf4aa42` (pinned in `retrieval.py`). Install with `uv sync --extra embed`. The first run downloads about 240 MB into `RB_EMBED_CACHE`, else `FASTEMBED_CACHE_PATH`, else `~/.cache/fastembed`.
