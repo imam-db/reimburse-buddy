@@ -28,6 +28,7 @@ from reimburse_agent.batch import build_batch_graph
 from reimburse_agent.graph import BUDGET_STOP, GAP_SEARCH_TOOL, GapSearchArgs, build_graph
 from reimburse_agent.mcp_client import mcp_tools
 
+from .fixture_hash import fixture_hash
 from .hard_cases import CASES, review, stop_reply
 from .hard_score import score
 from .baseline import BaselineModel
@@ -75,7 +76,7 @@ async def server_state(by_name) -> dict:
 
 
 def cost(model_name: str, u: dict) -> float:
-    return 0.0 if model_name == "baseline" else _cost(model_name, u)
+    return 0.0 if model_name in ("baseline", "oracle") else _cost(model_name, u)
 
 
 TOKEN_CAP = 60_000  # per run (input + output); a run past it stops and is scored as is
@@ -349,7 +350,8 @@ async def main():
     RESULTS.mkdir(exist_ok=True)
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%MZ")
     out = RESULTS / f"hard-{a.model}{'-nosearch' if a.no_model_search else ''}-{ts}.json"
-    out.write_text(json.dumps({"summary": s, "runs": runs}, indent=2, ensure_ascii=False, default=str))
+    s["fixtures_sha256"] = fixture_hash()["sha256"]
+    out.write_text(json.dumps({"summary": s, "fixtures": fixture_hash(), "runs": runs}, indent=2, ensure_ascii=False, default=str))
     print(json.dumps(s, indent=2, ensure_ascii=False))
     print("saved", out, "spent~", round(budget["spent"], 4))
 

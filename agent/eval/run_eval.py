@@ -26,6 +26,7 @@ from langgraph.types import Command
 from reimburse_agent.graph import build_graph
 from reimburse_agent.mcp_client import mcp_tools
 
+from .fixture_hash import fixture_hash
 from .cases import CASES, engine, expected
 
 # USD per 1M tokens, https://api-docs.deepseek.com/quick_start/pricing (read 2026-10-24).
@@ -248,7 +249,8 @@ async def main():
     RESULTS.mkdir(exist_ok=True)
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%MZ")
     out = RESULTS / f"{a.model}-{'raw' if a.raw else 'compact'}-{ts}.json"
-    out.write_text(json.dumps({"summary": s, "runs": runs}, indent=2, ensure_ascii=False))
+    s["fixtures_sha256"] = fixture_hash()["sha256"]
+    out.write_text(json.dumps({"summary": s, "fixtures": fixture_hash(), "runs": runs}, indent=2, ensure_ascii=False))
     print(json.dumps(s, indent=2))
     for r in runs:
         print(r["claim"], r["latency_s"], r["usage"]["input"], r["items_correct"], "/", r["items_total"],
