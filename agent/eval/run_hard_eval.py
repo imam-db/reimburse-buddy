@@ -84,12 +84,14 @@ def use_sqlite_cache(path: str) -> None:
     set_llm_cache(SQLiteCache(database_path=path))
 
 
-async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP):
-    model = ChatOpenAI(model=model_name, api_key=api_key, base_url="https://api.deepseek.com",
-                       temperature=0, timeout=180, max_retries=2)
+async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP, model=None):
+    """model: tests pass a fake chat model; otherwise DeepSeek via the OpenAI-compatible API."""
+    model = model or ChatOpenAI(model=model_name, api_key=api_key, base_url="https://api.deepseek.com",
+                                temperature=0, timeout=180, max_retries=2)
     t0 = time.perf_counter()
-    rec = {"case": case.id, "claim": case.claim_id, "calls": [], "gated": [], "questions": 0, "error": None,
-           "drafted_since_human": False}
+    # questions: turn-ending agent messages that ask something ("?"), not the scripted reviewer's replies
+    rec = {"case": case.id, "claim": case.claim_id, "calls": [], "gated": [], "questions": 0, "reviewer_turns": 0,
+           "error": None, "drafted_since_human": False}
     usage = {"input": 0, "cache_hit": 0, "output": 0, "llm_calls": 0}
     tool_texts: list[str] = []
     env = {"REIMBURSE_BUDDY_DATA": str(case.data)}
@@ -120,6 +122,8 @@ async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP):
                             continue
                         for m in (upd or {}).get("messages", []):
                             if m.type == "ai":
+                                if node == "agent" and not m.tool_calls and "?" in str(m.content):
+                                    rec["questions"] += 1
                                 u = usage_of(m)
                                 usage["llm_calls"] += 1
                                 for k in ("input", "output", "cache_hit"):
@@ -159,17 +163,29 @@ async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP):
                                          "approved": ok, "reason": reason})
                     payload = Command(resume={"approved": ok, "tool_call_id": req["tool_call_id"], "reason": reason})
                     continue
+                rec["reviewer_decisions_state"] = dict(st.values.get("reviewer_decisions", {}))
                 reply = stop_reply(case, rec) if turns < 2 else None
                 if reply is None:
                     break
                 turns += 1
-                rec["questions"] += 1
+                rec["reviewer_turns"] += 1
                 rec["drafted_since_human"] = False
                 payload = {"messages": [("user", reply)]}
         except Exception as exc:  # record, don't abort the whole eval
             rec["error"] = f"{type(exc).__name__}: {exc}"[:300]
             st = await g.aget_state(conf)
         server = await server_state(raw)
+    vals = st.values if st else {}
+    eff = vals.get("effective_args", {})
+    for c in rec["calls"]:  # score what really ran: the graph injects reviewer decisions, strips ignored IDs
+        if c["id"] in eff and eff[c["id"]] != c["args"]:
+            c["model_args"], c["args"] = c["args"], eff[c["id"]]
+    for i, w in enumerate(w for w in vals.get("writes", []) if w.get("by") == "graph"):
+        rec["calls"].append({"id": f"graph-write-{i}", "name": w["tool"], "args": w["args"], "schema_ok": True,
+                             "turn": -1, "auto": True, "declined": False, "error": False, "ok": True})
+    rec["reviewer_decisions"] = vals.get("reviewer_decisions", {})
+    rec["unparsed_reviewer"] = vals.get("unparsed_reviewer", [])
+    rec["model_decisions_refused"] = sum("human_decisions_not_from_reviewer" in t for t in tool_texts)
     rec["server_changed"] = server["changed_status"]
     rec["latency_s"] = round(time.perf_counter() - t0, 1)
     rec["usage"] = usage
@@ -200,6 +216,7 @@ def summarize(model, runs):
             "correct": f"{sum(m.get('correct', False) for m in ms)}/{len(ms)}",
             "efficiency_avg": _avg([m.get("efficiency") for m in ms]),
             "unauthorized_writes": sum(m["unauthorized_writes"] for m in ms),
+            "evidence_precision_avg": _avg([m.get("evidence_precision") for m in ms]),
             "tool_calls_avg": round(sum(m["tool_calls"] for m in ms) / len(ms), 1),
             "llm_calls_avg": round(sum(r["usage"]["llm_calls"] for r in rs) / len(rs), 1),
             "input_tokens_avg": round(sum(r["usage"]["input"] for r in rs) / len(rs)),
@@ -225,6 +242,9 @@ def summarize(model, runs):
                                                  for r, m in zip(runs, allm) if r["case"] == "2u"),
         "invented_rp": sum(len(m["invented_rp"]) for m in allm),
         "wrong_evidence_submitted": sum(len(m.get("wrong_evidence_submitted", [])) for m in allm),
+        "evidence_precision_avg": _avg([m.get("evidence_precision") for m in allm]),
+        "model_decisions_refused": sum(r.get("model_decisions_refused", 0) for r in runs),
+        "agent_questions": sum(m.get("questions", 0) for m in allm),
         "cost_usd_total_peak": round(cost(model, u), 4), "cases": rows,
     }
 

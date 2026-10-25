@@ -169,3 +169,20 @@ def test_redact(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-abcdef1234567890")
     out = redact("auth failed for sk-abcdef1234567890; Authorization: Bearer xyz123")
     assert "sk-abcdef1234567890" not in out and "xyz123" not in out
+
+
+def test_question_form_resumes_the_run_with_decisions(client, monkeypatch, tmp_path):
+    use_script(monkeypatch, tmp_path, [
+        {"tool_calls": [{"name": "check_claim", "args": {"claim_id": HERO}, "id": "r1"}]},
+        {"content": "Should the hotel IT-3 be capped?"},
+        {"content": "Noted, done."}])
+    rid = start(client)
+    html = wait_page(client, rid, "id=question")
+    assert "awaiting your answer" in html and "name='dec_IT-3'" in html
+    qid = web.INVESTIGATOR.runs[rid].question["question_id"]
+    client.post(f"/admin/investigations/{rid}/reply", data={"question_id": "stale", "dec_IT-3": "reject"})
+    assert web.INVESTIGATOR.runs[rid].question is not None  # stale id ignored
+    client.post(f"/admin/investigations/{rid}/reply", data={"question_id": qid, "dec_IT-3": "approve_capped",
+                                                            "reply": "cap it"})
+    html = wait_page(client, rid, "id=final")
+    assert "Reviewer replied (decisions: IT-3: approve_capped)" in html and "Noted, done." in html
