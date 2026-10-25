@@ -23,6 +23,7 @@ from langgraph.graph.message import add_messages
 from langgraph.types import interrupt
 
 from .compact import compact as _compact, tool_text
+from .retrieval import clean_query, find_messages as ranked_find
 
 SKILL_PATH = Path(__file__).resolve().parents[2] / "skills" / "claim-auditor" / "SKILL.md"
 
@@ -31,6 +32,7 @@ SKILL_PATH = Path(__file__).resolve().parents[2] / "skills" / "claim-auditor" / 
 READ_ONLY_TOOLS = frozenset({
     "list_claims", "get_claim", "get_policy", "search_reimburse_mailbox", "get_calendar",
     "find_approval_memo", "check_claim", "triage_claims", "draft_decision", "get_outbox", "search_for_gap",
+    "find_messages",
 })
 # request_missing_evidence (fixed template, owner-only; src/reimburse_buddy/evidence_request.py) runs
 # without the reviewer only when free_evidence_request() says so; otherwise it is gated like any write.
@@ -48,6 +50,9 @@ PROMPT_ADDENDUM = """
   code from your latest `check_claim`. It writes a fixed message to the claim owner.
 - Search the mailbox for one open gap with `search_for_gap(item_id, gap_code, query)`. Each open gap
   gets 2 searches before you ask the employee and 1 more after; past that the search is refused.
+- `find_messages(employee_id, query, date_from, date_to)` ranks the employee's messages in a date window
+  by meaning as well as words (any language), and returns the top 5. Each call is one read from the
+  same per-gap budget as a search.
 - Do not pass `human_decisions` yourself. Reviewer decisions come only from the reviewer; the graph
   fills them into check_claim, draft_decision and request_missing_evidence.
 - `send_message` always needs reviewer approval here; use it only when a free-text message is
@@ -217,8 +222,9 @@ def attribute_query(query: str, gaps: list[str], check: dict) -> str | None:
     scores = {}
     for k in gaps:
         item, code = k.split(":", 1)
-        sc = bool(re.search(GAP_WORDS.get(code, r"$^"), q)) + bool(re.search(CATEGORY_QUERY.get(cat.get(item), r"$^"), q))
-        scores[k] = sc + (1 if item.lower() in q else 0)
+        sc = (bool(re.search(rf"\b(?:{GAP_WORDS.get(code, '$^')})\b", q))
+              + bool(re.search(rf"\b(?:{CATEGORY_QUERY.get(cat.get(item), '$^')})\b", q)))
+        scores[k] = sc + (1 if re.search(rf"(?<![\w-]){re.escape(item.lower())}(?![\w-])", q) else 0)
     best = max(scores.values(), default=0)
     top = [k for k, v in scores.items() if v == best]
     return top[0] if best > 0 and len(top) == 1 else None
@@ -241,6 +247,26 @@ def gap_search_tool() -> StructuredTool:
         description=("Search the reimburse@ mailbox (same results as search_reimburse_mailbox, for the claim's "
                      "owner) for evidence for ONE open gap from your latest check_claim. Each gap gets 2 searches "
                      "before you ask the employee and 1 more after."))
+
+
+FIND_TOOL = "find_messages"  # version B only; ranked search, counted like one mailbox search
+
+
+class FindArgs(BaseModel):
+    employee_id: str = Field(description="the claim owner's employee ID")
+    query: str = Field(description="what the message is about, any language, e.g. 'meeting moved earlier'")
+    date_from: str | None = Field(default=None, description="ISO date, e.g. the trip start")
+    date_to: str | None = Field(default=None, description="ISO date, e.g. the trip end")
+
+
+def find_tool() -> StructuredTool:
+    async def _never(**_kw):
+        raise RuntimeError("find_messages is handled by the graph")
+    return StructuredTool.from_function(
+        coroutine=_never, name=FIND_TOOL, args_schema=FindArgs,
+        description=("Ranked search of the reimburse@ mailbox for one employee's messages in a date window: "
+                     "BM25 plus a multilingual embedding model, so 'meeting moved' also finds 'jadwal "
+                     "dimajukan'. Returns the top 5. Counts as one search for the open gap it is about."))
 
 
 def search_key(args: dict) -> str:
@@ -509,9 +535,9 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
     tools = [t for t in tools if t.name not in HIDDEN_TOOLS]
     by_name = {t.name: t for t in tools}
     if run_claim and SEARCH_TOOL in by_name and GAP_SEARCH_TOOL not in by_name:
-        tools = [*tools, gap_search_tool()]  # bound once for the whole run: the tool list never changes
-        by_name[GAP_SEARCH_TOOL] = tools[-1]
-    model_tools = tools if model_search else [t for t in tools if t.name not in (SEARCH_TOOL, GAP_SEARCH_TOOL)]
+        tools = [*tools, gap_search_tool(), find_tool()]  # bound once for the whole run: the tool list never changes
+        by_name[GAP_SEARCH_TOOL], by_name[FIND_TOOL] = tools[-2], tools[-1]
+    model_tools = tools if model_search else [t for t in tools if t.name not in (SEARCH_TOOL, GAP_SEARCH_TOOL, FIND_TOOL)]
     bound = model.bind_tools(model_tools)
     split = token_split(system.content, model_tools, served)
     log.info("token split (est. tokens per call): %s", split)
@@ -521,6 +547,8 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             want, text = served[name]  # held only for these args (e.g. the same batch); other args go to the server
             if all(args.get(k) in (None, v) for k, v in want.items()):
                 return text
+        if name == SEARCH_TOOL and run_claim:
+            args = {**args, "query": clean_query(args.get("query", ""))}
         res = await by_name[name].ainvoke(args)
         if compact:
             return _compact(tool_text(res))
@@ -704,9 +732,15 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                 for k in gaps_now:
                     attempts.setdefault(k, {})["request"] = here
 
-        async def search(args, gap: str | None) -> str:
+        async def ranked(args) -> str:
+            async def raw(a):
+                return _rows(tool_text(await by_name[SEARCH_TOOL].ainvoke(a)))
+            return json.dumps(await ranked_find(raw, args.get("employee_id"), args.get("query", ""),
+                                                args.get("date_from"), args.get("date_to")), ensure_ascii=False)
+
+        async def search(args, gap: str | None, find: bool = False) -> str:
             nonlocal streak
-            key = search_key(args)
+            key = search_key(args) + (f"|find|{args.get('date_from')}|{args.get('date_to')}" if find else "")
             if key in cache:
                 streak += 1
                 return json.dumps({"note": ALREADY_SEARCHED, "results": json.loads(cache[key])}, ensure_ascii=False)
@@ -716,7 +750,7 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                 if att.get("searches", 0) >= lim:
                     streak += 1
                     return json.dumps({"note": await on_limit(gap, lim)}, ensure_ascii=False)
-            content = await invoke(SEARCH_TOOL, args)
+            content = await (ranked(args) if find else invoke(SEARCH_TOOL, args))
             streak = 0
             cache[key] = json.dumps(_as_json(content), ensure_ascii=False)
             if gap is not None:
@@ -841,7 +875,10 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                 else:
                     args = {"employee_id": check.get("employee_id"), "query": args.get("query", "")}
                     content = await search(args, k)
-            elif name == SEARCH_TOOL:
+            elif name in (SEARCH_TOOL, FIND_TOOL):
+                find = name == FIND_TOOL
+                if find and check and not args.get("employee_id"):
+                    args["employee_id"] = check.get("employee_id")
                 gap = None
                 if run_claim and gaps_now:
                     gap = gaps_now[0] if len(gaps_now) == 1 else attribute_query(args.get("query", ""), gaps_now, check)
@@ -851,11 +888,11 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                         content = json.dumps({"note": UNATTRIBUTED_LIMIT.format(n=unattr, gaps=", ".join(gaps_now))})
                     else:
                         before = len(cache)
-                        content = await search(args, None)
+                        content = await search(args, None, find)
                         unattr += len(cache) > before
                         note = USE_GAP_SEARCH.format(gaps=", ".join(gaps_now))
                 else:
-                    content = await search(args, gap)
+                    content = await search(args, gap, find)
             else:
                 content = None
                 if name in DECISION_TOOLS:
