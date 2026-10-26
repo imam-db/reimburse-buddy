@@ -98,7 +98,7 @@ def _pending_plans() -> list[tuple[str, dict]]:
     out: list[tuple[str, dict]] = []
     for run_id in store().runs():
         plan = store().load_plan(run_id)
-        if not plan:
+        if not plan or plan.get("staging_errors"):
             continue
         if store().load_decisions(run_id, plan["version"]) is not None:
             continue
@@ -139,6 +139,11 @@ def plans_index():
 
 @router.get("/admin/plans/{run_id}", response_class=HTMLResponse)
 def plan_page(run_id: str, msg: str = ""):
+    from . import intake  # late import: intake.py imports this module
+
+    question = intake.pending_for(run_id)
+    if question and question.get("kind") == "clarify":
+        return HTMLResponse(intake.render_question(run_id, question, msg=msg))
     try:
         plan = store().load_plan(run_id)
     except ValueError:
@@ -168,4 +173,10 @@ async def decide(run_id: str, request: Request):
              if k.startswith("note:") and k.split(":", 1)[1] in ids and str(v).strip()}
     store().save_decisions(run_id, plan["version"], {"plan_id": plan["plan_id"], "decisions": decisions,
                                                      "notes": notes, "actor": "human:reviewer"})
+    from . import intake  # late import: intake.py imports this module
+
+    # When this process started the run (request intake), resume it here: approval -> executor -> mock
+    # tools. Otherwise the decision map is only stored, for an external driver such as plan_demo.py.
+    intake.resume_if_live(run_id, {"plan_id": plan["plan_id"], "decisions": decisions, "notes": notes,
+                                   "actor": "human:reviewer"})
     return RedirectResponse(f"/admin/plans/{run_id}?msg=Keputusan+disimpan+/+decisions+saved", status_code=303)

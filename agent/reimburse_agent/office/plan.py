@@ -43,6 +43,12 @@ PERSON_RE = re.compile(r"\b(?:ke|kepada|dengan|sama|untuk|to|with|for)\s+((?:EMP
                        r"[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)")
 NOT_NAMES = {"Jumat", "Senin", "Selasa", "Rabu", "Kamis", "Friday", "Monday", "Tuesday", "Wednesday", "Thursday",
              "Finance", "Semua", "All"}
+# A request aimed at a whole group is never resolved to "everyone": it becomes one question that must be
+# answered with an explicit directory ID, exactly like an ambiguous name.
+BROAD_TARGET = "__broad_audience__"
+BROAD_RE = re.compile(r"\b(?:all (?:staff|employees|users|contacts|managers)|everyone|every employee"
+                      r"|semua (?:karyawan|staf|staff|pegawai|orang|kontak|manajer)"
+                      r"|seluruh (?:karyawan|staf|staff|pegawai|orang))\b", re.I)
 
 
 # --- reading the request (deterministic default; an LLM proposer can replace it) -----------------------
@@ -95,7 +101,9 @@ def read_request(request: str, documents: list[dict] | None = None) -> list[dict
             where = "task"
         else:
             continue
-        names = parse_names(cl) or list(last_names)
+        names = [n for n in parse_names(cl) if not BROAD_RE.search(n)]
+        if not names:
+            names = [BROAD_TARGET] if BROAD_RE.search(cl) else list(last_names)
         last_names = names or last_names
         topic = ("notulen" if re.search(r"notulen|minutes", low) else
                  "follow-up" if re.search(r"follow-?up", low) else cl[:80])
@@ -124,6 +132,14 @@ def who_question(intents: list[dict], directory: Directory, answers: dict[str, s
         for name in it["names"]:
             if name in answers:
                 continue
+            if name == BROAD_TARGET:
+                opts = sorted(directory.ids())
+                listing = "; ".join(c.short() for c in (directory.get(o) for o in opts) if c)
+                return {"id": "who:broad", "name": BROAD_TARGET, "options": opts,
+                        "id_text": "Permintaan ini ditujukan ke banyak orang sekaligus dan tidak dikirim massal. "
+                                   f"Pilih satu penerima dari direktori: {listing}.",
+                        "en": "This request targets a broad audience and is never sent to everyone. "
+                              f"Choose one recipient from the directory: {listing}."}
             found = directory.find(name)
             if len(found) == 1:
                 continue
@@ -146,7 +162,7 @@ def resolve_names(intents: list[dict], directory: Directory, answers: dict[str, 
         for name in it["names"]:
             if name in answers:
                 out[name] = answers[name]
-            else:
+            elif name != BROAD_TARGET:
                 found = directory.find(name)
                 if len(found) == 1:
                     out[name] = found[0].id
