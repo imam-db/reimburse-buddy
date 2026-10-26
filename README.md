@@ -113,6 +113,10 @@ Retrieval was the bottleneck. With semantic retrieval, the no-LLM baseline passe
 | `get_outbox()` | Everything the agent sent or changed this session |
 | `reset_demo()` | Restore all in-memory state before a new take (replies, outbox, approvals, statuses) |
 
+The four `(Mock write)` tools are registered only when `REIMBURSE_ENABLE_WRITE_TOOLS=1`. The
+WorkBuddy config (`.workbuddy/mcp.json`) does not set it, so in WorkBuddy the agent can only read and
+draft; version B's agent sets it and gates every write behind a human approval.
+
 Write tools are mocks: state lives in memory for one server process. `send_message` is a
 closed loop: scripted replies in `data/replies.json` are the employee's answer and land in the reimburse@ mailbox right away,
 so the agent can `search_reimburse_mailbox` and pass the reply's ID to `check_claim`.
@@ -205,7 +209,8 @@ tests/
 The agent proposes, the reviewer confirms. `triage_claims` is read-only; cleared claims change status only
 through `approve_cleared_batch(..., reviewer_confirmed=true)` with the exact cleared list. Final status
 changes, rejections, above-cap approvals, escalations and decision notices always wait for the reviewer.
-Gathering evidence and asking an employee for a missing document happen automatically.
+Gathering evidence happens automatically; asking an employee for a missing document also waits for the
+reviewer's approval.
 
 In a real deployment the evidence source is a dedicated reimburse@ mailbox that employees forward
 documents to, plus connectors for calendar, HR and ERP. The mock MCP tools here stand in for those.
