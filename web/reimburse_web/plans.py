@@ -106,8 +106,12 @@ def plan_page(run_id: str, msg: str = ""):
         plan = None
     if not plan:
         raise HTTPException(404, "no such plan")
-    return HTMLResponse(page.render(plan, log(), directory(), R.default_rules(),
-                                    action_url=f"/admin/plans/{run_id}/decide", msg=msg))
+    from . import app as web  # late import: app.py includes this router
+
+    markup = page.render(plan, log(), directory(), R.default_rules(),
+                         action_url=f"/admin/plans/{run_id}/decide", msg=msg)
+    markup = markup.replace("</head>", f"<style>{web.NAV_CSS}</style></head>", 1)
+    return HTMLResponse(markup.replace("<body>", f"<body>{web.nav_html()}", 1))
 
 
 @router.post("/admin/plans/{run_id}/decide")

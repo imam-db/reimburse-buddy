@@ -33,6 +33,9 @@ button{min-height:44px;display:inline-flex;align-items:center;justify-content:ce
 a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,label:focus-visible{outline:3px solid #1a5fb4;outline-offset:2px}"""
 
 WHERE = {"email": "Email", "calendar": "Kalender / Calendar", "task": "Tugas / Task"}
+TOOL_LABELS = {"send_email": "Email", "create_calendar_event": "Undangan rapat", "create_task": "Tugas"}
+STATUS_LABELS = {"execution": "Dijalankan", "rejection": "Ditolak", "approval": "Disetujui",
+                 "superseded": "Digantikan"}
 DAYS_ID = ("Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu")
 MONTHS_ID = ("", "Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des")
 
@@ -141,7 +144,8 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
                     "content</span>") if name in infl else ""
             return f"<pre{c}>{e(text)}</pre>{flag}" if pre else f"<span{c}>{e(text)}</span>{flag}"
         rows = [f"<tr><th>Siapa / Who</th><td>{'<br>'.join(_person(directory, w) for w in a['who'])}</td></tr>",
-                f"<tr><th>Apa / What</th><td><span class=tag>{e(a['tool'])}</span> "
+                f"<tr><th>Apa / What</th><td><span class=tag title='{e(a['tool'])}'>"
+                f"{e(TOOL_LABELS.get(a['tool'], a['tool']))}</span> "
                 + (field("subject", a["what"].get("subject", "")) if a["what"].get("subject")
                    else field("title", a["what"].get("title", "")))
                 + field("body", a["what"].get("body", ""), pre=True) + "</td></tr>"]
@@ -171,10 +175,11 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
                       f"<p><label>Catatan (opsional, agen akan mengusulkan rencana baru) / Note (optional, the agent "
                       f"proposes a new plan):<br><textarea name='note:{e(aid)}' rows=2 cols=70></textarea></label></p>")
         elif st:
-            decide = f"<p class=tag>Status: {e(st)}</p>"
+            decide = f"<p class=tag title='{e(st)}'>Status: {e(STATUS_LABELS.get(st, st))}</p>"
         out.append(f"<div class='card{cls}'><div class=\"sentence\">{sentence}</div>"
                    f"<b>Aksi {i} / Action {i}</b> <span class=muted>{e(aid)} &middot; "
-                   f"args_hash {e(a['args_hash'][:12])}</span><table>{''.join(rows)}</table>{assume}{decide}</div>")
+                   f"<span title='args_hash'>hash argumen</span> "
+                   f"{e(a['args_hash'][:12])}</span><table>{''.join(rows)}</table>{assume}{decide}</div>")
     if form:
         out.append("<p><button type=submit>Kirim keputusan / Submit decisions</button></p></form>")
     out.append("</body></html>")

@@ -62,6 +62,10 @@ LABELS = {
     "hotel": "Hotel",
     "taxi": "Taksi",
     "meal": "Makan",
+    # office tool names (agent/reimburse_agent/office/tools.py)
+    "send_email": "Email",
+    "create_calendar_event": "Undangan rapat",
+    "create_task": "Tugas",
     # document types (extract.DOC_TYPES)
     "hotel_receipt": "Struk hotel",
     "taxi_receipt": "Struk taksi",
