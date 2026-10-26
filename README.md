@@ -211,6 +211,27 @@ export REIMBURSE_AUDIT_DATABASE_URL='postgresql://user:pass@db.example:5432/reim
 - Outside production (`APP_ENV` unset or any other value), behaviour is unchanged: JSONL via
   `REIMBURSE_AUDIT_LOG`, otherwise a fresh in-memory log.
 
+### After deploy: audit log self-test
+
+Use Neon's **direct (unpooled) endpoint** for `REIMBURSE_AUDIT_DATABASE_URL` and connect with the
+application role (INSERT + SELECT only), never the owner role. psycopg connects with
+`prepare_threshold=None`, so it never creates server-side prepared statements even if a pooled/PgBouncer
+endpoint is used by mistake.
+
+Install the optional extra in the agent image and run the self-test as a Cloud Run job (same environment
+as the web/agent service):
+
+```bash
+cd agent
+uv sync --extra postgres
+uv run --extra postgres python -m reimburse_agent.audit_selftest
+```
+
+It prints one PASS/FAIL line per check — append + list roundtrip, duplicate `event_key`, UPDATE/DELETE/
+TRUNCATE denied on `audit_events`, no unmatched executions, and `prepare_threshold=None` — and exits
+non-zero if any check fails. The DSN and its password are masked in the output. There is intentionally no
+HTTP route for this: the web simulation has no admin authentication, so it is CLI/job only.
+
 ## Project layout
 
 ```

@@ -14,6 +14,9 @@ dependencies = [
 embed = [
     "fastembed==0.9.1",
 ]
+postgres = [
+    "psycopg[binary]>=3.2",
+]
 
 [dependency-groups]
 dev = ["pytest>=8", "pytest-asyncio>=0.23"]
