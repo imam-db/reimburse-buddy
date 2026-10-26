@@ -28,10 +28,10 @@ from typing import Any, Iterable, Protocol
 EVENT_TYPES = frozenset({
     "request", "plan", "tool_call", "staged_action", "approval", "rejection", "execution", "clarification",
     "limit", "refusal", "access_denied", "injection_notice", "injection_detected", "notice_shown", "expired",
-    "error",
+    "error", "superseded",
 })
 OUTCOME_TYPES = frozenset({"approval", "rejection", "expired"})
-ACTION_TYPES = frozenset({"staged_action", "approval", "rejection", "execution", "expired"})
+ACTION_TYPES = frozenset({"staged_action", "approval", "rejection", "execution", "expired", "superseded"})
 FIELDS = ("id", "event_key", "run_id", "action_id", "ts", "actor", "event_type", "args_hash", "payload", "sources")
 ACTOR_RE = re.compile(r"^(agent|system|human:[^\s:][^:]{0,79})$")
 MAX_TEXT = 500
@@ -188,7 +188,7 @@ class JsonlAuditLog:
 
 
 class PostgresAuditLog:
-    """Same contract on Postgres (psycopg 3). Expects agent/migrations/001_audit_log.sql and 002_injection_events.sql applied by the
+    """Same contract on Postgres (psycopg 3). Expects agent/migrations/001_audit_log.sql, 002_injection_events.sql and 003_plan_events.sql applied by the
     owner role; connect with the app role (INSERT + SELECT only). Not exercised without DATABASE_URL."""
 
     def __init__(self, dsn: str):
