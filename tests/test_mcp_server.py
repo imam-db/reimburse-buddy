@@ -9,13 +9,14 @@ from mcp.client.stdio import stdio_client
 
 READ_TOOLS = {"list_claims", "get_claim", "get_policy", "search_reimburse_mailbox",
               "get_calendar", "find_approval_memo", "check_claim", "draft_decision",
-              "get_outbox", "triage_claims", "reset_demo"}
-WRITE_TOOLS = {"send_message", "request_approval", "update_claim_status", "approve_cleared_batch"}
+              "get_outbox", "triage_claims"}
+WRITE_TOOLS = {"send_message", "request_approval", "update_claim_status", "approve_cleared_batch", "reset_demo"}
 WRITE_ARGS = {
     "send_message": {"to": "EMP-001", "body": "hi"},
     "request_approval": {"manager_id": "EMP-100", "claim_id": "CLM-2026-0110", "item_id": "IT-3"},
     "update_claim_status": {"claim_id": "CLM-2026-0101", "status": "approved"},
     "approve_cleared_batch": {"batch_id": "2026-W43", "claim_ids": [], "reviewer_confirmed": True},
+    "reset_demo": {},
 }
 EXPECTED = READ_TOOLS | WRITE_TOOLS
 
@@ -30,7 +31,7 @@ async def test_server_lists_tools_and_checks_claim():
         async with ClientSession(read, write) as session:
             await session.initialize()
             tools = {t.name for t in (await session.list_tools()).tools}
-            assert tools == READ_TOOLS and len(tools) == 11  # WorkBuddy's server: no write tools
+            assert tools == READ_TOOLS and len(tools) == 10  # WorkBuddy's server: no write tools
             res = await session.call_tool("check_claim", {"claim_id": "CLM-2026-0101", "evidence_ids": ["MSG-5001"]})
             data = json.loads(res.content[0].text)
             assert data["decision"] == "approve"

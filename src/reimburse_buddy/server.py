@@ -125,14 +125,6 @@ def update_claim_status(claim_id: str, status: str, note: str = "") -> dict:
     return store.update_claim_status(claim_id, status, note)
 
 
-# Version B only: WorkBuddy's server (version A) exposes no write tools.
-if os.environ.get("REIMBURSE_ENABLE_EVIDENCE_TOOL") == "1":
-    mcp.tool()(request_missing_evidence)
-if os.environ.get("REIMBURSE_ENABLE_WRITE_TOOLS") == "1":
-    for _write_tool in (send_message, request_approval, update_claim_status, approve_cleared_batch):
-        mcp.tool()(_write_tool)
-
-
 @mcp.tool()
 def get_outbox() -> dict:
     """(Mock) Show sent messages, approval requests and status changes made in this session."""
@@ -140,11 +132,19 @@ def get_outbox() -> dict:
             "status_changes": store.status_log}
 
 
-@mcp.tool()
 def reset_demo() -> dict:
     """Restore all demo state: removes delivered replies, clears outbox, approval requests and status changes."""
     store.reset()
     return {"status": "reset", "claims": len(store.claims), "mailbox_messages": len(store.inbox)}
+
+
+# Version B only: WorkBuddy's server (version A) exposes no write tools.
+if os.environ.get("REIMBURSE_ENABLE_EVIDENCE_TOOL") == "1":
+    mcp.tool()(request_missing_evidence)
+if os.environ.get("REIMBURSE_ENABLE_WRITE_TOOLS") == "1":
+    for _write_tool in (send_message, request_approval, update_claim_status, approve_cleared_batch,
+                        reset_demo):
+        mcp.tool()(_write_tool)
 
 
 def main() -> None:
