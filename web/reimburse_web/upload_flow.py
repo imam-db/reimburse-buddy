@@ -99,6 +99,7 @@ function show(){l.textContent=i.files.length?Array.from(i.files).map(f=>f.name).
 z.addEventListener('dragover',ev=>{ev.preventDefault();z.classList.add('over');});
 z.addEventListener('dragleave',()=>z.classList.remove('over'));
 z.addEventListener('drop',ev=>{ev.preventDefault();z.classList.remove('over');i.files=ev.dataTransfer.files;show();});
+const p=document.getElementById('pick-files');if(p)p.addEventListener('click',()=>i.click());
 i.addEventListener('change',show);
 </script>"""
 
@@ -108,11 +109,14 @@ def new_claim(emp: str = "EMP-001"):
     me = core.store.get_employee(emp)
     body = f"""<p><a href="/employee?emp={e(emp)}">&larr; My claims</a> &middot; {e(me['name'])}</p>
 <form method="post" action="/employee/drafts" enctype="multipart/form-data"><input type="hidden" name="emp" value="{e(emp)}">
-<div class="box"><h2>1. Trip</h2>Purpose <input name="purpose" size="40" required> Destination <input name="destination" value="Surabaya" required>
-<br>Dates <input type="date" name="start_date" required> &rarr; <input type="date" name="end_date" required></div>
+<div class="box"><h2>1. Trip</h2><label>Purpose <input name="purpose" size="40" required></label>
+<label>Destination <input name="destination" value="Surabaya" required></label>
+<br><label>Dates <input type="date" name="start_date" required></label> &rarr;
+<label>End date <input type="date" name="end_date" required></label></div>
 <div class="box"><h2>2. Drop your receipts and boarding passes</h2>
 <label id="drop" class="drop">Drag photos or PDFs here, or click to choose (up to {MAX_FILES} files, 5 MB each)
-<input id="files" type="file" name="files" multiple accept=".pdf,.png,.jpg,.jpeg" style="display:none"></label>
+<input id="files" class="visually-hidden" type="file" name="files" multiple accept=".pdf,.png,.jpg,.jpeg"></label>
+<p><button type="button" id="pick-files">Pilih file</button></p>
 <div id="picked" class="note"></div>
 <p class="note">Extraction: {e(get_extractor().name)}. You can check and fix every field on the next screen.</p>
 <button type="submit">Read files</button></div></form>{DROP_JS}"""
@@ -197,12 +201,12 @@ def draft_page(did: str):
                (["nights"] if cat == "hotel" else [])
         files = ""
         for f in c["files"]:
-            mv = (f"<select name='move_{f['id']}'>{core.options([('', 'move to...')] + others(c['id']))}</select>"
+            mv = (f"<select name='move_{f['id']}' aria-label='Pindahkan berkas ke kartu lain'>{core.options([('', 'move to...')] + others(c['id']))}</select>"
                   f"<button name=action value='move:{f['id']}'>Move</button>") if len(d["cards"]) > 1 else ""
-            files += (f"<li>{e(f['name'])} <select name='f_{f['id']}_doc_type'>{core.options([(t, label(t)) for t in DOC_TYPES], f['doc_type'])}</select>"
+            files += (f"<li>{e(f['name'])} <select name='f_{f['id']}_doc_type' aria-label='Jenis dokumen untuk {e(f['name'])}'>{core.options([(t, label(t)) for t in DOC_TYPES], f['doc_type'])}</select>"
                       f" {_badge({'source': f['doc_type_source'], 'confidence': f['extract']['fields']['doc_type']['confidence']})}"
                       f"{_err(f)} {mv}</li>")
-        merge = (f"<select name='merge_{c['id']}'>{core.options([('', 'merge into...')] + others(c['id']))}</select>"
+        merge = (f"<select name='merge_{c['id']}' aria-label='Gabungkan kartu ke kartu lain'>{core.options([('', 'merge into...')] + others(c['id']))}</select>"
                  f"<button name=action value='merge:{c['id']}'>Merge</button>") if len(d["cards"]) > 1 else ""
         split = f"<button name=action value='split:{c['id']}'>Split</button>" if len(c["files"]) > 1 else ""
         errs = "".join(f"<div class=err>{e(x)}</div>" for x in c["errors"])
@@ -462,11 +466,15 @@ def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: i
             missing = [REVIEWING]
         if it["id"] in pending:
             missing = [AWAITING]
-        status = (", ".join(missing) if missing
-                  else (label(res.status.value) if res.status.value == "rejected" else "Bukti lengkap"))
-        cls = "warn" if missing else ("bad" if res.status.value == "rejected" else "ok")
+        if res.status.value == "rejected":
+            status, cls = "✕ " + label("rejected"), "bad"
+        elif missing:
+            status, cls = "! Perlu tindakan: " + ", ".join(missing), "warn"
+        else:
+            status, cls = "✓ Beres", "ok"
         add = (f"<form method=post action='/employee/claims/{e(cid)}/items/{e(it['id'])}/files' enctype='multipart/form-data'>"
-               f"<input type=file name=file accept='.pdf,.png,.jpg,.jpeg' required> <button>Add file</button></form>")
+               f"<input type=file name=file aria-label='Berkas bukti untuk {e(it['id'])}' accept='.pdf,.png,.jpg,.jpeg' required> "
+               "<button>Add file</button></form>")
         rows += (f"<tr><td>{e(label(it['category']))}<div class=note>{e(it['description'])}</div></td><td>{e(it['date'])}</td>"
                  f"<td class=num>{e(rupiah(res.claimed))}</td><td>{e(', '.join(have)) or '<span class=note>none</span>'}</td>"
                  f"<td><span class='tag {cls}'>{e(status)}</span></td><td>{add}</td></tr>")

@@ -74,7 +74,7 @@ def _picker(current: str | None, back: str) -> str:
     opts = "".join(f"<option value='{escape(x['id'])}'{' selected' if x['id'] == current else ''}>{escape(x['name'])}</option>"
                    for x in _staff())
     return (f"<form method='post' action='/employee/session' class='demo'><b>DEMO session</b> (no real login; simulation "
-            f"only): <select name='emp'>{opts}</select><input type='hidden' name='back' value='{escape(back)}'>"
+            f"only): <select name='emp' aria-label='Pilih karyawan demo'>{opts}</select><input type='hidden' name='back' value='{escape(back)}'>"
             f"<button>Masuk sebagai / Sign in as</button></form>")
 
 
@@ -109,7 +109,7 @@ def _qa_box(sess: Session, cid: str) -> str:
             # Two forms: pressing Enter in the text box must submit the text, not the first quick button.
             f"<form method='post' action='/employee/qa' class='quick'><input type='hidden' name='claim_id' value='{escape(cid)}'>{quick}</form>"
             f"<form method='post' action='/employee/qa' class='ask'><input type='hidden' name='claim_id' value='{escape(cid)}'>"
-            f"<p><input type='text' name='question' maxlength='500' placeholder='Tulis pertanyaan / Ask a question'>"
+            f"<p><input type='text' name='question' aria-label='Pertanyaan' maxlength='500' placeholder='Tulis pertanyaan / Ask a question'>"
             f" <button>Tanya / Ask</button></p></form></div>")
 
 
