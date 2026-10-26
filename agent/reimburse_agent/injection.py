@@ -22,6 +22,7 @@ import secrets
 import unicodedata
 
 DETECTOR_VERSION = "inj-rules-1"
+WITHHELD_MARKER = "[instruction-like text withheld"
 HIGH, LOW = "high", "low"
 
 ZERO_WIDTH = frozenset("\u200b\u200c\u200d\u2060\ufeff\u00ad\u180e")
@@ -229,7 +230,7 @@ def withhold(text: str, hits: list[dict]) -> str:
         if a < pos:  # overlapping span: extend the previous one
             continue
         out.append(text[pos:a])
-        out.append(f"[instruction-like text withheld: rule {rid}]")
+        out.append(f"{WITHHELD_MARKER}: rule {rid}]")
         pos = b
     out.append(text[pos:])
     return "".join(out)
@@ -268,8 +269,27 @@ RECIPIENT_ARGS = {"send_message": ("to",), "request_approval": ("manager_id",),
                   # office tools (plan graph): a recipient may be one directory ID or a list of them
                   "send_email": ("to",), "create_calendar_event": ("attendees",), "create_task": ("assignee",)}
 FREE_TEXT_ARGS = ("body", "subject", "note", "reason", "title")
+# Every free-text argument a staged action can carry (FREE_TEXT_ARGS plus a plain message/text). The
+# withheld placeholder is model-only text and must never be staged into any of them.
+STAGED_TEXT_ARGS = tuple(dict.fromkeys((*FREE_TEXT_ARGS, "message", "text")))
 TIME_ARGS = ("send_at", "scheduled_at", "time", "at", "when", "start")
 DIRECTORY_ID = re.compile(r"^EMP-\d{3,}$")
+
+
+def contains_withheld_marker(value) -> bool:
+    """True when value, or any string inside a dict/list, contains the withheld placeholder."""
+    if isinstance(value, str):
+        return WITHHELD_MARKER in value
+    if isinstance(value, dict):
+        return any(contains_withheld_marker(v) for v in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(contains_withheld_marker(v) for v in value)
+    return False
+
+
+def withheld_marker_fields(args: dict) -> list[str]:
+    """The staged text-argument names whose value contains the withheld placeholder (empty when clean)."""
+    return [k for k in STAGED_TEXT_ARGS if k in (args or {}) and contains_withheld_marker(args[k])]
 
 
 def arg_source_violations(tool: str, args: dict, engine_amounts: set[str] | None = None,

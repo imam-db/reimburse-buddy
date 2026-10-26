@@ -254,6 +254,8 @@ def attribute_query(query: str, gaps: list[str], check: dict) -> str | None:
 NOT_FROM_REVIEWER = ("human_decisions must come from the reviewer, not from you. The reviewer's decisions so far "
                      "are {d}; omit human_decisions and the graph fills them in. Nothing ran. If a decision is "
                      "needed, ask the reviewer.")
+WITHHELD_REFUSAL = ("text contains the withheld placeholder for instruction-like content. Rewrite it without the "
+                    "withheld marker or the withheld content, then call the tool again.")
 
 
 class GapSearchArgs(BaseModel):
@@ -769,6 +771,12 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             record(config, "refusal", f"{aid}:arg_source", actor="system", action_id=aid, args_hash=args_hash(name, args),
                    payload={"tool": name, "reason": "argument source not allowed", "violations": bad})
             return None, "argument source not allowed: " + "; ".join(bad)
+        marker = inj.withheld_marker_fields(args)  # defence in depth: staging refuses these too
+        if marker:
+            record(config, "refusal", f"{aid}:withheld_marker", actor="system", action_id=aid,
+                   args_hash=args_hash(name, args),
+                   payload={"tool": name, "reason": "withheld marker in free-text args", "fields": marker})
+            return None, WITHHELD_REFUSAL
 
         async def engine_check(a: dict, _approved_engine: dict) -> dict:
             """Re-run check_claim with the executed args' own claim_id/evidence_ids/human_decisions. The
@@ -985,6 +993,13 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                        args_hash=args_hash(call["name"], args),
                        payload={"tool": call["name"], "reason": "argument source not allowed", "violations": bad})
                 declined[call["id"]] = "argument source not allowed: " + "; ".join(bad)
+                continue
+            marker = inj.withheld_marker_fields(args)
+            if marker:  # model copied a withheld placeholder: nothing is shown to the reviewer
+                record(config, "refusal", f"{call['id']}:withheld_marker", actor="system", action_id=call["id"],
+                       args_hash=args_hash(call["name"], args),
+                       payload={"tool": call["name"], "reason": "withheld marker in free-text args", "fields": marker})
+                declined[call["id"]] = WITHHELD_REFUSAL
                 continue
             count += 1
             engine = await engine_for(call["name"], args)
