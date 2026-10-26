@@ -9,7 +9,9 @@ stdout events (one JSON object per line):
     {"type": "start", "model": ..., "compact": true}
     {"type": "step", "n": 1, "tool": ..., "args": {...}, "args_summary": ..., "result_summary": ...}
     {"type": "interrupt", "tool": ..., "args": {...}, "tool_call_id": ..., "approval_id": ...,
+     "engine": {"status", "approvable_amount", "evidence_ids", "human_decisions"} | absent,
      "current_decision": {...check_claim summary...} | null}   -> waits for the matching answer
+       `engine` is the snapshot the approval is bound to (also stored on the staged_action event).
     {"type": "answer_applied", "approval_id": ..., "approved": bool}   the answer took effect
     {"type": "final", "note": ..., "tokens": {...}}
     {"type": "error", "code": "no_key" | "token_limit" | "exception", "message": ...}

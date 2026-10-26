@@ -34,6 +34,15 @@ OpenAI-compatible tool-calling model (DeepSeek, Qwen, Gemini via its OpenAI endp
   model's `tool_call_id`); an answer without the matching id (stale page, second tab, double click)
   is rejected and never applied to another call. The trace shows a decision only after the worker
   acknowledges it (`answer_applied`). The approval box also shows `check_claim`'s current verdict.
+- **The approval binds to what the reviewer saw.** `args_hash` (`audit.approval_snapshot`) covers the
+  action args including `evidence_ids` and `human_decisions` (only `action_id` is excluded), plus,
+  for claim-affecting tools, the engine snapshot shown: `status`, `approvable_amount`,
+  `evidence_ids`, `human_decisions`. The graph fills the reviewer decisions and the evidence the
+  latest check used into the args *before* the action is staged and the interrupt is shown, so the
+  `staged_action` event, the prompt, the `approval` and the executor all use the same full args. The
+  executor re-runs `check_claim` with the approved inputs and refuses with a `refusal` event
+  (`reason: "engine result differs from what the reviewer approved"`) when the status, amount,
+  evidence or decisions changed; changed args are refused as before.
 - **Fewer prompts:** unknown or hidden tool names return an error without asking; an identical
   repeat of a declined call is declined automatically; at most 10 approval requests per run. A declined call never reaches the server; the model gets `reviewer_declined` back.
 

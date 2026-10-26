@@ -84,10 +84,12 @@ def test_hygiene_masks_pii_and_secrets():
     assert len(p["output"]) <= A.MAX_TEXT + 100 and p["output_sha256"] == A.sha256("x" * 2000)
 
 
-def test_args_hash_is_stable_and_ignores_graph_injected_fields():
+def test_args_hash_is_stable_covers_evidence_and_ignores_action_id():
     a = {"claim_id": "CLM-1", "item_id": "IT-1"}
     assert A.args_hash("t", a) == A.args_hash("t", dict(reversed(a.items())))
-    assert A.args_hash("t", a) == A.args_hash("t", {**a, "evidence_ids": ["MSG-1"], "action_id": "z"})
+    assert A.args_hash("t", a) == A.args_hash("t", {**a, "action_id": "z"})
+    assert A.args_hash("t", a) != A.args_hash("t", {**a, "evidence_ids": ["MSG-1"]})
+    assert A.args_hash("t", a) != A.args_hash("t", {**a, "human_decisions": {"IT-1": "approve_full"}})
     assert A.args_hash("t", a) != A.args_hash("t", {**a, "item_id": "IT-2"})
 
 
