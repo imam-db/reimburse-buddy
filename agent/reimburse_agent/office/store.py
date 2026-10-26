@@ -44,5 +44,13 @@ class PlanStore:
         p = self._dir(run_id) / f"decisions-v{version}.json"
         return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
 
+    def save_request(self, run_id: str, request: dict) -> None:
+        """The original intake request, so a new run can replay it (Jalankan ulang)."""
+        self._write(self._dir(run_id) / "request.json", request)
+
+    def load_request(self, run_id: str) -> dict | None:
+        p = self._dir(run_id) / "request.json"
+        return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+
     def runs(self) -> list[str]:
         return sorted(p.parent.name for p in self.root.glob("*/plan.json")) if self.root.exists() else []
