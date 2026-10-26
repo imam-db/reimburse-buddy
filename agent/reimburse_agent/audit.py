@@ -28,7 +28,7 @@ from typing import Any, Iterable, Protocol
 EVENT_TYPES = frozenset({
     "request", "plan", "tool_call", "staged_action", "approval", "rejection", "execution", "clarification",
     "limit", "refusal", "access_denied", "injection_notice", "injection_detected", "notice_shown", "expired",
-    "error", "superseded",
+    "error", "superseded", "qa_request", "qa_answer", "qa_refusal",
 })
 OUTCOME_TYPES = frozenset({"approval", "rejection", "expired"})
 ACTION_TYPES = frozenset({"staged_action", "approval", "rejection", "execution", "expired", "superseded"})
@@ -88,7 +88,7 @@ def args_hash(tool: str, args: dict | None) -> str:
     return sha256(canonical({"tool": tool, "args": view}))
 
 
-SOURCE_RE = re.compile(r"\b(?:CLM|IT|MSG|EVT|MEMO|EMP|OUT|APR)-[\w-]+\b")
+SOURCE_RE = re.compile(r"\b(?:CLM|IT|MSG|EVT|MEMO|EMP|OUT|APR|POL)-[\w-]+\b")
 
 
 def source_ids(*values: Any) -> list[str]:
@@ -188,7 +188,7 @@ class JsonlAuditLog:
 
 
 class PostgresAuditLog:
-    """Same contract on Postgres (psycopg 3). Expects agent/migrations/001_audit_log.sql, 002_injection_events.sql and 003_plan_events.sql applied by the
+    """Same contract on Postgres (psycopg 3). Expects agent/migrations/001_audit_log.sql, 002_injection_events.sql, 003_plan_events.sql and 004_qa_events.sql applied by the
     owner role; connect with the app role (INSERT + SELECT only). Not exercised without DATABASE_URL."""
 
     def __init__(self, dsn: str):
