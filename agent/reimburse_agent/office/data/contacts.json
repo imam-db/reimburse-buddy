@@ -1,0 +1,15 @@
+{
+  "_source": "SYNTHETIC gap-filler. The official kickoff dataset (contacts with time zones) was not in the repo when this was written; replace via REIMBURSE_OFFICE_CONTACTS. IDs EMP-001..EMP-101 match data/employees.json.",
+  "contacts": [
+    {"id": "EMP-001", "name": "Rina Wulandari", "role": "Sales staff", "email": "rina.wulandari@nusantara-niaga.example", "office": "Jakarta", "tz": "WIB"},
+    {"id": "EMP-002", "name": "Bagus Pratama", "role": "Business Development staff", "email": "bagus.pratama@nusantara-niaga.example", "office": "Surabaya", "tz": "WIB"},
+    {"id": "EMP-003", "name": "Sari Kusumawati", "role": "Operations senior", "email": "sari.kusumawati@nusantara-niaga.example", "office": "Makassar", "tz": "WITA"},
+    {"id": "EMP-004", "name": "Yoga Firmansyah", "role": "Sales staff", "email": "yoga.firmansyah@nusantara-niaga.example", "office": "Denpasar", "tz": "WITA"},
+    {"id": "EMP-005", "name": "Putri Maharani", "role": "Operations staff", "email": "putri.maharani@nusantara-niaga.example", "office": "Jayapura", "tz": "WIT"},
+    {"id": "EMP-100", "name": "Dewi Anggraini", "role": "Sales manager", "email": "dewi.anggraini@nusantara-niaga.example", "office": "Jakarta", "tz": "WIB"},
+    {"id": "EMP-101", "name": "Hendra Saputra", "role": "Operations manager", "email": "hendra.saputra@nusantara-niaga.example", "office": "Jakarta", "tz": "WIB"},
+    {"id": "EMP-201", "name": "Budi Santoso", "role": "Finance staff", "email": "budi.santoso@nusantara-niaga.example", "office": "Jakarta", "tz": "WIB"},
+    {"id": "EMP-202", "name": "Budi Hartono", "role": "Field operations lead", "email": "budi.hartono@nusantara-niaga.example", "office": "Jayapura", "tz": "WIT"},
+    {"id": "EMP-203", "name": "Andi Pratiwi", "role": "Finance staff", "email": "andi.pratiwi@nusantara-niaga.example", "office": "Makassar", "tz": "WITA"}
+  ]
+}

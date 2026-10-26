@@ -1,0 +1,17 @@
+{
+  "_source": "SYNTHETIC gap-filler for the official kickoff 'operational rules'; replace via REIMBURSE_OFFICE_RULES.",
+  "time_zones": {"WIB": 7, "WITA": 8, "WIT": 9},
+  "office_hours": {"start": "08:00", "end": "17:00", "workdays": [0, 1, 2, 3, 4]},
+  "friday_prayer": {"start": "11:30", "end": "13:00",
+    "assumption": "Friday prayer window approx. 11:30-13:00 local time for every participant; actual times vary by city and week."},
+  "slot_step_minutes": 30,
+  "holidays": {
+    "2026-01-01": "Tahun Baru Masehi",
+    "2026-03-20": "Idul Fitri 1447 H (synthetic date)",
+    "2026-03-21": "Idul Fitri 1447 H (synthetic date)",
+    "2026-05-01": "Hari Buruh",
+    "2026-06-01": "Hari Lahir Pancasila",
+    "2026-08-17": "Hari Kemerdekaan RI",
+    "2026-12-25": "Hari Natal"
+  }
+}
