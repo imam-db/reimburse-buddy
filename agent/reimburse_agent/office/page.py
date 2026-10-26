@@ -29,7 +29,8 @@ pre{white-space:pre-wrap;background:#f7f8fa;padding:8px;border-radius:6px;margin
 border:1px solid #888;border-radius:6px;font-size:15px;background:#fff;cursor:pointer}
 .decision label input{margin-right:6px}
 .done{background:#e3f6e8} .rej{background:#fde8e8}
-button{min-height:44px;display:inline-flex;align-items:center;justify-content:center;padding:8px 18px;font-size:15px}"""
+button{min-height:44px;display:inline-flex;align-items:center;justify-content:center;padding:8px 18px;font-size:15px}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,label:focus-visible{outline:3px solid #1a5fb4;outline-offset:2px}"""
 
 WHERE = {"email": "Email", "calendar": "Kalender / Calendar", "task": "Tugas / Task"}
 DAYS_ID = ("Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu")
