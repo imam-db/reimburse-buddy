@@ -191,6 +191,26 @@ uv run --no-dev reimburse-buddy-mcp   # starts the server on stdio (WorkBuddy no
 
 To point the server at another dataset, set `REIMBURSE_BUDDY_DATA=/path/to/data` in the `env` block.
 
+## Deployment notes: audit log
+
+Production refuses JSONL and in-memory audit logs. When `APP_ENV` is `prod` or `production`
+(case-insensitive), the audit log must be Postgres:
+
+```bash
+export APP_ENV=prod
+export REIMBURSE_AUDIT_DATABASE_URL='postgresql://user:pass@db.example:5432/reimburse'
+```
+
+- `REIMBURSE_AUDIT_DATABASE_URL` is required and must start with `postgres://` or `postgresql://`;
+  the connection must open at startup.
+- If it is missing, is not a Postgres URL, or the connection fails, the process exits with
+  `audit.AuditConfigError` (a subclass of `audit.AuditError`). There is no fallback to
+  `REIMBURSE_AUDIT_LOG` (JSONL) or the in-memory log.
+- The web app checks this in its FastAPI startup hook, so it fails before serving the first request.
+  `agent/investigate_worker.py` checks it before running, and `audit.default_log()` enforces it too.
+- Outside production (`APP_ENV` unset or any other value), behaviour is unchanged: JSONL via
+  `REIMBURSE_AUDIT_LOG`, otherwise a fresh in-memory log.
+
 ## Project layout
 
 ```

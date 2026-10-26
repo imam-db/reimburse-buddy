@@ -478,6 +478,13 @@ start -> propose -> resolve --(question)--> clarify -> resolve
   log (`audit.default_log()`) and agent workers never sweep, so a worker cannot expire a plan that is
   still waiting on someone's page.
 
+Production audit: with `APP_ENV=prod` or `APP_ENV=production` (case-insensitive), only a connected
+Postgres log is allowed. `REIMBURSE_AUDIT_DATABASE_URL` must be set, start with `postgres://` or
+`postgresql://`, and connect; otherwise `audit.check_audit_config()` raises `audit.AuditConfigError`
+and `investigate_worker.py` exits with error code `config` before running. There is no fallback to
+`REIMBURSE_AUDIT_LOG` (JSONL) or the in-memory log. Outside production, nothing changes. See the root
+README "Deployment notes: audit log".
+
 Demo (two terminals, same `REIMBURSE_AUDIT_LOG` and `REIMBURSE_PLAN_STORE`):
 
 ```bash
