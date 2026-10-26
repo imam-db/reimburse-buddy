@@ -655,7 +655,7 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
 
     def screen(config, name: str, content, hits_out: list, notices_out: list, spans_out: list, flagged_out: list):
         """Scan the content fields of a read tool's output. Every hit is logged (injection_detected); HIGH hits
-        get a notice (logged as notice_shown when it is surfaced) and are withheld from the model's copy, and
+        get a notice (logged as injection_notice when it is surfaced) and are withheld from the model's copy, and
         every content field the model sees is wrapped as data with this run's boundary."""
         data = _jsonish(content) if isinstance(content, str) else None
         if data is None:
@@ -701,7 +701,9 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
 
     def surface(config, notices: list[dict], where: str) -> None:
         for n in notices:
-            record(config, "notice_shown", f"{where}:{n['source_id']}", actor="system",
+            # injection_notice = the notice was attached to this prompt / run state. notice_shown is logged
+            # only when a page actually renders it (office/page.py, idempotent per run + notice id).
+            record(config, "injection_notice", f"{where}:{n['source_id']}", actor="system",
                    payload={"text": n["text"], "source_id": n["source_id"], "rules": n["rules"], "where": where},
                    sources=[n["source_id"]])
 
@@ -926,7 +928,7 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         return {"declined": declined, "gated_count": count, "declined_sigs": sigs}
 
     def review_banner(config, state: State, aid: str, args: dict) -> dict:
-        """Extra interrupt fields when the run has flagged content: the notice banner (logged as notice_shown
+        """Extra interrupt fields when the run has flagged content: the notice banner (logged as injection_notice
         for this prompt) and any free-text argument that echoes flagged text. Empty dict when clean."""
         extra: dict = {}
         notices = state.get("notices", [])
