@@ -119,6 +119,7 @@ def test_pending_form_carries_approval_id_rule_engine_and_honest_text(client, mo
     html = wait_page(client, rid, "id=pending")
     assert f'name=approval_id value="{pending_id(rid)}"' in html
     assert "id=rule-engine" in html and "Rp4.840.000" in html
+    assert "id=approved-engine" in html and "Dasar persetujuan" in html  # the basis the approval binds to
     assert "Nothing is written until you click Approve" not in html
     client.post(f"/admin/investigations/{rid}/cancel")
 
