@@ -617,7 +617,8 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         return alog.append(make_event(run_id_of(config), etype, ref, **kw))
 
     def stage(config, aid: str, tool: str, args: dict, by: str = "agent") -> None:
-        """Logged BEFORE the interrupt: the proposal exists even if nobody ever answers (startup sweep)."""
+        """Logged BEFORE the interrupt: the proposal exists even if nobody ever answers (the web app's
+        one-per-process startup sweep expires orphaned ones; opening a log never does)."""
         record(config, "staged_action", aid, actor="agent", action_id=aid, args_hash=args_hash(tool, args),
                payload={"tool": tool, "args": args, "by": by}, sources=source_ids(args))
 

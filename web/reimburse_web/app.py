@@ -29,7 +29,7 @@ from reimburse_buddy.triage import approve_cleared_batch, triage_claims
 
 from .agent_bridge import NO_KEY_MESSAGE, Investigator, RateLimited, key_configured
 from .labels import label, person
-from .plans import router as plans_router
+from .plans import router as plans_router, startup_sweep
 from .qa import router as qa_router
 
 BATCH = "2026-W43"
@@ -39,7 +39,8 @@ SIGNED, UNSIGNED = "signed", '<span class="tag bad">unsigned</span>'
 CHOICES = ("approve_full", "approve_capped", "reject")
 UPLOAD_DIR = Path(os.environ.get("REIMBURSE_WEB_UPLOADS", Path(__file__).resolve().parent.parent / "uploads"))
 
-app = FastAPI(title="reimburse-buddy web simulation")
+# Expiry sweep belongs to the web process, once at startup: agent workers opening the log never sweep.
+app = FastAPI(title="reimburse-buddy web simulation", on_startup=[startup_sweep])
 app.include_router(plans_router)
 app.include_router(qa_router)
 store = DataStore()
