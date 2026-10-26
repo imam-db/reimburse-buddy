@@ -436,11 +436,16 @@ GAP_TEXT = {**{code: REVIEWING for code in B_ONLY}, "receipt_missing": "receipt 
 
 
 @router.get("/employee/claims/{cid}", response_class=HTMLResponse)
-def employee_claim(cid: str, msg: str = ""):
+def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: ignore[assignment]  # direct calls pass no request
+    from . import qa as qa_web  # Employee Q&A hook; a no-op unless EMPLOYEE_QA is on
     try:
         claim = core.store.get_claim(cid)
     except KeyError:
         raise HTTPException(404, f"Unknown claim {cid}")
+    parts = qa_web.claim_page_parts(request, cid, claim["employee_id"])
+    if isinstance(parts, HTMLResponse):
+        return parts
+    qa_top, qa_box = parts
     chk = core.run_check(cid)
     files_by_item: dict[str, list] = {}
     for m in core.store.inbox:
@@ -469,7 +474,7 @@ def employee_claim(cid: str, msg: str = ""):
 {e(claim['trip']['end_date'])} &middot; status {core.status_tag(claim['status'])}</p>
 <table><tr><th>Item</th><th>Date</th><th class=num>Claimed</th><th>Files</th><th>Evidence</th><th></th></tr>{rows}</table>
 <p class="note">Finance reviews every claim. Amounts shown are what you claimed; finance decides what is approved.</p>"""
-    return core.page(f"Claim {cid}", body)
+    return core.page(f"Claim {cid}", qa_top + body + qa_box)
 
 
 @router.post("/employee/claims/{cid}/items/{iid}/files")

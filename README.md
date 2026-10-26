@@ -145,6 +145,10 @@ returns the top 5 summaries. Scripted replies react to English and Indonesian re
 kuitansi, nota, bukti, taksi). The decision note's Indonesian section is fully localised and lists ignored
 evidence as an audit trail.
 
+## Employee Q&A (flag)
+
+`EMPLOYEE_QA=1` adds a read-only Q&A box on the employee claim page. It answers policy questions, says what an employee's own claim is missing and shows its status, cites a source for every answer and keeps a full audit trail. It uses a synthetic rulebook. See [docs/employee-qa.md](docs/employee-qa.md).
+
 ## Demo scenarios
 
 | # | Claim | What happens |
