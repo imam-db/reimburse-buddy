@@ -53,6 +53,17 @@ class AuditError(RuntimeError):
     pass
 
 
+class AuditConfigError(AuditError):
+    """Production is configured with an audit backend that is not a usable Postgres log."""
+
+
+PRODUCTION_ENVS = frozenset({"prod", "production"})
+
+
+def is_production() -> bool:
+    return os.environ.get("APP_ENV", "").strip().lower() in PRODUCTION_ENVS
+
+
 # --- hygiene -------------------------------------------------------------------------------------------
 NIK_RE = re.compile(r"(?<!\d)\d{16}(?!\d)")
 PHONE_RE = re.compile(r"(?<![\w])(?:\+62|62|0)8\d(?:[\s.-]?\d){6,11}(?!\d)")
@@ -346,12 +357,57 @@ def sweep_expired(log: AuditLog, *, older_than: timedelta | None = None,
 
 _DEFAULT: AuditLog | None = None
 _DEFAULT_LOCK = threading.Lock()
+_PROD_LOG: AuditLog | None = None
+_PROD_LOCK = threading.Lock()
+
+
+def _production_dsn() -> str:
+    dsn = (os.environ.get("REIMBURSE_AUDIT_DATABASE_URL") or "").strip()
+    if not dsn:
+        raise AuditConfigError(
+            "APP_ENV=prod requires REIMBURSE_AUDIT_DATABASE_URL pointing at Postgres; "
+            "JSONL (REIMBURSE_AUDIT_LOG) and in-memory audit logs are refused in production.")
+    if not dsn.lower().startswith(("postgres://", "postgresql://")):
+        raise AuditConfigError(
+            "APP_ENV=prod: REIMBURSE_AUDIT_DATABASE_URL must be a Postgres URL "
+            "(postgres:// or postgresql://).")
+    return dsn
+
+
+def require_production_log() -> AuditLog | None:
+    """In production, the only permitted audit backend is a connected Postgres log.
+
+    Returns ``None`` outside production so callers keep their existing JSONL/in-memory behaviour.
+    In production it raises AuditConfigError when REIMBURSE_AUDIT_DATABASE_URL is missing, is not a
+    Postgres URL, or the connection cannot be opened. There is no fallback to JSONL or memory."""
+    if not is_production():
+        return None
+    global _PROD_LOG
+    with _PROD_LOCK:
+        if _PROD_LOG is None:
+            dsn = _production_dsn()
+            try:
+                _PROD_LOG = PostgresAuditLog(dsn)
+            except Exception as exc:
+                raise AuditConfigError(
+                    "APP_ENV=prod: cannot open the audit Postgres connection "
+                    f"({type(exc).__name__}). Check REIMBURSE_AUDIT_DATABASE_URL.") from exc
+        return _PROD_LOG
+
+
+def check_audit_config() -> None:
+    """Fail fast at startup when production is not configured for a working Postgres audit log."""
+    require_production_log()
 
 
 def default_log() -> AuditLog:
     """Process-wide log from REIMBURSE_AUDIT_LOG (JSONL path) or REIMBURSE_AUDIT_DATABASE_URL; opened once.
     Opening the log never sweeps: agent workers must not expire plans still waiting on a confirmation page.
-    Without either, a fresh in-memory log per call (tests, scripted runs)."""
+    Without either, a fresh in-memory log per call (tests, scripted runs). In production (APP_ENV=prod or
+    APP_ENV=production) only a connected Postgres log is allowed; anything else raises AuditConfigError."""
+    prod_log = require_production_log()
+    if prod_log is not None:
+        return prod_log
     global _DEFAULT
     path, dsn = os.environ.get("REIMBURSE_AUDIT_LOG"), os.environ.get("REIMBURSE_AUDIT_DATABASE_URL")
     if not path and not dsn:

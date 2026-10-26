@@ -40,7 +40,13 @@ def log() -> audit.AuditLog:
     """The audit log shared with the agent process, read fresh per request for the JSONL backend so the page
     sees events the agent wrote after the web process started. Opening a log no longer sweeps it (see
     audit.sweep_expired); the expiry sweep runs once at web startup instead, in startup_sweep().
-    Without REIMBURSE_AUDIT_LOG / REIMBURSE_AUDIT_DATABASE_URL: one in-memory log for this process."""
+    Without REIMBURSE_AUDIT_LOG / REIMBURSE_AUDIT_DATABASE_URL: one in-memory log for this process.
+    In production only a connected Postgres log is allowed (audit.require_production_log); there is no
+    fallback to JSONL or memory."""
+    prod_log = audit.require_production_log()
+    if prod_log is not None:
+        STATE["log"] = prod_log  # never reuse a non-Postgres log cached before APP_ENV=prod
+        return prod_log
     if "log" in STATE:
         return STATE["log"]
     path, dsn = os.environ.get("REIMBURSE_AUDIT_LOG"), os.environ.get("REIMBURSE_AUDIT_DATABASE_URL")
@@ -49,6 +55,13 @@ def log() -> audit.AuditLog:
     if path:
         return audit.JsonlAuditLog(path)
     return STATE.setdefault("log", audit.JsonlAuditLog())
+
+
+def startup_config_check() -> None:
+    """Fail web startup when production is misconfigured instead of at the first request.
+
+    Runs before startup_sweep() in FastAPI's on_startup list; an AuditConfigError here aborts startup."""
+    log()
 
 
 _SWEPT = False
