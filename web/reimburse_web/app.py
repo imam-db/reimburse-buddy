@@ -99,14 +99,27 @@ border-radius:10px;padding:30px;text-align:center;margin:10px 0}.drop.over{backg
 .card label{display:block;font-size:13px;margin-top:4px}
 .err{color:#a00;font-size:13px}.box{border:1px solid #ddd;border-radius:8px;padding:12px;margin:12px 0}pre{white-space:pre-wrap;
 background:#f7f7f9;padding:10px;border-radius:6px}.note{color:#666;font-size:13px}
+.badge{display:inline-block;min-width:18px;padding:0 6px;border-radius:9px;background:#c62828;color:#fff;
+font-size:12px;text-align:center;line-height:18px}
 button{cursor:pointer;min-height:44px;display:inline-flex;align-items:center;justify-content:center}"""
+
+
+def _pending_nav() -> str:
+    """Link to the pending-plan list with its count. A broken plan store must never break every page."""
+    try:
+        from .plans import pending_count  # lazy: plans.py imports this module
+        n = pending_count()
+    except Exception:
+        return ""
+    return (f'<a href="/admin/plans" id="nav-pending">Menunggu persetujuan '
+            f'<span class="badge" id="pending-badge">{n}</span></a>')
 
 
 def page(title: str, body: str) -> HTMLResponse:
     return HTMLResponse(f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>{escape(title)}</title>
 <style>{CSS}</style></head><body><nav><b>reimburse-buddy</b> &middot; <a href="/employee">Employee</a>
-<a href="/admin">Finance admin</a><span class="note">Synthetic data. Simulation only.</span></nav>
+<a href="/admin">Finance admin</a>{_pending_nav()}<span class="note">Synthetic data. Simulation only.</span></nav>
 <h1>{escape(title)}</h1>{body}</body></html>""")
 
 
@@ -182,6 +195,17 @@ ALLOWED_UPLOAD_EXT = {".pdf", ".png", ".jpg", ".jpeg"}
 # Final statuses the reviewer may pick for each engine decision. Overrides go through logged item decisions.
 STATUS_FOR_DECISION = {"approve": ["approved", "on_hold"], "partial_approve": ["partially_approved", "on_hold"],
                        "reject": ["rejected", "on_hold"], "needs_info": ["on_hold"]}
+# Gap codes an override decision (approve_full / approve_capped / reject) can settle. These are exactly the
+# gaps src/reimburse_buddy/rules.py resolves through the `choice in ("approve_full", "approve_capped")`
+# branch, minus MULTIPLE_RECEIPTS (the engine only accepts `use:<message id>` for it, never these buttons)
+# and minus the document gaps (receipt_missing / boarding_pass_missing): those need the document attached,
+# an override is not a substitute.
+DECISION_GAPS = frozenset({
+    "hotel_over_cap", "late_checkout_unjustified", "hotel_nights_mismatch",
+    "duplicate_suspected", "receipt_amount_mismatch", "receipt_shared",
+})
+# Gaps only a document can close; an override decision is not a substitute.
+DOCUMENT_GAPS = frozenset({"receipt_missing", "boarding_pass_missing"})
 
 
 def parse_amount(text: str) -> Decimal:
@@ -308,21 +332,26 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
     emp, trip = claim["employee_id"], claim["trip"]
     r = review(cid)
     c = investigate(cid)
+    pending = pending_items(cid)
     item_rows = ""
     for it in c.items:
         src = next(x for x in claim["items"] if x["id"] == it.item_id)
         finds = "<br>".join(f"<span class=tag title='{e(f.rule)}'>{e(label(f.rule))}</span> {e(f.message)}"
                             for f in it.findings)
         gaps = "".join(f"<span class='tag warn' title='{e(g)}'>{e(label(g))}</span>" for g in it.gaps)
+        pend = pending.get(it.item_id, [])
         dec = ""
-        if (it.gaps or it.human_decision) and it.item_id not in pending_items(cid):
+        decision_gaps = [g for g in it.gaps if g in DECISION_GAPS]
+        if (decision_gaps or it.human_decision) and not pend:
             dec = (f"<form method=post action='/admin/claims/{e(cid)}/decide' style='display:inline'>"
                    f"<input type=hidden name=item_id value='{e(it.item_id)}'>"
                    + "".join(f"<button name=choice value='{ch}'{' disabled' if it.human_decision == ch else ''}>{e(label(ch))}</button> "
                              for ch in CHOICES) + "</form>")
             if it.human_decision:
                 dec += f"<div class=note>Reviewer: {e(label(it.human_decision))}</div>"
-        pend = pending_items(cid).get(it.item_id, [])
+        elif it.gaps and not pend:
+            lead = "Perlu dokumen" if set(it.gaps) <= DOCUMENT_GAPS else "Perlu ditinjau"
+            dec = f"<div class=note>{lead}: {e(', '.join(label(g) for g in it.gaps))}</div>"
         status_cell = f"<span title='{e(it.status.value)}'>{e(label(it.status.value))}</span>"
         if pend:
             status_cell = "<span class='tag warn'>pending review</span>"
@@ -333,9 +362,20 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
                        f"<div class=note>{e(mid)}: <span title='{e(p['reason'])}'>{e(why)}</span></div>"
                        f"<button name=verdict value=accept>Accept evidence</button> "
                        f"<button name=verdict value=reject>Reject evidence</button></form>") + dec
-        item_rows += (f"<tr><td>{e(it.item_id)}</td><td>{e(label(it.category))}<div class=note>{e(src['description'])}</div></td>"
+        item_rows += (f"<tr id='item-{e(it.item_id)}'><td>{e(it.item_id)}</td>"
+                      f"<td>{e(label(it.category))}<div class=note>{e(src['description'])}</div></td>"
                       f"<td class=num>{e(rupiah(it.claimed))}</td><td class=num>{e(rupiah(it.approvable))}</td>"
                       f"<td>{status_cell}</td><td>{provenance_badges(src)}{finds}<div>{gaps}</div></td><td>{e(', '.join(it.evidence_used))}</td><td>{dec}</td></tr>")
+    needs = [(it, [g for g in it.gaps if g in DECISION_GAPS]) for it in c.items
+             if any(g in DECISION_GAPS for g in it.gaps) and not it.human_decision
+             and it.item_id not in pending]
+    if needs:
+        links = ", ".join(f"<a href='#item-{e(it.item_id)}'>{e(', '.join(label(g) for g in gs))}</a>"
+                          for it, gs in needs)
+        needs_you = (f"<div class='box' id='needs-you'><b>Klaim ini butuh {len(needs)} keputusan Anda:</b> "
+                     f"{links}</div>")
+    else:
+        needs_you = "<div class='box' id='needs-you'>Klaim ini tidak butuh keputusan Anda.</div>"
     log_rows = "".join(f"<li>{e(x['at'])} {e(x['evidence_id'])} ({e(x['item_id'])}, "
                        f"<span title='{e(x['reason'])}'>{e(', '.join(label(v) for v in x['reason'].split(', ')))}</span>): "
                        f"<b>{e(label(x['verdict']))}</b> by reviewer</li>" for x in r["evidence_log"])
@@ -365,12 +405,13 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
     allowed_status = STATUS_FOR_DECISION[c.decision.value]
     if pending_items(cid):
         allowed_status = ["on_hold"]
-    body = f"""<p><a href="/admin">&larr; Triage</a></p>{f'<p class="tag ok">{e(msg)}</p>' if msg else ''}
+    body = f"""<p><a href="/admin">&larr; Triage</a> &middot; <a href="/admin/claims/{e(cid)}/audit">Lihat jejak audit</a></p>{f'<p class="tag ok">{e(msg)}</p>' if msg else ''}
 <p><span title="{e(emp)}">{e(person(store, emp))}</span> &middot; {e(claim['purpose'])} &middot; {e(trip['destination'])}
 {e(trip['start_date'])} &rarr; {e(trip['end_date'])} &middot; status {status_tag(claim['status'])}</p>
 <div class="box"><h2>Rule engine: {e(label(c.decision.value))}</h2>
 <p>Approvable <b>{e(rupiah(c.total_approvable))}</b> of {e(rupiah(c.total_claimed))} &middot; pending {e(rupiah(c.total_pending))}</p>
-<p class="note">Every amount on this page comes from the rule engine. Evidence attached: {e(', '.join(r['evidence']) or 'none')}</p>
+<p class="note">Semua angka dihitung oleh mesin aturan, bukan oleh AI. Evidence attached: {e(', '.join(r['evidence']) or 'none')}</p>
+{needs_you}
 <div class="table-wrap"><table><tr><th>Item</th><th>Category</th><th class=num>Claimed</th><th class=num>Approvable</th><th>Status</th><th>Findings / gaps</th><th>Evidence</th><th>Reviewer decision</th></tr>{item_rows}</table></div>
 {f'<h3>Evidence review log</h3><ul>{log_rows}</ul>' if log_rows else ''}{f'<h3>Ignored evidence</h3><ul>{ignored}</ul>' if ignored else ''}{f'<h3>Warnings</h3><ul>{warns}</ul>' if warns else ''}</div>
 <div class="box"><h2>Investigate</h2>
@@ -390,6 +431,42 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
 <p class="note">Status options follow the engine decision ({e(label(c.decision.value))}). To override, record an item decision above.
 Status changes only after you confirm. Notes are sent only by you.</p></div>"""
     return page(f"Claim {cid}", body)
+
+
+@app.get("/admin/claims/{cid}/audit", response_class=HTMLResponse)
+def claim_audit(cid: str):
+    """Read-only audit trail for one claim. Raw system codes are shown here and only here."""
+    try:
+        store.get_claim(cid)
+    except KeyError:
+        raise HTTPException(404, f"Unknown claim {cid}")
+    r = review(cid)
+    status_rows = "".join(
+        f"<tr><td>{e(x.get('claim_id'))}</td><td>{e(x.get('from'))}</td><td>{e(x.get('to'))}</td>"
+        f"<td>{e(x.get('note', ''))}</td></tr>"
+        for x in store.status_log if x.get("claim_id") == cid)
+    evidence_rows = "".join(
+        f"<tr><td>{e(x.get('at'))}</td><td>{e(x.get('evidence_id'))}</td><td>{e(x.get('item_id'))}</td>"
+        f"<td>{e(x.get('reason'))}</td><td>{e(x.get('verdict'))}</td></tr>" for x in r["evidence_log"])
+    decision_rows = "".join(f"<tr><td>{e(item_id)}</td><td>{e(choice)}</td></tr>"
+                            for item_id, choice in r["decisions"].items())
+    outbox_rows = "".join(
+        f"<tr><td>{e(m.get('id'))}</td><td>{e(m.get('to'))}</td><td>{e(m.get('subject'))}</td>"
+        f"<td>{e(m.get('body'))}</td></tr>" for m in store.outbox if m.get("claim_id") == cid)
+
+    def table(head: list[str], rows: str, empty: str) -> str:
+        if not rows:
+            return f"<p class=note>{empty}</p>"
+        return ("<div class='table-wrap'><table><tr>"
+                + "".join(f"<th>{h}</th>" for h in head) + f"</tr>{rows}</table></div>")
+
+    body = f"""<p><a href="/admin/claims/{e(cid)}">&larr; Kembali ke klaim / Back to claim</a></p>
+<p class="note">Jejak audit mentah untuk {e(cid)}; kode sistem ditampilkan apa adanya.</p>
+<div class="box"><h2>Riwayat status</h2>{table(["Claim", "Dari", "Ke", "Catatan"], status_rows, "Tidak ada perubahan status.")}</div>
+<div class="box"><h2>Log bukti peninjau</h2>{table(["Waktu", "Bukti", "Item", "Alasan", "Verdict"], evidence_rows, "Tidak ada catatan bukti.")}</div>
+<div class="box"><h2>Keputusan item</h2>{table(["Item", "Keputusan"], decision_rows, "Tidak ada keputusan item.")}</div>
+<div class="box"><h2>Pesan keluar</h2>{table(["ID", "Ke", "Subjek", "Isi"], outbox_rows, "Tidak ada pesan keluar.")}</div>"""
+    return page(f"Jejak audit {cid}", body)
 
 
 @app.post("/admin/claims/{cid}/evidence")

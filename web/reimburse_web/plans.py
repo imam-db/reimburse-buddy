@@ -53,14 +53,49 @@ def directory() -> Directory:
     return STATE.setdefault("directory", Directory.load())
 
 
+def _pending_plans() -> list[tuple[str, dict]]:
+    """Runs still waiting for the reviewer: no saved decisions for their current version and at least one
+    action with no outcome in the audit log (same status reading as the confirmation page)."""
+    out: list[tuple[str, dict]] = []
+    for run_id in store().runs():
+        plan = store().load_plan(run_id)
+        if not plan:
+            continue
+        if store().load_decisions(run_id, plan["version"]) is not None:
+            continue
+        events = log().list(run_id)
+        if any(page._status(events, a["action_id"]) is None for a in plan.get("actions", [])):
+            out.append((run_id, plan))
+    return out
+
+
+def pending_count() -> int:
+    return len(_pending_plans())
+
+
+def _requester_name(emp_id) -> str:
+    contact = directory().get(str(emp_id))
+    return contact.name if contact else str(emp_id)
+
+
 @router.get("/admin/plans", response_class=HTMLResponse)
 def plans_index():
-    rows = "".join(f"<li><a href='/admin/plans/{escape(r)}'>{escape(r)}</a></li>" for r in store().runs())
-    return HTMLResponse(f"<!doctype html><html><head><meta charset=utf-8>"
-                        f"<meta name=viewport content='width=device-width, initial-scale=1'>"
-                        f"<title>Rencana menunggu / Pending plans</title></head><body>"
-                        f"<h1>Rencana menunggu / Pending plans</h1>"
-                        f"<ul>{rows or '<li>none</li>'}</ul></body></html>")
+    from . import app as web  # late import: app.py includes this router
+
+    pending = _pending_plans()
+    if not pending:
+        body = "<p>Tidak ada rencana yang menunggu persetujuan.</p>"
+    else:
+        rows = "".join(
+            f"<tr><td><a href='/admin/plans/{escape(run_id)}'>{escape(run_id)}</a></td>"
+            f"<td>{escape(_requester_name(plan.get('requester')))}</td>"
+            f"<td>{escape(plan.get('request', ''))}</td>"
+            f"<td class=num>{len(plan.get('actions', []))}</td></tr>"
+            for run_id, plan in pending)
+        body = ("<div class='table-wrap'><table><tr><th>Run</th><th>Peminta / Requester</th>"
+                "<th>Permintaan / Request</th><th class=num>Aksi / Actions</th></tr>"
+                f"{rows}</table></div>")
+    return web.page("Rencana menunggu / Pending plans", body)
 
 
 @router.get("/admin/plans/{run_id}", response_class=HTMLResponse)
