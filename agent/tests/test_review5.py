@@ -178,8 +178,9 @@ async def test_batch_runs_each_exception_claim_fresh_with_per_claim_protections(
     v, seen = await drive(Spy(messages=iter(script)), None,
                           ["Process batch 2026-W43: triage it and bulk-approve the claims that are cleared."],
                           batch="2026-W43")
-    assert [r["tool"] for r in seen] == ["approve_cleared_batch"]  # the free evidence ask in 0101 was ungated
+    assert [r["tool"] for r in seen] == ["approve_cleared_batch", "request_missing_evidence"]
     assert seen[0]["by"] == "graph" and "bulk-approve" in seen[0]["from"]
+    assert "by" not in seen[1]  # the model's evidence ask is gated like any write
     assert [s["claim_id"] for s in v["summaries"]] == ["CLM-2026-0101", "CLM-2026-0104", "CLM-2026-0110", "CLM-2026-0118"]
     assert max(seen_models) <= 6  # every sub-run starts from an empty history (system + prompt + own turns)
     tools = [w["tool"] for w in v["writes"]]

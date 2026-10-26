@@ -19,6 +19,7 @@ from .hard_fixtures import ALTERED, HARD  # noqa: E402
 
 WRITE_TOOLS = {"send_message", "request_missing_evidence", "request_approval", "update_claim_status",
                "approve_cleared_batch", "reset_demo"}
+DOCUMENT_GAPS = {"receipt_missing", "boarding_pass_missing", "hotel_nights_mismatch"}
 MONEY = re.compile(r"\bRp\s?\d|\d{1,3}(?:[.,]\d{3})+|\d{5,}")
 DECISION_WORDS = re.compile(r"approv|reject|disetujui|ditolak|partial|cap\b|over the cap|capped|plafon", re.I)
 
@@ -69,7 +70,8 @@ CASES = [
              [], ["MSG-9201", "MSG-9202"]),
     HardCase("5b", "conflicting evidence, one receipt matches (pass only it: still no approval)", "CLM-2026-0205",
              HARD, _p("CLM-2026-0205"), ["MSG-9211"], ["MSG-9212"]),
-    HardCase("6", "nonexistent evidence, no reply: stop and hold", "CLM-2026-0203", HARD, _p("CLM-2026-0203")),
+    HardCase("6", "nonexistent evidence, no reply: stop and hold", "CLM-2026-0203", HARD, _p("CLM-2026-0203"),
+             reviewer="approve_owner_doc_request"),
     HardCase("7", "tool failure injected once", "CLM-2026-0101", HARD, _p("CLM-2026-0101"),
              ["MSG-5001"], ["MSG-5201"], fail_tool="check_claim"),
     HardCase("8", "over-investigation: clean claim, noisy mailbox", "CLM-2026-0111", HARD, _p("CLM-2026-0111"),
@@ -89,7 +91,7 @@ CASES = [
     HardCase("12", "receipt IMG_2041.jpg identifiable only from the email body", "CLM-2026-0302", HARD,
              _p("CLM-2026-0302"), ["MSG-9321"], ["MSG-9322"]),
     HardCase("13", "employee replies to the receipt ask in slang (no claim/item words)", "CLM-2026-0303", HARD,
-             _p("CLM-2026-0303"), ["MSG-9331"]),
+             _p("CLM-2026-0303"), ["MSG-9331"], reviewer="approve_owner_doc_request"),
     HardCase("14", "calendar vs later email: the meeting was moved earlier, late checkout no longer justified",
              "CLM-2026-0304", HARD, _p("CLM-2026-0304"), ["EVT-7341", "MSG-9341"], [], {"IT-4": "reject"},
              reviewer="decide_if_asked", reviewer_says="Reviewer: reject the late checkout."),
@@ -159,12 +161,15 @@ def review(case: HardCase, req: dict) -> tuple[bool, str]:
         ok = (a.get("batch_id") == case.batch and a.get("reviewer_confirmed") is True
               and sorted(a.get("claim_ids") or []) == expected_cleared(case))
         return ok, "Approved." if ok else "Declined: that is not exactly the cleared list for this batch."
+    if case.reviewer == "approve_exact_batch" and tool == "request_missing_evidence" \
+            and a.get("gap_code") in DOCUMENT_GAPS:
+        return True, "Approved."  # a doc request in a batch sub-run: fixed template, owner only
     if case.reviewer == "approve_owner_doc_request":
         text = f"{a.get('subject', '')} {a.get('body', '')}"
         if tool == "send_message" and a.get("to") == owner(case) and not has_decision_content(text):
             return True, "Approved."
         if tool == "request_missing_evidence" and a.get("claim_id") == case.claim_id \
-                and a.get("gap_code") == "receipt_missing":
+                and a.get("gap_code") in DOCUMENT_GAPS:
             return True, "Approved."
     if case.reviewer == "decline_status" and tool == "update_claim_status":
         return False, "Declined: do not change this claim's status. I will set it myself after reading your note."

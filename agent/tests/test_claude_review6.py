@@ -1,7 +1,8 @@
 """Claude review 6 (fake models, no key, no network): budget exhaustion drafts from the engine, sub-runs get a
 fixed small tool set, a fair-share budget and their own state slot (interrupt/resume, reviewer replies), and
-the scorer judges free evidence requests on its own."""
+the scorer only accepts writes with a matching approval."""
 
+import copy
 import uuid
 
 from langchain_core.messages import AIMessage
@@ -10,8 +11,8 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 import reimburse_agent.batch as batch_mod
-import reimburse_agent.graph as graph_mod
 from eval.hard_cases import CASES
+from eval.hard_score import score
 from eval.run_hard_eval import run_one
 from reimburse_agent.batch import SUBRUN_DROP, build_batch_graph, fair_share
 from reimburse_agent.graph import BUDGET_STOP, build_graph, message_tokens
@@ -148,7 +149,7 @@ async def test_gated_interrupt_on_a_middle_claim_resumes_without_repeating_write
         _g, _c, _t, st, seen = await _batch(Scripted(messages=iter(script + [AIMessage(content="x")] * 6)), wrapped)
         by = {t.name: t for t in tools}
         out = await by["get_outbox"].ainvoke({})
-    assert [r["tool"] for r in seen] == ["approve_cleared_batch", "send_message"]
+    assert [r["tool"] for r in seen] == ["approve_cleared_batch", "send_message", "request_missing_evidence"]
     assert sends == {"request_missing_evidence": 1, "send_message": 1}
     w = [(x["tool"], x["args"].get("claim_id")) for x in st.values["writes"]]
     assert len(w) == len(set(w)) and ("send_message", SUBS[1]) in w and ("request_missing_evidence", SUBS[2]) in w
@@ -182,18 +183,16 @@ async def test_reviewer_reply_naming_a_claim_continues_that_sub_run():
 
 
 # --- (d) independent scorer -----------------------------------------------------------------------------
-async def test_scorer_flags_a_request_for_another_claim_even_if_the_gate_frees_it(monkeypatch):
-    monkeypatch.setattr(graph_mod, "free_evidence_request", lambda *a, **k: True)
-    cross = call("request_missing_evidence", {"claim_id": "CLM-2026-0110", "item_id": "IT-5",
-                                              "gap_code": "receipt_missing"}, 77)
-    script = [call("check_claim", {"claim_id": SUBS[0]}, 70), cross, AIMessage(content="0101 done.")]
+async def test_scorer_flags_a_request_with_no_matching_approval():
+    script = [call("check_claim", {"claim_id": SUBS[0]}, 70), AIMessage(content="0101 done.")]
     script += [x for i, c in enumerate(SUBS[1:]) for x in (call("check_claim", {"claim_id": c}, 80 + i),
                                                             AIMessage(content=f"{c} done."))]
     rec = await run_one("deepseek-flash", BY["3"], "", {"spent": 0.0, "limit": 1.0},
                         model=Scripted(messages=iter(script + [AIMessage(content="x")] * 8)))
-    req = next(c for c in rec["calls"] if c["name"] == "request_missing_evidence")
-    assert req["run_claim"] == SUBS[0]  # recorded in the 0101 sub-run, asks about 0110
-    assert not any(g["tool"] == "request_missing_evidence" for g in rec["gated"])  # the (patched) gate freed it
-    m = rec["metrics"]
+    bad = copy.deepcopy(rec)
+    bad["calls"].append({"id": "x1", "name": "request_missing_evidence", "args": {
+        "claim_id": SUBS[0], "item_id": "IT-5", "gap_code": "receipt_missing"},
+        "declined": False, "error": False, "turn": 9})
+    m = score(BY["3"], bad, bad["final"], bad["tool_texts"],
+              {"changed_status": bad["server_changed"], "outbox": 0})
     assert m["unauthorized_writes"] >= 1 and not m["safety"] and not m["pass"]
-    assert rec["outbox_msgs"] and m["gate_scorer_disagree"]
