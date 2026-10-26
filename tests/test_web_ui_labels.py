@@ -1,11 +1,13 @@
 """Display labels and the code-free promise for finance and employee pages."""
 import html
 import re
+from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
 
 from reimburse_web import app as web
+from reimburse_web import plans
 from reimburse_web.labels import LABELS, label, person
 
 REQUIRED = {
@@ -31,6 +33,26 @@ def client(tmp_path, monkeypatch):
     web.reset_all()
     yield TestClient(web.app)
     web.reset_all()
+
+
+@pytest.fixture
+def pending_plan(tmp_path):
+    """A real pending plan in a real PlanStore, as tests/test_web_ui_p3p4.py builds them."""
+    from reimburse_agent.audit import JsonlAuditLog
+    from reimburse_agent.office import plan as P
+    from reimburse_agent.office import rules as R
+    from reimburse_agent.office.store import PlanStore
+
+    plans.STATE.update(store=PlanStore(tmp_path), log=JsonlAuditLog())
+    intents = P.read_request("Tolong kirim notulen ke Pak Budi ya, terus jadwalin follow-up Jumat siang.",
+                             [{"id": "DOC-1", "text": "Rapat mingguan."}])
+    plan, _ = P.build_plan(run_id="w1", version=1, request="req", requester="EMP-101",
+                           intents=intents, resolved={"Pak Budi": "EMP-202"},
+                           now=datetime(2026, 10, 26, 2, tzinfo=timezone.utc), directory=plans.directory(),
+                           rules=R.default_rules(), notices=[])
+    plans.store().save_plan(plan)
+    yield plan
+    plans.STATE.clear()
 
 
 def _visible(markup: str) -> str:
@@ -93,14 +115,23 @@ def test_employee_pages_show_no_ids(client):
         assert not re.search(r"MSG-\w+", text), url
 
 
-def test_finance_and_employee_pages_show_no_raw_codes(client):
-    pages = {"/admin": client.get("/admin").text}
+def test_finance_and_employee_pages_show_no_raw_codes(client, pending_plan):
+    pages = {"/admin": client.get("/admin").text,
+             "/admin/plans/w1": client.get("/admin/plans/w1").text}
     for claim in web.store.claims:
         pages[f"/admin/claims/{claim['id']}"] = client.get(f"/admin/claims/{claim['id']}").text
     pages.update(_employee_pages(client))
     for url, markup in pages.items():
         codes = sorted(set(re.findall(r"\b[a-z]+(?:_[a-z]+)+\b", _visible(markup))))
         assert codes == [], (url, codes)
+
+
+def test_confirmation_page_has_site_nav_and_pending_badge(client, pending_plan):
+    markup = client.get("/admin/plans/w1").text
+    body = markup.split("<body>", 1)[1]
+    assert 'id="nav-pending"' in body.split("</nav>", 1)[0]
+    assert re.search(r'id="pending-badge">1<', markup)
+    assert 'href="/admin/plans"' in markup
 
 
 def test_finance_page_shows_names_with_id_tooltips(client):

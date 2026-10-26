@@ -107,18 +107,30 @@ def test_claim_page_decision_buttons_only_for_decision_gaps(client):
     html = client.get(f"/admin/claims/{HERO}").text
     # CLM-2026-0110 without evidence: IT-3 hotel_over_cap and IT-4 late_checkout_unjustified are decision
     # gaps; IT-1 only lacks a boarding pass and IT-5 only lacks a receipt.
-    assert "name=choice" in _row(html, "IT-3")
-    assert "name=choice" in _row(html, "IT-4")
-    assert "name=choice" not in _row(html, "IT-1")
-    assert "name=choice" not in _row(html, "IT-5")
-    assert "Perlu dokumen" in _row(html, "IT-1")
-    assert "Perlu dokumen" in _row(html, "IT-5")
+    for item_id in ("IT-3", "IT-4"):
+        row = _row(html, item_id)
+        assert "name=choice" in row
+        assert "value='approve_full'" in row and "value='approve_capped'" in row
+    for item_id in ("IT-1", "IT-5"):
+        row = _row(html, item_id)
+        assert "value='reject'" in row
+        assert "value='approve_full'" not in row
+        assert "value='approve_capped'" not in row
+        assert "Perlu dokumen" in row
 
     box = html.split("id='needs-you'", 1)[1].split("</div>", 1)[0]
     assert "butuh 2 keputusan Anda" in box
     assert "href='#item-IT-3'" in box and "href='#item-IT-4'" in box
     assert "IT-1" not in box and "IT-5" not in box
     assert "Hotel di atas plafon" in box
+
+    # A document-only item can still be rejected; the decision settles it as rejected.
+    r = client.post(f"/admin/claims/{HERO}/decide", data={"item_id": "IT-1", "choice": "reject"},
+                    follow_redirects=False)
+    assert r.status_code == 303
+    row = _row(client.get(f"/admin/claims/{HERO}").text, "IT-1")
+    assert "value='reject' disabled" in row
+    assert "Reviewer: Tolak" in row
 
 
 def test_claim_page_states_amounts_come_from_rules_and_links_audit(client):

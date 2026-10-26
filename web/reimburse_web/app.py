@@ -119,11 +119,22 @@ def _pending_nav() -> str:
             f'<span class="badge" id="pending-badge">{n}</span></a>')
 
 
+# Nav rules for pages rendered outside page() (the plan confirmation screen has its own stylesheet).
+NAV_CSS = ("nav{margin-bottom:12px}nav a{margin-right:14px}nav .note{margin-left:8px}"
+           ".badge{display:inline-block;min-width:18px;padding:0 6px;border-radius:9px;background:#c62828;color:#fff;"
+           "text-align:center;font-size:12px;margin-left:4px}")
+
+
+def nav_html() -> str:
+    return (f'<nav><b>reimburse-buddy</b> &middot; <a href="/">Beranda</a>\n'
+            f'<a href="/employee">Employee</a> <a href="/admin">Finance admin</a>{_pending_nav()}'
+            f'<span class="note">Synthetic data. Simulation only.</span></nav>')
+
+
 def page(title: str, body: str) -> HTMLResponse:
     return HTMLResponse(f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>{escape(title)}</title>
-<style>{CSS}</style></head><body><nav><b>reimburse-buddy</b> &middot; <a href="/">Beranda</a>
-<a href="/employee">Employee</a> <a href="/admin">Finance admin</a>{_pending_nav()}<span class="note">Synthetic data. Simulation only.</span></nav>
+<style>{CSS}</style></head><body>{nav_html()}
 <h1>{escape(title)}</h1>{body}</body></html>""")
 
 
@@ -381,7 +392,16 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
         pend = pending.get(it.item_id, [])
         dec = ""
         decision_gaps = [g for g in it.gaps if g in DECISION_GAPS]
-        if (decision_gaps or it.human_decision) and not pend:
+        document_only = bool(it.gaps) and set(it.gaps) <= DOCUMENT_GAPS
+        if document_only and not pend:
+            dec = (f"<form method=post action='/admin/claims/{e(cid)}/decide' style='display:inline'>"
+                   f"<input type=hidden name=item_id value='{e(it.item_id)}'>"
+                   f"<button name=choice value='reject'{' disabled' if it.human_decision == 'reject' else ''}>"
+                   f"{e(label('reject'))}</button></form>"
+                   f"<div class=note>Perlu dokumen: {e(', '.join(label(g) for g in it.gaps))}</div>")
+            if it.human_decision:
+                dec += f"<div class=note>Reviewer: {e(label(it.human_decision))}</div>"
+        elif (decision_gaps or it.human_decision) and not pend:
             dec = (f"<form method=post action='/admin/claims/{e(cid)}/decide' style='display:inline'>"
                    f"<input type=hidden name=item_id value='{e(it.item_id)}'>"
                    + "".join(f"<button name=choice value='{ch}'{' disabled' if it.human_decision == ch else ''}>{e(label(ch))}</button> "
@@ -389,8 +409,7 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
             if it.human_decision:
                 dec += f"<div class=note>Reviewer: {e(label(it.human_decision))}</div>"
         elif it.gaps and not pend:
-            lead = "Perlu dokumen" if set(it.gaps) <= DOCUMENT_GAPS else "Perlu ditinjau"
-            dec = f"<div class=note>{lead}: {e(', '.join(label(g) for g in it.gaps))}</div>"
+            dec = f"<div class=note>Perlu ditinjau: {e(', '.join(label(g) for g in it.gaps))}</div>"
         status_cell = f"<span title='{e(it.status.value)}'>{e(label(it.status.value))}</span>"
         if pend:
             status_cell = "<span class='tag warn'>pending review</span>"
