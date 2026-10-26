@@ -85,7 +85,6 @@ def triage_claims(batch: str = "") -> dict:
     return _triage(store, batch)
 
 
-@mcp.tool()
 def approve_cleared_batch(batch_id: str, claim_ids: list[str], reviewer_confirmed: bool = False) -> dict:
     """(Mock write) Mark auto-cleared claims as approved in one step. Only works when the reviewer
     explicitly confirmed (reviewer_confirmed=true) and claim_ids exactly equal the claims that
@@ -130,7 +129,7 @@ def update_claim_status(claim_id: str, status: str, note: str = "") -> dict:
 if os.environ.get("REIMBURSE_ENABLE_EVIDENCE_TOOL") == "1":
     mcp.tool()(request_missing_evidence)
 if os.environ.get("REIMBURSE_ENABLE_WRITE_TOOLS") == "1":
-    for _write_tool in (send_message, request_approval, update_claim_status):
+    for _write_tool in (send_message, request_approval, update_claim_status, approve_cleared_batch):
         mcp.tool()(_write_tool)
 
 
