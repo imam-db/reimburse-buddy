@@ -5,3 +5,8 @@ __pycache__/
 dist/
 .env
 web/uploads/
+.neon
+node_modules/
+.env.local
+.env*
+!.env.example
