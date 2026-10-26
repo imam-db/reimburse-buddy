@@ -85,11 +85,26 @@ def triage_claims(batch: str = "") -> dict:
     return _triage(store, batch)
 
 
-def approve_cleared_batch(batch_id: str, claim_ids: list[str], reviewer_confirmed: bool = False) -> dict:
+def _once(action_id: str, run) -> dict:
+    """Mock outbox idempotency: an action_id the server already executed is refused, never re-run."""
+    if action_id:
+        seen = store.__dict__.setdefault("executed_actions", {})
+        if action_id in seen:
+            return {"error": "duplicate_action_id", "message": f"action {action_id} was already executed",
+                    "first_result": seen[action_id]}
+        res = run()
+        if not (isinstance(res, dict) and "error" in res):
+            seen[action_id] = res
+        return res
+    return run()
+
+
+def approve_cleared_batch(batch_id: str, claim_ids: list[str], reviewer_confirmed: bool = False,
+                          action_id: str = "") -> dict:
     """(Mock write) Mark auto-cleared claims as approved in one step. Only works when the reviewer
     explicitly confirmed (reviewer_confirmed=true) and claim_ids exactly equal the claims that
     triage_claims(batch_id) currently clears. Otherwise returns an error and changes nothing."""
-    return _approve_batch(store, batch_id, claim_ids, reviewer_confirmed)
+    return _once(action_id, lambda: _approve_batch(store, batch_id, claim_ids, reviewer_confirmed))
 
 
 @mcp.tool()
@@ -101,28 +116,28 @@ def draft_decision(claim_id: str, evidence_ids: list[str] | None = None,
     return _draft(store, _check(store, claim_id, evidence_ids, human_decisions), note, language)
 
 
-def send_message(to: str, body: str, subject: str = "", claim_id: str = "") -> dict:
+def send_message(to: str, body: str, subject: str = "", claim_id: str = "", action_id: str = "") -> dict:
     """(Mock) Email an employee, e.g. to ask for a missing receipt. Goes to the outbox.
     The employee's scripted reply arrives in the reimburse@ mailbox; check with search_reimburse_mailbox."""
-    return store.send_message(to, body, subject, claim_id)
+    return _once(action_id, lambda: store.send_message(to, body, subject, claim_id))
 
 
 def request_missing_evidence(claim_id: str, item_id: str, gap_code: str, evidence_ids: list[str] | None = None,
-                             human_decisions: dict[str, str] | None = None) -> dict:
+                             human_decisions: dict[str, str] | None = None, action_id: str = "") -> dict:
     """(Mock) Ask the claim's owner for a missing document, using a fixed template (no free text,
     no amounts, no decision). gap_code must still be reported by check_claim for that item given
     evidence_ids and human_decisions. An unanswered identical request is returned, not resent."""
-    return _request_evidence(store, claim_id, item_id, gap_code, evidence_ids, human_decisions)
+    return _once(action_id, lambda: _request_evidence(store, claim_id, item_id, gap_code, evidence_ids, human_decisions))
 
 
-def request_approval(manager_id: str, claim_id: str, item_id: str, reason: str = "") -> dict:
+def request_approval(manager_id: str, claim_id: str, item_id: str, reason: str = "", action_id: str = "") -> dict:
     """(Mock) Ask the claimant's manager to approve one item. Returns a pending request."""
-    return store.request_approval(manager_id, claim_id, item_id, reason)
+    return _once(action_id, lambda: store.request_approval(manager_id, claim_id, item_id, reason))
 
 
-def update_claim_status(claim_id: str, status: str, note: str = "") -> dict:
+def update_claim_status(claim_id: str, status: str, note: str = "", action_id: str = "") -> dict:
     """(Mock) Set claim status: submitted, on_hold, approved, partially_approved or rejected."""
-    return store.update_claim_status(claim_id, status, note)
+    return _once(action_id, lambda: store.update_claim_status(claim_id, status, note))
 
 
 @mcp.tool()

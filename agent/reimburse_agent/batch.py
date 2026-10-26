@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from typing import Annotated, TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
@@ -18,6 +19,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.types import interrupt
 
+from .audit import AuditLog, args_hash, default_log, execute_approved, make_event, source_ids
 from .compact import tool_text
 from .graph import (MAX_GATED_CALLS, _compact, _jsonish, build_graph, call_signature, check_position, describe_writes,
                     open_gaps)
@@ -70,6 +72,7 @@ class BatchState(TypedDict, total=False):
     writes: list[dict]
     gated_count: int
     graph_proposals: list[dict]
+    exec_queue: list[dict]  # approve's decision, waiting for approve_exec
     effective_args: Annotated[dict[str, dict], _merge]
     rp_unsupported: list[int]
     threads: Annotated[dict[str, dict], _merge]  # claim -> {"thread_id", "state"}: each sub-run's own state, kept
@@ -125,9 +128,15 @@ def triage_row(triage_text: str, cid: str) -> str:
 def build_batch_graph(model, tools, batch_id: str, system_prompt: str | None = None, checkpointer=None,
                       compact: bool = True, max_gated: int = MAX_GATED_CALLS,
                       subrun_token_budget: int | None = SUBRUN_TOKEN_BUDGET,
-                      batch_token_budget: int | None = BATCH_TOKEN_BUDGET, slim: bool = True):
+                      batch_token_budget: int | None = BATCH_TOKEN_BUDGET, slim: bool = True,
+                      audit: AuditLog | None = None):
     """slim=False is the review-5 sub-run (bare prompt, nothing served), kept for the token comparison."""
     by_name = {t.name: t for t in tools}
+    alog = audit if audit is not None else default_log()
+    bnonce = uuid.uuid4().hex[:8]
+
+    def run_id_of(config) -> str:
+        return f"{bnonce}:{((config or {}).get('configurable') or {}).get('thread_id', 'default')}"
 
     async def call(name, args):
         res = await by_name[name].ainvoke(args)
@@ -143,7 +152,8 @@ def build_batch_graph(model, tools, batch_id: str, system_prompt: str | None = N
                 "policy_text": _compact(await call("get_policy", {})) if "get_policy" in by_name else "",
                 "summaries": [], "writes": [], "gated_count": 0, "graph_proposals": []}
 
-    async def approve(state: BatchState):
+    async def approve(state: BatchState, config):
+        """Gate only: one interrupt, decision logged. approve_exec runs the approved batch approval."""
         first = next((m for m in state["messages"] if isinstance(m, HumanMessage)), None)
         quote = str(first.content) if first else ""
         cleared = state.get("cleared") or []
@@ -151,20 +161,46 @@ def build_batch_graph(model, tools, batch_id: str, system_prompt: str | None = N
             return {}
         args = {"batch_id": batch_id, "claim_ids": cleared, "reviewer_confirmed": True}
         tcid = "graph-approve_cleared_batch-0"
+        rid = run_id_of(config)
+        alog.append(make_event(rid, "staged_action", tcid, action_id=tcid, args_hash=args_hash("approve_cleared_batch", args),
+                               payload={"tool": "approve_cleared_batch", "args": args, "by": "graph"},
+                               sources=source_ids(args)))
         answer = interrupt({"tool": "approve_cleared_batch", "args": args, "tool_call_id": tcid, "by": "graph",
                             "from": quote, "prompt": f'Approve the {len(cleared)} claims triage cleared? You asked: "{quote}"'})
         ok = isinstance(answer, dict) and answer.get("approved") is True and answer.get("tool_call_id") == tcid
-        rec = {"tool": "approve_cleared_batch", "args": args, "id": tcid, "approved": ok, "from": quote}
+        reason = None if ok else ((answer.get("reason") if isinstance(answer, dict) else "") or "declined")
+        try:
+            alog.append(make_event(rid, "approval" if ok else "rejection", tcid, actor="human:reviewer", action_id=tcid,
+                                   args_hash=args_hash("approve_cleared_batch", args),
+                                   payload={"tool": "approve_cleared_batch", **({"reason": reason} if reason else {})}))
+        except Exception:
+            ok, reason = False, "approval could not be logged"
+        return {"gated_count": state.get("gated_count", 0) + 1,
+                "exec_queue": [{"tool": "approve_cleared_batch", "args": args, "id": tcid, "ok": ok,
+                                "reason": reason, "quote": quote}]}
+
+    async def approve_exec(state: BatchState, config):
+        """Executor: runs the approved batch approval via execute_approved (one execution per action_id)."""
         writes = list(state.get("writes", []))
-        if ok:
-            res = _jsonish(await call("approve_cleared_batch", args)) or {}
+        props = list(state.get("graph_proposals", []))
+        for q in state.get("exec_queue", []):
+            args, tcid, ok = q["args"], q["id"], q["ok"]
+            rec = {"tool": "approve_cleared_batch", "args": args, "id": tcid, "approved": ok, "from": q["quote"]}
+            if not ok:
+                rec["reason"] = q["reason"]
+                props.append(rec)
+                continue
+            schema = getattr(by_name["approve_cleared_batch"], "args_schema", None)
+            takes = "action_id" in (schema.get("properties", {}) if isinstance(schema, dict)
+                                    else getattr(schema, "model_fields", {}) or {})
+            r = await execute_approved(alog, run_id_of(config), tcid, "approve_cleared_batch", args,
+                                       lambda a: call("approve_cleared_batch", {**a, "action_id": tcid} if takes else a))
+            res = (_jsonish(r["result"]) or {}) if r["status"] == "executed" else {"error": r.get("reason") or r["status"]}
             rec["error"] = not res.get("ok")
             if res.get("ok"):
                 writes.append({"tool": "approve_cleared_batch", "args": args, "by": "graph_action"})
-        else:
-            rec["reason"] = (answer.get("reason") if isinstance(answer, dict) else "") or "declined"
-        return {"writes": writes, "gated_count": state.get("gated_count", 0) + 1,
-                "graph_proposals": [*state.get("graph_proposals", []), rec]}
+            props.append(rec)
+        return {"writes": writes, "graph_proposals": props, "exec_queue": []}
 
     sub_tools = [t for t in tools if t.name not in SUBRUN_DROP] if slim else tools
 
@@ -194,7 +230,8 @@ def build_batch_graph(model, tools, batch_id: str, system_prompt: str | None = N
         cid = state["queue"][0]
         left = max(0, max_gated - state.get("gated_count", 0))
         sub = build_graph(model, sub_tools, system_prompt=system_prompt, compact=compact, max_gated=left,
-                          run_claim=cid, served=None, token_budget=budget_for(state, state["queue"]))
+                          run_claim=cid, served=None, token_budget=budget_for(state, state["queue"]),
+                          audit=alog, run_prefix=f"{bnonce}:{cid}")
         first = next((m for m in state["messages"] if isinstance(m, HumanMessage)), None)
         # Triage and policy are already known: hand them in (the sub-run's tool set has no triage/policy tools).
         prompt = (f"Review claim {cid} and draft the decision note. It is an exception in batch {batch_id} "
@@ -222,7 +259,8 @@ def build_batch_graph(model, tools, batch_id: str, system_prompt: str | None = N
         budget = budget_for(state, [cid])
         sub = build_graph(model, sub_tools, system_prompt=system_prompt, compact=compact, max_gated=left + prev.get("gated_count", 0),
                           run_claim=cid, served=None,
-                          token_budget=None if budget is None else prev.get("tokens_used", 0) + budget)
+                          token_budget=None if budget is None else prev.get("tokens_used", 0) + budget,
+                          audit=alog, run_prefix=f"{bnonce}:{cid}")
         v = await sub.ainvoke({**prev, "messages": [*prev.get("messages", []), state["messages"][-1]]})
         out = merged(state, cid, v, before=prev)
         s = next(x for x in out["summaries"] if x["claim_id"] == cid)
@@ -263,6 +301,8 @@ def build_batch_graph(model, tools, batch_id: str, system_prompt: str | None = N
     g = StateGraph(BatchState)
     g.add_node("triage", triage)
     g.add_node("approve", approve)
+    g.add_node("approve_exec", approve_exec)
+    g.add_edge("approve", "approve_exec")
     g.add_node("claim_run", claim_run)
     g.add_node("finish", finish)
     g.add_edge(START, "triage")
@@ -270,7 +310,7 @@ def build_batch_graph(model, tools, batch_id: str, system_prompt: str | None = N
     g.add_conditional_edges("triage", lambda s: ("claim_reply" if reply_target(s) else "finish") if len(
         [m for m in s["messages"] if isinstance(m, HumanMessage)]) > 1 else "approve", ["approve", "finish", "claim_reply"])
     g.add_edge("claim_reply", END)
-    g.add_conditional_edges("approve", next_step, ["claim_run", "finish"])
+    g.add_conditional_edges("approve_exec", next_step, ["claim_run", "finish"])
     g.add_conditional_edges("claim_run", next_step, ["claim_run", "finish"])
     g.add_edge("finish", END)
     return g.compile(checkpointer=checkpointer)
