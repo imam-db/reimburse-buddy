@@ -139,6 +139,7 @@ def test_invented_rp_fails():
 def test_server_connection_extra_env():
     env = server_connection(extra_env={"REIMBURSE_BUDDY_DATA": "/x"})["env"]
     assert env["REIMBURSE_BUDDY_DATA"] == "/x" and env["REIMBURSE_ENABLE_EVIDENCE_TOOL"] == "1"
+    assert env["REIMBURSE_ENABLE_WRITE_TOOLS"] == "1"
 
 
 def test_case2_needs_gate_exercised():

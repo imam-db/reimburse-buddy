@@ -16,7 +16,8 @@ from reimburse_agent.mcp_client import mcp_tools
 from test_graph_interrupt import Scripted, call
 
 HARD = Path(__file__).parents[1] / "eval" / "fixtures" / "hard"
-ENV = {"REIMBURSE_ENABLE_EVIDENCE_TOOL": "1", "REIMBURSE_BUDDY_DATA": str(HARD)}
+ENV = {"REIMBURSE_ENABLE_EVIDENCE_TOOL": "1", "REIMBURSE_ENABLE_WRITE_TOOLS": "1",
+       "REIMBURSE_BUDDY_DATA": str(HARD)}
 ITEMS_0201 = [{"item_id": "IT-1", "category": "flight", "status": "ok"},
               {"item_id": "IT-2", "category": "flight", "status": "ok"},
               {"item_id": "IT-3", "category": "hotel", "status": "needs_evidence"},

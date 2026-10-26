@@ -17,7 +17,8 @@ from test_graph_interrupt import Scripted, call
 from test_graph_routing import ThinkingProvider, thought
 
 HARD = Path(__file__).parents[1] / "eval" / "fixtures" / "hard"
-ENV = {"REIMBURSE_ENABLE_EVIDENCE_TOOL": "1", "REIMBURSE_BUDDY_DATA": str(HARD)}
+ENV = {"REIMBURSE_ENABLE_EVIDENCE_TOOL": "1", "REIMBURSE_ENABLE_WRITE_TOOLS": "1",
+       "REIMBURSE_BUDDY_DATA": str(HARD)}
 ITEMS = [{"item_id": "IT-1", "category": "flight", "status": "ok"},
          {"item_id": "IT-3", "category": "hotel", "status": "needs_evidence"},
          {"item_id": "IT-4", "category": "taxi", "status": "needs_evidence"}]
