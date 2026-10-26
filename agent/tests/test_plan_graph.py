@@ -175,6 +175,6 @@ def test_expired_action_never_executes(env):
     g, log, office, *_ = env
     p, _ = to_plan(g, run="r9")
     from reimburse_agent.audit import sweep_expired
-    assert sweep_expired(log) == 2
+    assert sweep_expired(log, older_than=timedelta(0)) == 2
     g.invoke(Command(resume={"decisions": {a["action_id"]: "approve" for a in p["actions"]}}), cfg("r9"))
     assert office.count() == 0

@@ -462,7 +462,12 @@ start -> propose -> resolve --(question)--> clarify -> resolve
   IDs), assumptions, injection notices and highlighted `influenced_fields`, with per-action
   Approve/Reject and a note. Rendering logs `notice_shown` with the key `<run_id>:notice_shown:<notice
   id>`, so a refresh adds nothing. Submitting the form only stores the decision map
-  (`REIMBURSE_PLAN_STORE`); the graph process resumes from it.
+  (`REIMBURSE_PLAN_STORE`); the graph process resumes from it. An expired plan shows
+  "Rencana ini sudah kedaluwarsa" with the reason and a "Jalankan ulang" link instead of approve
+  controls. Expiry is swept by the **web process once at startup** for staged actions older than
+  `REIMBURSE_APPROVAL_DEADLINE_MIN` (default 30) whose run is no longer in the plan store. Opening a
+  log (`audit.default_log()`) and agent workers never sweep, so a worker cannot expire a plan that is
+  still waiting on someone's page.
 
 Demo (two terminals, same `REIMBURSE_AUDIT_LOG` and `REIMBURSE_PLAN_STORE`):
 

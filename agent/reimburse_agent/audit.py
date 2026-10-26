@@ -21,9 +21,9 @@ import re
 import subprocess
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterable, Protocol
+from typing import Any, Callable, Iterable, Protocol
 
 EVENT_TYPES = frozenset({
     "request", "plan", "tool_call", "staged_action", "approval", "rejection", "execution", "clarification",
@@ -238,17 +238,52 @@ UNMATCHED_SQL = """SELECT x.* FROM audit_events x WHERE x.event_type = 'executio
   AND a.action_id = x.action_id AND a.args_hash = x.args_hash)"""
 
 
-def sweep_expired(log: AuditLog, reason: str = "process restarted before an answer") -> int:
-    """Startup: every staged_action with no approval/rejection/expired gets an `expired` event (actor system)."""
+DEFAULT_APPROVAL_DEADLINE_MIN = 30
+EXPIRY_REASON_DEADLINE = "not answered before the deadline"
+
+
+def approval_deadline() -> timedelta:
+    """How long a staged action may wait for an answer: REIMBURSE_APPROVAL_DEADLINE_MIN (default 30)."""
+    raw = os.environ.get("REIMBURSE_APPROVAL_DEADLINE_MIN", str(DEFAULT_APPROVAL_DEADLINE_MIN))
+    try:
+        minutes = float(raw)
+    except (TypeError, ValueError):
+        minutes = float(DEFAULT_APPROVAL_DEADLINE_MIN)
+    return timedelta(minutes=max(0.0, minutes))
+
+
+def _live_ids(live: Iterable[str] | Callable[[], Iterable[str]]) -> set[str]:
+    return set((live() if callable(live) else live) or ())
+
+
+def sweep_expired(log: AuditLog, *, older_than: timedelta | None = None,
+                  live: Iterable[str] | Callable[[], Iterable[str]] = (),
+                  now: datetime | None = None, reason: str = EXPIRY_REASON_DEADLINE) -> int:
+    """Expire staged actions past the approval deadline whose run is not live anymore.
+
+    An event is only expired when it has no approval/rejection/expired outcome yet, it is older than
+    `older_than` (default: REIMBURSE_APPROVAL_DEADLINE_MIN, 30 minutes), AND its run_id is not in `live`
+    (a set or a callable returning the run ids still on someone's confirmation page). Opening a log never
+    calls this: ``default_log()`` and agent workers must not expire a plan that is still being reviewed.
+    The web process calls it once at startup with the run ids from its plan store.
+    """
+    older_than = approval_deadline() if older_than is None else older_than
+    now = now or datetime.now(timezone.utc)
+    keep = _live_ids(live)
     events = log.list()
     done = {(e["run_id"], e["action_id"]) for e in events if e["event_type"] in OUTCOME_TYPES}
     n = 0
     for e in events:
-        if e["event_type"] == "staged_action" and (e["run_id"], e["action_id"]) not in done:
-            n += log.append(make_event(e["run_id"], "expired", e["action_id"], actor="system",
-                                       action_id=e["action_id"], args_hash=e["args_hash"],
-                                       payload={"reason": reason, "tool": e["payload"].get("tool")}))
-            done.add((e["run_id"], e["action_id"]))
+        if e["event_type"] != "staged_action" or (e["run_id"], e["action_id"]) in done:
+            continue
+        if e["run_id"] in keep:
+            continue
+        if now - datetime.fromisoformat(e["ts"]) <= older_than:
+            continue
+        n += log.append(make_event(e["run_id"], "expired", e["action_id"], actor="system",
+                                   action_id=e["action_id"], args_hash=e["args_hash"],
+                                   payload={"reason": reason, "tool": e["payload"].get("tool")}))
+        done.add((e["run_id"], e["action_id"]))
     return n
 
 
@@ -257,7 +292,8 @@ _DEFAULT_LOCK = threading.Lock()
 
 
 def default_log() -> AuditLog:
-    """Process-wide log from REIMBURSE_AUDIT_LOG (JSONL path) or DATABASE_URL; opened once, swept at open.
+    """Process-wide log from REIMBURSE_AUDIT_LOG (JSONL path) or REIMBURSE_AUDIT_DATABASE_URL; opened once.
+    Opening the log never sweeps: agent workers must not expire plans still waiting on a confirmation page.
     Without either, a fresh in-memory log per call (tests, scripted runs)."""
     global _DEFAULT
     path, dsn = os.environ.get("REIMBURSE_AUDIT_LOG"), os.environ.get("REIMBURSE_AUDIT_DATABASE_URL")
@@ -266,7 +302,6 @@ def default_log() -> AuditLog:
     with _DEFAULT_LOCK:
         if _DEFAULT is None:
             _DEFAULT = PostgresAuditLog(dsn) if dsn else JsonlAuditLog(path)
-            sweep_expired(_DEFAULT)
         return _DEFAULT
 
 
