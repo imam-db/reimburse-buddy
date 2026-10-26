@@ -1260,6 +1260,7 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         snap = state.get("mailbox_before")
         props = list(state.get("graph_proposals", []))
         count = state.get("gated_count", 0)
+        decided = []  # phase 1: (instruction, tool, args, tcid, approved, answer); nothing runs here
         for ins in pend:
             name, call_args = await build_action(ins, fresh, args)
             if name is None:
@@ -1271,10 +1272,14 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                 notes.append(f"Not proposed: {name} (limit of {max_gated} approval requests reached).")
                 continue
             count += 1
-            tcid = f"graph-{name}-{len(props)}"
+            tcid = f"graph-{name}-{len(props) + len(decided)}"
             answer = interrupt({"tool": name, "args": call_args, "tool_call_id": tcid, "by": "graph",
                                 "from": ins["quote"], "prompt": f'Proposed by the graph because you asked: "{ins["quote"]}"'})
             ok = isinstance(answer, dict) and answer.get("approved") is True and answer.get("tool_call_id") == tcid
+            decided.append((ins, name, call_args, tcid, ok, answer))
+        # Phase 2: execute only after every interrupt in this node has its answer. A resume re-runs this
+        # node from the top; nothing above has side effects, so no approved write can run twice.
+        for ins, name, call_args, tcid, ok, answer in decided:
             rec = {"tool": name, "args": call_args, "id": tcid, "approved": ok, "from": ins["quote"]}
             if ok:
                 try:
