@@ -27,7 +27,7 @@ from .judge import get_judge, review_flags
 from .retrieval import (clean_query, contradiction_hits, find_messages as ranked_find, message_pool,
                         pool_version)
 
-SKILL_PATH = Path(__file__).resolve().parents[2] / "skills" / "claim-auditor" / "SKILL.md"
+SKILL_PATH = Path(__file__).resolve().parent / "prompts" / "system_prompt.md"
 
 # Allowlist: only these read-only tools run without the reviewer. Every other tool, including any
 # write tool added to the server later, stops for approval (deny by default).
@@ -42,7 +42,7 @@ EVIDENCE_TOOL = "request_missing_evidence"
 FREE_EVIDENCE_GAPS = frozenset({"receipt_missing", "boarding_pass_missing", "hotel_nights_mismatch"})
 MAX_FREE_EVIDENCE = 3  # per run
 
-# Version B only, appended to SKILL.md (which stays exactly what WorkBuddy loads).
+# Version B only, appended to the B-owned prompt file (skills/claim-auditor/SKILL.md is WorkBuddy's).
 PROMPT_ADDENDUM = """
 
 ---
@@ -87,8 +87,8 @@ def _as_json(text):
 
 
 def load_system_prompt(path: Path = SKILL_PATH, addendum: bool = True) -> str:
-    """SKILL.md as-is (YAML frontmatter included, the same text WorkBuddy loads), plus the version B
-    addendum unless addendum=False."""
+    """The version B prompt as-is (YAML frontmatter included), plus the version B addendum unless
+    addendum=False. WorkBuddy's draft-only SKILL.md is a separate file."""
     text = path.read_text(encoding="utf-8")
     return text + PROMPT_ADDENDUM if addendum else text
 
@@ -209,7 +209,7 @@ GAP_SEARCH_TOOL = "search_for_gap"  # version B only; wraps SEARCH_TOOL and attr
 EMPLOYEE_MESSAGE_TOOLS = frozenset({EVIDENCE_TOOL, "send_message"})
 DECISION_TOOLS = frozenset({"check_claim", "draft_decision", EVIDENCE_TOOL})
 EVIDENCE_ARG_TOOLS = DECISION_TOOLS
-SEARCHES_PER_GAP = 2  # per open gap before asking the employee; 1 more after the ask (SKILL.md: 3 in all)
+SEARCHES_PER_GAP = 2  # per open gap before asking the employee; 1 more after the ask (prompt: 3 in all)
 SEARCHES_AFTER_ASK = 1
 MAX_BLOCKED = 2  # consecutive refused searches before the graph finishes the run itself
 STABLE_IGNORE = frozenset({"belongs_to_other_employee", "memo_unsigned", "no_matching_item"})
@@ -514,8 +514,8 @@ def message_tokens(m) -> int:
 
 
 def token_split(system_text: str, tools, served: dict | None) -> dict:
-    """Rough (chars/4) size of what every model call carries: SKILL.md, the version B addendum, the bound
-    tool schemas, and any served text. Logged once per build_graph."""
+    """Rough (chars/4) size of what every model call carries: the prompt file, the version B addendum,
+    the bound tool schemas, and any served text. Logged once per build_graph."""
     schemas = []
     for t in tools:
         sch = t.args_schema if isinstance(t.args_schema, dict) else t.args_schema.model_json_schema()
