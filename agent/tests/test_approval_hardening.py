@@ -165,3 +165,84 @@ async def test_graph_initiated_evidence_request_rejected_sends_nothing():
     assert [r["tool"] for r in seen] == [EVIDENCE_TOOL] and seen[0]["by"] == "graph"
     assert calls[EVIDENCE_TOOL] == 0 and not st.values.get("writes")
     assert any("declined" in str(m.content) for m in st.values["messages"] if getattr(m, "type", "") == "tool")
+
+
+# --- exactly-once execution across resumes (graph-proposed actions, batch approval) ---------------------
+async def test_graph_actions_run_each_approved_write_exactly_once():
+    """Two reviewer instructions -> two graph-proposed writes in ONE graph_actions step. Resuming the second
+    interrupt re-runs the node from the top; the first approved write must not run again."""
+    cid = "CLM-2026-0111"  # clean claim: both actions are fully determined
+    script = [call("check_claim", {"claim_id": cid}, 1), AIMessage(content="done")]
+    ask = (f"Review claim {cid}. Tell the employee the outcome and the amount. "
+           "Then set the claim status to record your decision.")
+    async with mcp_tools(extra_env=ENV) as (_s, tools):
+        wrapped, calls = counted(tools)
+        g = build_graph(Scripted(messages=iter(script)), wrapped, checkpointer=InMemorySaver(), run_claim=cid)
+        conf = {"configurable": {"thread_id": str(uuid.uuid4())}, "recursion_limit": 60}
+        payload = {"messages": [("user", ask)], "declined": {}}
+        seen = []
+        while True:
+            await g.ainvoke(payload, conf)
+            st = await g.aget_state(conf)
+            if not st.interrupts:
+                break
+            req = st.interrupts[0].value
+            seen.append(req)
+            payload = Command(resume={"approved": True, "tool_call_id": req["tool_call_id"]})
+    assert [r["tool"] for r in seen] == ["send_message", "update_claim_status"]
+    assert calls["send_message"] == 1 and calls["update_claim_status"] == 1, calls
+    assert [w["tool"] for w in st.values["writes"]] == ["send_message", "update_claim_status"]
+
+
+async def test_graph_actions_partial_approval_runs_only_the_approved_one_once():
+    cid = "CLM-2026-0111"
+    script = [call("check_claim", {"claim_id": cid}, 1), AIMessage(content="done")]
+    ask = (f"Review claim {cid}. Tell the employee the outcome and the amount. "
+           "Then set the claim status to record your decision.")
+    async with mcp_tools(extra_env=ENV) as (_s, tools):
+        wrapped, calls = counted(tools)
+        g = build_graph(Scripted(messages=iter(script)), wrapped, checkpointer=InMemorySaver(), run_claim=cid)
+        conf = {"configurable": {"thread_id": str(uuid.uuid4())}, "recursion_limit": 60}
+        payload = {"messages": [("user", ask)], "declined": {}}
+        while True:
+            await g.ainvoke(payload, conf)
+            st = await g.aget_state(conf)
+            if not st.interrupts:
+                break
+            req = st.interrupts[0].value
+            payload = Command(resume={"approved": req["tool"] == "send_message", "reason": "no",
+                                      "tool_call_id": req["tool_call_id"]})
+    assert calls["send_message"] == 1 and calls["update_claim_status"] == 0, calls
+
+
+async def test_batch_approval_runs_exactly_once():
+    from reimburse_agent.batch import build_batch_graph
+    model = Scripted(messages=iter([AIMessage(content="needs you.")] * 20))
+    async with mcp_tools(extra_env=ENV) as (_s, tools):
+        counted_tools, _ = counted(tools)
+        n = {"approve_cleared_batch": 0}
+
+        def wrap(t):
+            if t.name != "approve_cleared_batch":
+                return t
+
+            async def run(**kw):
+                n["approve_cleared_batch"] += 1
+                return await t.ainvoke(kw)
+            return StructuredTool.from_function(coroutine=run, name=t.name, description=t.description,
+                                                args_schema=t.args_schema)
+        g = build_batch_graph(model, [wrap(t) for t in counted_tools], "2026-W43", checkpointer=InMemorySaver())
+        conf = {"configurable": {"thread_id": str(uuid.uuid4())}, "recursion_limit": 200}
+        payload = {"messages": [("user", "Triage batch 2026-W43 and approve the cleared claims.")], "declined": {}}
+        seen = []
+        while True:
+            await g.ainvoke(payload, conf)
+            st = await g.aget_state(conf)
+            if not st.interrupts:
+                break
+            req = st.interrupts[0].value
+            seen.append(req["tool"])
+            payload = Command(resume={"approved": req["tool"] == "approve_cleared_batch", "reason": "no",
+                                      "tool_call_id": req["tool_call_id"]})
+    assert seen.count("approve_cleared_batch") == 1
+    assert n["approve_cleared_batch"] == 1
