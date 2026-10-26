@@ -147,7 +147,9 @@ class QAToolbox:
              "text_id": a["text_id"], "text_en": a["text_en"]} for a in hits]}
 
 
-def _sensitive(item: dict) -> bool:
+def is_sensitive_item(item: dict) -> bool:
+    """Single source of truth: does this (jsonable) rule-engine item carry a finding an employee may only
+    see as UNDER_REVIEW? Used by my_claim_check and the employee claim page."""
     return bool(SENSITIVE_GAPS & set(item.get("gaps") or [])) or any(
         f.get("key") in SENSITIVE_KEYS or f.get("gap") in SENSITIVE_GAPS for f in item.get("findings") or [])
 
@@ -158,7 +160,7 @@ def employee_safe_check(check: dict, render: Render | None = None) -> dict:
     items, any_sensitive = [], False
     for it in check.get("items", []):
         base = {"item_id": it["item_id"], "category": it["category"], "claimed": it.get("claimed")}
-        if _sensitive(it):
+        if is_sensitive_item(it):
             any_sensitive = True
             items.append({**base, **UNDER_REVIEW})
             continue
