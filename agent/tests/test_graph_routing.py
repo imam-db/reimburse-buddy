@@ -16,7 +16,7 @@ from reimburse_agent.mcp_client import mcp_tools
 from test_graph_interrupt import Scripted, call
 
 HARD = Path(__file__).parents[1] / "eval" / "fixtures" / "hard"
-ENV = {"REIMBURSE_ENABLE_EVIDENCE_TOOL": "1"}
+ENV = {"REIMBURSE_ENABLE_EVIDENCE_TOOL": "1", "REIMBURSE_ENABLE_WRITE_TOOLS": "1"}
 
 
 async def _run(script, run_claim, env=None):

@@ -73,7 +73,8 @@ async def estimate(rec, slim: bool, drop_served: bool, budget):
     CALLS.clear(); PER.clear()
     SCRIPTS.clear(); SCRIPTS.update(scripts_from(rec, drop_served))
     model = Counting(messages=iter([]))
-    env = {"REIMBURSE_ENABLE_EVIDENCE_TOOL": "1", "REIMBURSE_BUDDY_DATA": str(case.data)}
+    env = {"REIMBURSE_ENABLE_EVIDENCE_TOOL": "1", "REIMBURSE_ENABLE_WRITE_TOOLS": "1",
+           "REIMBURSE_BUDDY_DATA": str(case.data)}
     async with mcp_tools(extra_env=env) as (_s, tools):
         g = build_batch_graph(model, tools, case.batch, checkpointer=InMemorySaver(), slim=slim,
                               subrun_token_budget=budget)

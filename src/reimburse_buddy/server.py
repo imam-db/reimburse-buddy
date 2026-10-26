@@ -102,7 +102,6 @@ def draft_decision(claim_id: str, evidence_ids: list[str] | None = None,
     return _draft(store, _check(store, claim_id, evidence_ids, human_decisions), note, language)
 
 
-@mcp.tool()
 def send_message(to: str, body: str, subject: str = "", claim_id: str = "") -> dict:
     """(Mock) Email an employee, e.g. to ask for a missing receipt. Goes to the outbox.
     The employee's scripted reply arrives in the reimburse@ mailbox; check with search_reimburse_mailbox."""
@@ -117,21 +116,22 @@ def request_missing_evidence(claim_id: str, item_id: str, gap_code: str, evidenc
     return _request_evidence(store, claim_id, item_id, gap_code, evidence_ids, human_decisions)
 
 
-# Version B only: WorkBuddy's server (version A) keeps exactly its 15 tools.
-if os.environ.get("REIMBURSE_ENABLE_EVIDENCE_TOOL") == "1":
-    mcp.tool()(request_missing_evidence)
-
-
-@mcp.tool()
 def request_approval(manager_id: str, claim_id: str, item_id: str, reason: str = "") -> dict:
     """(Mock) Ask the claimant's manager to approve one item. Returns a pending request."""
     return store.request_approval(manager_id, claim_id, item_id, reason)
 
 
-@mcp.tool()
 def update_claim_status(claim_id: str, status: str, note: str = "") -> dict:
     """(Mock) Set claim status: submitted, on_hold, approved, partially_approved or rejected."""
     return store.update_claim_status(claim_id, status, note)
+
+
+# Version B only: WorkBuddy's server (version A) exposes no write tools.
+if os.environ.get("REIMBURSE_ENABLE_EVIDENCE_TOOL") == "1":
+    mcp.tool()(request_missing_evidence)
+if os.environ.get("REIMBURSE_ENABLE_WRITE_TOOLS") == "1":
+    for _write_tool in (send_message, request_approval, update_claim_status):
+        mcp.tool()(_write_tool)
 
 
 @mcp.tool()
