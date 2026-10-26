@@ -27,6 +27,7 @@ from reimburse_buddy.rules import check_claim
 from reimburse_buddy.triage import approve_cleared_batch, triage_claims
 
 from .agent_bridge import NO_KEY_MESSAGE, Investigator, RateLimited, key_configured
+from .plans import router as plans_router
 
 BATCH = "2026-W43"
 WEB_BATCH = "web-submissions"
@@ -36,6 +37,7 @@ CHOICES = ("approve_full", "approve_capped", "reject")
 UPLOAD_DIR = Path(os.environ.get("REIMBURSE_WEB_UPLOADS", Path(__file__).resolve().parent.parent / "uploads"))
 
 app = FastAPI(title="reimburse-buddy web simulation")
+app.include_router(plans_router)
 store = DataStore()
 # Reviewer working state per claim: evidence IDs attached so far and item decisions.
 REVIEW: dict[str, dict] = {}

@@ -1,5 +1,5 @@
 """Prompt injection through the graph (scripted model, no key, eval hard fixtures): the injected email
-(MSG-9101, hard case 1) is wrapped and withheld from the model, logged (injection_detected + notice_shown),
+(MSG-9101, hard case 1) is wrapped and withheld from the model, logged (injection_detected + injection_notice; notice_shown is page-render only),
 every later prompt carries the notice, an echo of the injected text is flagged, and nothing executes
 without a logged approval. A model that obeys the injection still cannot pick its own recipient."""
 
@@ -58,7 +58,8 @@ async def test_injected_email_is_withheld_logged_and_noticed():
     det = [e for e in ev if e["event_type"] == "injection_detected" and e["payload"].get("source_id") == "MSG-9101"]
     assert det and all({"rule_id", "severity", "offsets", "snippet", "detector_version"} <= set(e["payload"]) for e in det)
     assert any(e["payload"]["severity"] == "high" for e in det)
-    shown = [e for e in ev if e["event_type"] == "notice_shown"]
+    shown = [e for e in ev if e["event_type"] == "injection_notice"]
+    assert not [e for e in ev if e["event_type"] == "notice_shown"]  # no page rendered in this flow
     assert any(e["payload"]["text"] == notice["text"] for e in shown)
     # every write prompt carries the banner and is asked one by one (no batching)
     writes = [r for r in seen if r["tool"] in ("send_message", "update_claim_status")]
