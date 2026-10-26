@@ -13,15 +13,17 @@ from ..audit import AuditLog, make_event
 from . import rules as R
 from .directory import Directory
 
-CSS = """body{font-family:system-ui,sans-serif;max-width:980px;margin:24px auto;padding:0 16px;color:#1d2433}
+CSS = """body{font-family:system-ui,sans-serif;max-width:980px;margin:24px auto;padding:0 16px;color:#1d2433;overflow-x:hidden}
 h1{font-size:22px} .muted{color:#667} .card{border:1px solid #d5dae3;border-radius:8px;padding:14px 16px;margin:14px 0}
 .notice{background:#fff4e5;border:2px solid #e08a00;border-radius:8px;padding:10px 14px;margin:10px 0}
 .assume{background:#eef6ff;border-left:4px solid #3a7bd5;padding:6px 10px;margin:6px 0}
 .influenced{background:#ffe3e3;outline:2px solid #d33}
 table{border-collapse:collapse} td,th{padding:4px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
+.table-wrap{overflow-x:auto;max-width:100%} img,pre{max-width:100%}
 pre{white-space:pre-wrap;background:#f7f8fa;padding:8px;border-radius:6px;margin:4px 0}
 .tag{display:inline-block;padding:1px 8px;border-radius:10px;background:#eef;font-size:12px}
-.done{background:#e3f6e8} .rej{background:#fde8e8} button{padding:8px 18px;font-size:15px}"""
+.done{background:#e3f6e8} .rej{background:#fde8e8}
+button{min-height:44px;display:inline-flex;align-items:center;justify-content:center;padding:8px 18px;font-size:15px}"""
 
 WHERE = {"email": "Email", "calendar": "Kalender / Calendar", "task": "Tugas / Task"}
 
@@ -58,7 +60,9 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
     log_notices_shown(plan, log)
     events = log.list(plan["run_id"])
     run = e(plan["run_id"])
-    out = [f"<!doctype html><html><head><meta charset=utf-8><title>Konfirmasi rencana {run}</title>"
+    out = [f"<!doctype html><html><head><meta charset=utf-8>"
+           f"<meta name=viewport content='width=device-width, initial-scale=1'>"
+           f"<title>Konfirmasi rencana {run}</title>"
            f"<style>{CSS}</style></head><body>",
            f"<h1>Konfirmasi rencana / Plan confirmation</h1>",
            f"<p class=muted>Run {run} &middot; {e(plan['plan_id'])} &middot; peminta / requester: "

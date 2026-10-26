@@ -56,8 +56,11 @@ def directory() -> Directory:
 @router.get("/admin/plans", response_class=HTMLResponse)
 def plans_index():
     rows = "".join(f"<li><a href='/admin/plans/{escape(r)}'>{escape(r)}</a></li>" for r in store().runs())
-    return HTMLResponse(f"<!doctype html><meta charset=utf-8><h1>Rencana menunggu / Pending plans</h1>"
-                        f"<ul>{rows or '<li>none</li>'}</ul>")
+    return HTMLResponse(f"<!doctype html><html><head><meta charset=utf-8>"
+                        f"<meta name=viewport content='width=device-width, initial-scale=1'>"
+                        f"<title>Rencana menunggu / Pending plans</title></head><body>"
+                        f"<h1>Rencana menunggu / Pending plans</h1>"
+                        f"<ul>{rows or '<li>none</li>'}</ul></body></html>")
 
 
 @router.get("/admin/plans/{run_id}", response_class=HTMLResponse)
