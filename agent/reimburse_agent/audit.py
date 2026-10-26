@@ -257,12 +257,16 @@ class JsonlAuditLog:
 
 class PostgresAuditLog:
     """Same contract on Postgres (psycopg 3). Expects agent/migrations/001_audit_log.sql, 002_injection_events.sql, 003_plan_events.sql and 004_qa_events.sql applied by the
-    owner role; connect with the app role (INSERT + SELECT only). Not exercised without DATABASE_URL."""
+    owner role; connect with the app role (INSERT + SELECT only). Not exercised without DATABASE_URL.
+
+    Use the direct (unpooled) Neon endpoint for the audit log. psycopg connects with
+    ``prepare_threshold=None`` so it never creates server-side prepared statements, which keeps it safe if a
+    pooled/PgBouncer endpoint is used anyway (transaction pooling would reject prepared statements)."""
 
     def __init__(self, dsn: str):
         import psycopg  # optional dependency, imported only when used
 
-        self._conn = psycopg.connect(dsn, autocommit=True)
+        self._conn = psycopg.connect(dsn, autocommit=True, prepare_threshold=None)
 
     def append(self, event: dict) -> bool:
         r = validate(event)
