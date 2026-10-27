@@ -1002,8 +1002,10 @@ setInterval(function(){{s+=1;n.textContent=s;}},1000);}})();</script></div>"""
     tail = ""
     if final:
         t = final.get("tokens", {})
+        hit = f" ({t.get('cache_hit', 0)} cache hit)" if t.get("cache_hit") else ""
         tail = (f"<div class=box id=final><h2>Agent's final note</h2><pre>{e(final['note'])}</pre>"
-                f"<p class=note>Tokens: {t.get('input', 0)} in / {t.get('output', 0)} out. Amounts come from tool results; verify against the rule engine.</p></div>")
+                f"<p class=note>Tokens: {t.get('input', 0)} in{hit} / {t.get('output', 0)} out. Amounts come "
+                f"from tool results; verify against the rule engine.</p></div>")
     if err:
         msg = NO_KEY_MESSAGE if err.get("code") == "no_key" else err.get("message", "")
         tail += f"<div class=box id=error><p class='tag bad'>{e(msg)}</p>"
