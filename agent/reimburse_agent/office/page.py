@@ -13,17 +13,42 @@ from ..audit import AuditLog, make_event
 from . import rules as R
 from .directory import Directory
 
-CSS = """body{font-family:system-ui,sans-serif;max-width:980px;margin:24px auto;padding:0 16px;color:#1d2433}
+CSS = """body{font-family:system-ui,sans-serif;max-width:980px;margin:24px auto;padding:0 16px;color:#1d2433;overflow-x:hidden}
 h1{font-size:22px} .muted{color:#667} .card{border:1px solid #d5dae3;border-radius:8px;padding:14px 16px;margin:14px 0}
 .notice{background:#fff4e5;border:2px solid #e08a00;border-radius:8px;padding:10px 14px;margin:10px 0}
 .assume{background:#eef6ff;border-left:4px solid #3a7bd5;padding:6px 10px;margin:6px 0}
 .influenced{background:#ffe3e3;outline:2px solid #d33}
 table{border-collapse:collapse} td,th{padding:4px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
+.table-wrap{overflow-x:auto;max-width:100%} img,pre{max-width:100%}
 pre{white-space:pre-wrap;background:#f7f8fa;padding:8px;border-radius:6px;margin:4px 0}
 .tag{display:inline-block;padding:1px 8px;border-radius:10px;background:#eef;font-size:12px}
-.done{background:#e3f6e8} .rej{background:#fde8e8} button{padding:8px 18px;font-size:15px}"""
+.assume-badge{background:#eef6ff;border:1px solid #3a7bd5;color:#1d4f91}
+.sentence{font-size:16px;font-weight:600;margin-bottom:8px;line-height:1.4}
+.decision{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.decision label{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:8px 18px;
+border:1px solid #888;border-radius:6px;font-size:15px;background:#fff;cursor:pointer}
+.decision label input{margin-right:6px}
+.done{background:#e3f6e8} .rej{background:#fde8e8}
+button{min-height:44px;display:inline-flex;align-items:center;justify-content:center;padding:8px 18px;font-size:15px}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,label:focus-visible{outline:3px solid #1a5fb4;outline-offset:2px}"""
 
 WHERE = {"email": "Email", "calendar": "Kalender / Calendar", "task": "Tugas / Task"}
+TOOL_LABELS = {"send_email": "Email", "create_calendar_event": "Undangan rapat", "create_task": "Tugas"}
+STATUS_LABELS = {"execution": "Dijalankan", "rejection": "Ditolak", "approval": "Disetujui",
+                 "superseded": "Digantikan"}
+DAYS_ID = ("Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu")
+MONTHS_ID = ("", "Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des")
+
+
+def _id_time(rules: R.Rules, dt, zone: str) -> str:
+    """'Senin, 3 Nov 09.00 WIB' (Indonesian day and month names)."""
+    loc = R.local(rules, dt, zone)
+    return f"{DAYS_ID[loc.weekday()]}, {loc.day} {MONTHS_ID[loc.month]} {loc:%H.%M} {zone}"
+
+
+def _short(text, n: int = 120) -> str:
+    text = " ".join(str(text or "").split())
+    return text if len(text) <= n else text[:n] + "…"
 
 
 def e(x) -> str:
@@ -58,12 +83,14 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
     log_notices_shown(plan, log)
     events = log.list(plan["run_id"])
     run = e(plan["run_id"])
-    out = [f"<!doctype html><html><head><meta charset=utf-8><title>Konfirmasi rencana {run}</title>"
+    out = [f"<!doctype html><html><head><meta charset=utf-8>"
+           f"<meta name=viewport content='width=device-width, initial-scale=1'>"
+           f"<title>Konfirmasi rencana {run}</title>"
            f"<style>{CSS}</style></head><body>",
            f"<h1>Konfirmasi rencana / Plan confirmation</h1>",
            f"<p class=muted>Run {run} &middot; {e(plan['plan_id'])} &middot; peminta / requester: "
            f"{_person(directory, plan['requester'])}</p>",
-           "<p><b>Tidak ada yang dikirim atau dijadwalkan sebelum Anda menyetujui.</b> "
+           "<p><b>Belum ada yang dikirim sampai Anda menyetujui.</b> "
            "Nothing is sent or scheduled until you approve. Mock tools only.</p>"]
     if msg:
         out.append(f"<p class=tag>{e(msg)}</p>")
@@ -87,6 +114,29 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
         st = _status(events, aid)
         cls = " done" if st == "execution" else " rej" if st in ("rejection", "superseded") else ""
         infl = a.get("influenced_fields", {})
+        names = ", ".join(directory.get(w).name if directory.get(w) else w for w in a.get("who", []))
+        assume_here = by_action.get(aid, [])
+        badges = ""
+        if assume_here:
+            badges += " <span class='tag assume-badge'>waktu diusulkan agent</span>"
+        if infl:
+            badges += " <span class='tag influenced'>⚠ dipengaruhi konten mencurigakan</span>"
+        if a["where"] == "email":
+            sentence = f"Kirim email ke <b>{e(names)}</b> — segera setelah Anda menyetujui"
+            if a["what"].get("body"):
+                sentence += f" — isi: {e(_short(a['what']['body']))}"
+        elif a["where"] == "calendar":
+            sentence = f"Jadwalkan rapat dengan <b>{e(names)}</b>"
+            req = directory.get(plan["requester"])
+            if a.get("when", {}).get("start") and req:
+                sentence += f" — {e(_id_time(rules, R.parse_iso(a['when']['start']), req.tz))}"
+            if a["what"].get("title"):
+                sentence += f" — judul: {e(a['what']['title'])}"
+        else:
+            sentence = f"Buat tugas untuk <b>{e(names)}</b>"
+            if a["what"].get("title"):
+                sentence += f" — {e(a['what']['title'])}"
+        sentence += badges
 
         def field(name, text, pre=False):
             c = " class=influenced" if name in infl else ""
@@ -94,7 +144,8 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
                     "content</span>") if name in infl else ""
             return f"<pre{c}>{e(text)}</pre>{flag}" if pre else f"<span{c}>{e(text)}</span>{flag}"
         rows = [f"<tr><th>Siapa / Who</th><td>{'<br>'.join(_person(directory, w) for w in a['who'])}</td></tr>",
-                f"<tr><th>Apa / What</th><td><span class=tag>{e(a['tool'])}</span> "
+                f"<tr><th>Apa / What</th><td><span class=tag title='{e(a['tool'])}'>"
+                f"{e(TOOL_LABELS.get(a['tool'], a['tool']))}</span> "
                 + (field("subject", a["what"].get("subject", "")) if a["what"].get("subject")
                    else field("title", a["what"].get("title", "")))
                 + field("body", a["what"].get("body", ""), pre=True) + "</td></tr>"]
@@ -105,7 +156,9 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
             alts = ", ".join(R.fmt_local(rules, R.parse_iso(x), directory.get(plan["requester"]).tz)
                              for x in w.get("alternatives", []))
             rows.append(f"<tr><th>Kapan / When</th><td>{e(w['duration_min'])} menit / minutes, "
-                        f"<span class=muted>{e(w['start'])}</span><table>{loc}</table>"
+                        f"<span class=muted>{e(w['start'])}</span>"
+                        f"<div class=note>Waktu lokal setiap peserta / Each participant's local time</div>"
+                        f"<table>{loc}</table>"
                         + (f"<span class=muted>Alternatif / alternatives: {e(alts)}</span>" if alts else "")
                         + "</td></tr>")
         else:
@@ -113,17 +166,20 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
         rows.append(f"<tr><th>Di mana / Where</th><td>{e(WHERE[a['where']])}</td></tr>")
         rows.append(f"<tr><th>Mengapa / Why</th><td>{e(', '.join(a['why']) or '-')}</td></tr>")
         assume = "".join(f"<div class=assume><b>Asumsi / Assumption:</b> {e(x['id'])}<br><i>{e(x['en'])}</i></div>"
-                         for x in by_action.get(aid, []))
+                         for x in assume_here)
         decide = ""
         if form and st is None:
-            decide = (f"<p><label><input type=radio name='decision:{e(aid)}' value=approve> Setujui / Approve</label> "
+            decide = (f"<p class=\"decision\"><label><input type=radio name='decision:{e(aid)}' value=approve> "
+                      f"Setujui / Approve</label> "
                       f"<label><input type=radio name='decision:{e(aid)}' value=reject checked> Tolak / Reject</label></p>"
                       f"<p><label>Catatan (opsional, agen akan mengusulkan rencana baru) / Note (optional, the agent "
                       f"proposes a new plan):<br><textarea name='note:{e(aid)}' rows=2 cols=70></textarea></label></p>")
         elif st:
-            decide = f"<p class=tag>Status: {e(st)}</p>"
-        out.append(f"<div class='card{cls}'><b>Aksi {i} / Action {i}</b> <span class=muted>{e(aid)} &middot; "
-                   f"args_hash {e(a['args_hash'][:12])}</span><table>{''.join(rows)}</table>{assume}{decide}</div>")
+            decide = f"<p class=tag title='{e(st)}'>Status: {e(STATUS_LABELS.get(st, st))}</p>"
+        out.append(f"<div class='card{cls}'><div class=\"sentence\">{sentence}</div>"
+                   f"<b>Aksi {i} / Action {i}</b> <span class=muted>{e(aid)} &middot; "
+                   f"<span title='args_hash'>hash argumen</span> "
+                   f"{e(a['args_hash'][:12])}</span><table>{''.join(rows)}</table>{assume}{decide}</div>")
     if form:
         out.append("<p><button type=submit>Kirim keputusan / Submit decisions</button></p></form>")
     out.append("</body></html>")

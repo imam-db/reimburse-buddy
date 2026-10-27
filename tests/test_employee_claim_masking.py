@@ -44,4 +44,4 @@ def test_masking_uses_qa_source_of_truth():
 
 def test_admin_page_still_shows_finding(client):
     text = _visible(client.get(f"/admin/claims/{DUP_CLAIM}").text)
-    assert "duplicate" in text
+    assert "duplikat" in text

@@ -54,6 +54,7 @@ class Run:
     def __init__(self, claim_id: str, cmd: list[str]):
         self.id = uuid.uuid4().hex[:10]
         self.claim_id = claim_id
+        self._started_at = time.time()
         self.events: list[dict] = []
         self.lock = threading.Lock()
         self.answered: set[str] = set()  # approval_ids already answered (duplicates ignored)
@@ -82,6 +83,11 @@ class Run:
             if not any(e["type"] in ("final", "error") for e in self.events):
                 self.events.append({"type": "error", "code": "exited",
                                     "message": f"Agent process exited with code {self.proc.returncode}."})
+
+    @property
+    def started_at(self) -> float:
+        """Epoch seconds when this run was started (read-only measurement for the progress page)."""
+        return self._started_at
 
     def snapshot(self) -> list[dict]:
         with self.lock:
