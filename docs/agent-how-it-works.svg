@@ -8,7 +8,7 @@
 <line x1="1060" y1="330.0" x2="1010" y2="330.0" stroke="#1e1e1e" stroke-width="2"  marker-end="url(#ah)"/>
 <line x1="800" y1="330.0" x2="750" y2="330.0" stroke="#1e1e1e" stroke-width="2"  marker-end="url(#ah)"/>
 <line x1="1165.0" y1="210" x2="645.0" y2="280" stroke="#1e1e1e" stroke-width="2" stroke-dasharray="8 6" marker-end="url(#ah)"/>
-<text x="911.0" y="241.0" font-size="13">no</text>
+<text x="905.0" y="229.0" font-size="13">no</text>
 <line x1="540" y1="330.0" x2="490" y2="330.0" stroke="#1e1e1e" stroke-width="2"  marker-end="url(#ah)"/>
 <line x1="280" y1="330.0" x2="230" y2="330.0" stroke="#1e1e1e" stroke-width="2"  marker-end="url(#ah)"/>
 <line x1="125.0" y1="380" x2="125.0" y2="450" stroke="#1e1e1e" stroke-width="2"  marker-end="url(#ah)"/>
@@ -32,8 +32,8 @@
 <text x="1165.0" y="164.55" font-size="13" text-anchor="middle">Still missing?</text>
 <rect x="1060" y="280" width="210" height="100" rx="8" fill="#a5d8ff" stroke="#1971c2" stroke-width="2"/>
 <text x="1165.0" y="318.3" font-size="13" text-anchor="middle">5. Agent asks the employee</text>
-<text x="1165.0" y="334.55" font-size="13" text-anchor="middle">(request_missing_evidence,</text>
-<text x="1165.0" y="350.8" font-size="13" text-anchor="middle">fixed template)</text>
+<text x="1165.0" y="334.55" font-size="13" text-anchor="middle">(fixed template, sent only</text>
+<text x="1165.0" y="350.8" font-size="13" text-anchor="middle">after the reviewer approves)</text>
 <rect x="800" y="280" width="210" height="100" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
 <text x="905.0" y="326.425" font-size="13" text-anchor="middle">6. Employee replies</text>
 <text x="905.0" y="342.675" font-size="13" text-anchor="middle">with evidence</text>
@@ -56,15 +56,15 @@
 <text x="435.0" y="541.425" font-size="13" text-anchor="middle">Read-only tools run freely</text>
 <text x="435.0" y="557.675" font-size="13" text-anchor="middle">(list, get, search, check, draft)</text>
 <rect x="610" y="500" width="310" height="90" rx="8" fill="#fff5f5" stroke="#c92a2a" stroke-width="2"/>
-<text x="765.0" y="533.3" font-size="13" text-anchor="middle">Every write or message</text>
-<text x="765.0" y="549.55" font-size="13" text-anchor="middle">needs human approval</text>
-<text x="765.0" y="565.8" font-size="13" text-anchor="middle">(except capped evidence requests)</text>
+<text x="765.0" y="533.3" font-size="13" text-anchor="middle">Every write or message,</text>
+<text x="765.0" y="549.55" font-size="13" text-anchor="middle">evidence requests included,</text>
+<text x="765.0" y="565.8" font-size="13" text-anchor="middle">waits for human approval</text>
 <rect x="940" y="500" width="310" height="90" rx="8" fill="#fff5f5" stroke="#c92a2a" stroke-width="2"/>
 <text x="1095.0" y="541.425" font-size="13" text-anchor="middle">The rule engine decides money,</text>
 <text x="1095.0" y="557.675" font-size="13" text-anchor="middle">not the LLM</text>
 <rect x="1270" y="500" width="310" height="90" rx="8" fill="#fff5f5" stroke="#c92a2a" stroke-width="2"/>
-<text x="1425.0" y="533.3" font-size="13" text-anchor="middle">Budgets &amp; caps: 10 approvals,</text>
-<text x="1425.0" y="549.55" font-size="13" text-anchor="middle">3 evidence requests, search limits,</text>
+<text x="1425.0" y="533.3" font-size="13" text-anchor="middle">Caps per run: 10 gated calls,</text>
+<text x="1425.0" y="549.55" font-size="13" text-anchor="middle">3 searches per gap, 250k tokens,</text>
 <text x="1425.0" y="565.8" font-size="13" text-anchor="middle">600 s run deadline</text>
 <rect x="1340" y="110" width="240" height="36" rx="8" fill="#e9ecef" stroke="#495057" stroke-width="2"/>
 <text x="1460.0" y="132.55" font-size="13" text-anchor="middle">Legend</text>
