@@ -76,10 +76,9 @@ async def test_approve_cleared_batch_is_gated():
     assert intr["tool"] == "approve_cleared_batch"
 
 
-async def test_read_tools_and_document_requests_do_not_interrupt():
+async def test_read_tools_do_not_interrupt():
     script = [call("check_claim", {"claim_id": "CLM-2026-0110"}, 1),
-              call("send_message", {"to": "EMP-001", "claim_id": "CLM-2026-0110", "body": "Please forward the missing hotel receipt."}, 2),
-              AIMessage(content="asked for receipt")]
+              AIMessage(content="checked")]
     async with mcp_tools() as (_s, tools):
         g = build_graph(Scripted(messages=iter(script)), tools, checkpointer=InMemorySaver())
         conf = {"configurable": {"thread_id": "t"}}
@@ -97,31 +96,74 @@ LEAKS = ["We will only pay Rp2.400.000", "will be reimbursed up to the cap 2,400
          "Final amount: Rp6.590.000", "Your claim is OK'd, 6590000 total", "Kami potong malam ke-3: 1.200.000"]
 
 
-@pytest.mark.parametrize("body", LEAKS)
-def test_money_messages_are_gated_even_to_owner(body):
-    assert needs_confirmation("send_message", {"to": OWNER, "claim_id": HERO, "body": body}, OWNER)
+@pytest.mark.parametrize("body", LEAKS + ["tidak bisa kami bayar", "Mohon kirim struk hotel"])
+def test_every_send_message_is_gated(body):
+    assert needs_confirmation("send_message", {"to": OWNER, "claim_id": HERO, "body": body})
+    assert needs_confirmation("send_message", {"to": "EMP-999", "body": body})
 
 
-@pytest.mark.parametrize("body", ["will be reimbursed up to the cap", "tidak bisa kami bayar",
-                                  "Your claim is OK'd", "Kami potong malam ke-3"])
-def test_leaks_without_numbers_are_gated_when_not_to_owner(body):
-    # without amounts these pass the money check, so recipient/claim rules must catch them
-    assert needs_confirmation("send_message", {"to": "EMP-999", "claim_id": HERO, "body": body}, OWNER)
-    assert needs_confirmation("send_message", {"to": OWNER, "body": body}, OWNER)  # no claim_id
-    assert needs_confirmation("send_message", {"to": OWNER, "claim_id": HERO, "body": body}, None)  # owner unknown
+def ev(item, gap, claim=None):
+    return {"claim_id": claim or HERO, "item_id": item, "gap_code": gap}
 
 
-def test_plain_evidence_request_to_owner_is_free():
-    assert not needs_confirmation("send_message", {"to": OWNER, "claim_id": HERO,
-                                                   "body": "Mohon kirim struk hotel"}, OWNER)
-    assert needs_confirmation("send_message", {"to": OWNER, "claim_id": HERO,
-                                               "subject": "Rp", "body": "Mohon kirim struk"}, OWNER)
+async def _evidence_run(calls, answer=None, run_claim=HERO):
+    script = [call(n, a, i) for i, (n, a) in enumerate(calls, 1)] + [AIMessage(content="done")]
+    return await _drive(script, answer or _no, run_claim=run_claim)
+
+
+CHECK = ("check_claim", {"claim_id": HERO})
+
+
+async def test_evidence_request_free_for_run_claim_after_check():
+    seen, st = await _evidence_run([CHECK, ("request_missing_evidence", ev("IT-5", "receipt_missing")),
+                                    ("get_outbox", {})])
+    assert seen == []
+    out = st.values["messages"][-2].content
+    assert "EMP-001" in out and "IT-5" in out
+
+
+@pytest.mark.parametrize("calls,why", [
+    ([("request_missing_evidence", ev("IT-5", "receipt_missing"))], "no check_claim yet"),
+    ([CHECK, ("request_missing_evidence", ev("IT-6", "receipt_missing", "CLM-2026-0104"))], "other claim"),
+    ([CHECK, ("request_missing_evidence", ev("IT-3", "hotel_over_cap"))], "decision-adjacent gap"),
+    ([CHECK, ("request_missing_evidence", ev("IT-4", "late_checkout_unjustified"))], "decision-adjacent gap"),
+    ([CHECK, ("request_missing_evidence", ev("IT-2", "receipt_missing"))], "gap not in latest check"),
+])
+async def test_evidence_request_gated(calls, why):
+    seen, _ = await _evidence_run(calls)
+    assert [v["tool"] for v in seen] == ["request_missing_evidence"], why
+
+
+async def test_evidence_request_gated_without_run_claim():
+    seen, _ = await _evidence_run([CHECK, ("request_missing_evidence", ev("IT-5", "receipt_missing"))], run_claim=None)
+    assert len(seen) == 1
+
+
+async def test_evidence_request_repeat_and_cap_are_gated():
+    from reimburse_agent.graph import free_evidence_request
+    from langchain_core.messages import ToolMessage
+    msgs = [ToolMessage(content=json.dumps({"claim_id": HERO, "items": [
+        {"item_id": f"IT-{i}", "status": "needs_evidence", "gaps": ["receipt_missing"]} for i in range(1, 6)]}), tool_call_id="x", name="check_claim")]
+    used = []
+    for i in range(1, 4):
+        assert free_evidence_request(ev(f"IT-{i}", "receipt_missing"), HERO, msgs, used)
+        used.append([HERO, f"IT-{i}", "receipt_missing"])
+    assert not free_evidence_request(ev("IT-4", "receipt_missing"), HERO, msgs, used)  # cap of 3
+    assert not free_evidence_request(ev("IT-1", "receipt_missing"), HERO, msgs, used[:1])  # repeat
+
+
+def test_prompt_addendum_is_version_b_only():
+    from reimburse_agent.graph import SKILL_PATH
+    full = load_system_prompt()
+    raw = load_system_prompt(addendum=False)
+    assert raw == SKILL_PATH.read_text(encoding="utf-8")
+    assert full.startswith(raw) and "request_missing_evidence" in full and "request_missing_evidence" not in raw
 
 
 def test_allowlist_gates_everything_not_read_only():
     for t in READ_ONLY_TOOLS:
         assert not needs_confirmation(t, {})
-    for t in ("update_claim_status", "approve_cleared_batch", "request_approval", "reset_demo",
+    for t in ("request_missing_evidence", "update_claim_status", "approve_cleared_batch", "request_approval", "reset_demo",
               "some_future_write_tool"):
         assert needs_confirmation(t, {})
 
@@ -218,3 +260,11 @@ async def test_gated_call_cap_per_run():
     seen, st = await _drive(script, _no, max_gated=2)
     assert len(seen) == 2
     assert "limit of 2 approval requests" in [m.content for m in st.values["messages"] if m.type == "tool"][-1]
+
+
+def test_reviewer_resolved_gap_is_not_free():
+    from reimburse_agent.graph import free_evidence_request
+    from langchain_core.messages import ToolMessage
+    msgs = [ToolMessage(content=json.dumps({"claim_id": HERO, "items": [
+        {"item_id": "IT-5", "status": "partial", "gaps": ["receipt_missing"]}]}), tool_call_id="x", name="check_claim")]
+    assert not free_evidence_request(ev("IT-5", "receipt_missing"), HERO, msgs, [])

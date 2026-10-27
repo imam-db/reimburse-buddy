@@ -148,12 +148,19 @@ class DataStore:
     # --- mock write tools ---------------------------------------------
     CLAIM_STATUSES = ("submitted", "on_hold", "approved", "partially_approved", "rejected")
 
-    def send_message(self, to: str, body: str, subject: str = "", claim_id: str = "") -> dict:
+    def send_message(self, to: str, body: str, subject: str = "", claim_id: str = "",
+                     evidence_request: list[str] | None = None) -> dict:
         """Put a message in the outbox. Matching scripted replies (data/replies.json) are the
-        employee's answer, delivered at once to the reimburse@ mailbox."""
+        employee's answer, delivered at once to the reimburse@ mailbox.
+
+        Free-text messages match replies by keywords (version A). A templated evidence request
+        ([claim_id, item_id, gap_code]) matches only a reply scripted for exactly that item and gap,
+        so template wording can't trigger an unrelated reply."""
         self.get_employee(to)
         msg = {"id": f"OUT-{len(self.outbox) + 1:03d}", "to": to, "subject": subject,
                "body": body, "claim_id": claim_id}
+        if evidence_request:
+            msg["evidence_request"] = list(evidence_request)
         self.outbox.append(msg)
         text = f"{subject} {body} {claim_id}".lower()
         delivered = []
@@ -162,7 +169,11 @@ class DataStore:
                 continue
             if r.get("claim_id") and r["claim_id"] != claim_id:
                 continue
-            if any(k.lower() in text for k in r["keywords_any"]):
+            if evidence_request:
+                hit = [r.get("claim_id"), r.get("item_id"), r.get("gap_code")] == list(evidence_request)
+            else:
+                hit = any(k.lower() in text for k in r["keywords_any"])
+            if hit:
                 r["_delivered"] = True
                 self.inbox.append(dict(r["reply"], in_reply_to=msg["id"]))
                 delivered.append(r["reply"]["id"])

@@ -17,8 +17,19 @@ async def test_server_lists_tools_and_checks_claim():
         async with ClientSession(read, write) as session:
             await session.initialize()
             tools = {t.name for t in (await session.list_tools()).tools}
-            assert EXPECTED <= tools
+            assert tools == EXPECTED and len(tools) == 15  # WorkBuddy's server: exactly 15 tools
             res = await session.call_tool("check_claim", {"claim_id": "CLM-2026-0101", "evidence_ids": ["MSG-5001"]})
             data = json.loads(res.content[0].text)
             assert data["decision"] == "approve"
             assert data["total_approvable"] == "6265000"
+
+
+async def test_evidence_tool_only_with_flag():
+    import os
+    env = {**os.environ, "REIMBURSE_ENABLE_EVIDENCE_TOOL": "1"}
+    params = StdioServerParameters(command=sys.executable, args=["-m", "reimburse_buddy.server"], env=env)
+    async with stdio_client(params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            tools = {t.name for t in (await session.list_tools()).tools}
+            assert tools == EXPECTED | {"request_missing_evidence"}
