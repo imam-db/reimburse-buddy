@@ -111,6 +111,11 @@ LABELS = {
                            "Minta reviewer lain menyetujuinya."),
     "self_approval_plan_note": ("Anda tercatat sebagai peminta rencana ini, jadi persetujuan dimatikan. "
                                 "Anda tetap bisa menolak atau meminta rekan lain menyetujuinya."),
+    # daily LLM budget (web/reimburse_web/spend.py)
+    "budget_exhausted": "Batas biaya harian demo tercapai. Coba lagi besok.",
+    "budget_remaining": "Sisa anggaran LLM hari ini",
+    "budget_unconfigured": ("Batas biaya LLM belum diatur, jadi tidak ada panggilan model yang dijalankan. "
+                            "Isi LLM_DAILY_BUDGET_USD dan harga token di environment."),
 }
 
 

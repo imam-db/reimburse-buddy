@@ -30,7 +30,7 @@ from reimburse_buddy.models import rupiah
 from reimburse_buddy.rules import check_claim
 from reimburse_buddy.triage import approve_cleared_batch, triage_claims
 
-from . import auth
+from . import auth, spend
 from .agent_bridge import NO_KEY_MESSAGE, Investigator, RateLimited, key_configured
 from .intake import router as intake_router
 from .labels import label, person
@@ -44,11 +44,11 @@ SIGNED, UNSIGNED = "signed", '<span class="tag bad">unsigned</span>'
 CHOICES = ("approve_full", "approve_capped", "reject")
 UPLOAD_DIR = Path(os.environ.get("REIMBURSE_WEB_UPLOADS", Path(__file__).resolve().parent.parent / "uploads"))
 
-# Startup order matters: refuse a production deployment without a Postgres audit log before doing any work,
-# then refuse one without a demo password / session key, then run the one-per-process expiry sweep (agent
-# workers opening the log never sweep).
+# Startup order matters: refuse a production deployment without a Postgres audit log before doing any
+# work, then one without a demo password / session key, then one that cannot cap or charge a model call,
+# then run the one-per-process expiry sweep (agent workers opening the log never sweep).
 app = FastAPI(title="reimburse-buddy web simulation",
-              on_startup=[startup_config_check, auth.startup_check, startup_sweep])
+              on_startup=[startup_config_check, auth.startup_check, spend.startup_check, startup_sweep])
 app.include_router(plans_router)
 app.include_router(intake_router)
 app.include_router(qa_router)
@@ -198,8 +198,19 @@ def nav_html() -> str:
                    f'<button type="submit" id="logout">Keluar</button></form>')
     return (f'<nav><b>reimburse-buddy</b> &middot; <a href="/">Beranda</a>\n'
             f'<a href="/employee">Employee</a> <a href="/admin">Finance admin</a> '
-            f'<a href="/admin/intake">Permintaan baru</a>{_pending_nav()}{account}'
+            f'<a href="/admin/intake">Permintaan baru</a>{_pending_nav()}{account}{_budget_nav()}'
             f'<span class="note">Synthetic data. Simulation only.</span></nav>')
+
+
+def _budget_nav() -> str:
+    """Today's remaining LLM budget. A ledger problem must never break every page."""
+    try:
+        left = spend.remaining()
+    except Exception:  # noqa: BLE001 - see docstring
+        return ""
+    if left is None:
+        return ""
+    return f'<span class="note" id="llm-budget">{e(label("budget_remaining"))}: ${left:.2f}</span> '
 
 
 def page(title: str, body: str, status_code: int = 200) -> HTMLResponse:
@@ -798,17 +809,38 @@ def _agent_ready() -> bool:
     return bool(INVESTIGATOR.fake_script) or key_configured()
 
 
+def _audit_limit(cid: str, kind: str, **extra) -> None:
+    """A `limit` event, so a refused run is visible in the audit trail. Best effort."""
+    try:
+        from . import plans  # late import: app.py includes its router
+        from reimburse_agent import audit
+        plans.log().append(audit.make_event(f"investigate:{cid}", "limit", f"{kind}:{cid}", actor="system",
+                                            payload={"kind": kind, **extra}))
+    except Exception:  # noqa: BLE001 - an audit problem must not turn a refusal into a 500
+        pass
+
+
 @app.post("/admin/claims/{cid}/investigate")
 def investigate_start(cid: str):
     store.get_claim(cid)
     if not _agent_ready():
         return page(f"Investigate {cid}", f"<p><a href='/admin/claims/{e(cid)}'>&larr; Claim</a></p>"
                     f"<div class='box'><h2>Agent not configured</h2><p class='tag warn' id=no-key>{e(NO_KEY_MESSAGE)}</p></div>")
+    if spend.is_production() and not spend.configured():
+        # Defence in depth: startup already refuses this, and no uncapped run may start either way.
+        _audit_limit(cid, "llm_budget_unconfigured")
+        return page(f"Investigate {cid}", f"<p><a href='/admin/claims/{e(cid)}'>&larr; Claim</a></p>"
+                    f"<div class='box'><p class='tag warn' id=budget-unconfigured>{e(label('budget_unconfigured'))}</p></div>")
     try:
         run = INVESTIGATOR.start(cid)
     except RateLimited as exc:
         return page(f"Investigate {cid}", f"<p><a href='/admin/claims/{e(cid)}'>&larr; Claim</a></p>"
                     f"<div class='box'><p class='tag warn' id=rate-limited>{e(exc)}</p></div>")
+    except spend.BudgetRefused:
+        _audit_limit(cid, "daily_llm_budget", budget=str(spend.budget()), committed=str(spend.committed()))
+        return page(f"Investigate {cid}", f"<p><a href='/admin/claims/{e(cid)}'>&larr; Claim</a></p>"
+                    f"<div class='box'><p class='tag warn' id=budget-exhausted>{e(label('budget_exhausted'))}</p>"
+                    f"<p class='note'>{e(label('budget_remaining'))}: ${spend.remaining():.2f}</p></div>")
     return RedirectResponse(f"/admin/investigations/{run.id}", status_code=303)
 
 

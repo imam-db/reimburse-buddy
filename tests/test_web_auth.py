@@ -237,6 +237,12 @@ def test_prod_without_session_key_fails_startup(prod):
 def test_prod_with_everything_set_serves_the_app(prod):
     prod.setenv("DEMO_PASSWORD", PW)
     prod.setenv("REIMBURSE_DEMO_SESSION_KEY", "k" * 32)
+    # The LLM budget and its prices are also required in production (web/reimburse_web/spend.py). They are
+    # set here so this test keeps passing once the daily-cap branch is merged in.
+    prod.setenv("LLM_DAILY_BUDGET_USD", "2.00")
+    prod.setenv("LLM_PRICE_INPUT_MISS_PER_MTOK", "0.27")
+    prod.setenv("LLM_PRICE_INPUT_HIT_PER_MTOK", "0.07")
+    prod.setenv("LLM_PRICE_OUTPUT_PER_MTOK", "1.10")
     with TestClient(web.app) as c:
         assert c.get("/healthz").text == "ok"
         assert c.get("/", follow_redirects=False).status_code == 303

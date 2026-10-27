@@ -83,10 +83,15 @@ def test_startup_accepts_postgres_in_prod(monkeypatch):
 
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("REIMBURSE_AUDIT_DATABASE_URL", dsn)
-    # Production also requires the demo password gate (web/reimburse_web/auth.py); without it startup
-    # stops with AuthConfigError, which tests/test_web_auth.py covers.
+    # Production also requires the demo password gate (web/reimburse_web/auth.py) and the daily LLM
+    # budget with its prices (web/reimburse_web/spend.py); without them startup stops with
+    # AuthConfigError / SpendConfigError, which tests/test_web_auth.py and test_web_cost_cap.py cover.
     monkeypatch.setenv("DEMO_PASSWORD", "correct-horse-battery-staple")
     monkeypatch.setenv("REIMBURSE_DEMO_SESSION_KEY", "test-session-key-not-a-secret")
+    monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "2.00")
+    monkeypatch.setenv("LLM_PRICE_INPUT_MISS_PER_MTOK", "0.27")
+    monkeypatch.setenv("LLM_PRICE_INPUT_HIT_PER_MTOK", "0.07")
+    monkeypatch.setenv("LLM_PRICE_OUTPUT_PER_MTOK", "1.10")
     monkeypatch.setattr(A, "PostgresAuditLog", FakePostgresLog)
 
     with TestClient(web.app) as client:
