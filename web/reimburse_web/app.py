@@ -19,6 +19,7 @@ from datetime import date
 from decimal import Decimal
 from html import escape
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
@@ -90,6 +91,32 @@ async def require_demo_login(request: Request, call_next):
 
 def review(cid: str) -> dict:
     return REVIEW.setdefault(cid, {"evidence": [], "decisions": {}, "pending": {}, "evidence_log": []})
+
+
+def self_approval_refusal(request: Request, cid: str, attempt: str) -> str | None:
+    """The Indonesian refusal when the signed-in reviewer owns this claim, else None.
+
+    Fail closed: the caller returns before touching any state. Only the approval direction is refused
+    (accept evidence, approve an item, move the status off `on_hold`, approve a staged write); rejecting
+    or holding your own claim cannot approve it, so those stay available.
+
+    The audit entry is an `access_denied` event attributed to `human:<reviewer>`, one per claim and
+    attempt, so a double submit cannot flood the log."""
+    try:
+        owner = store.get_claim(cid)["employee_id"]
+    except KeyError:
+        return None  # let the handler answer 404 as before
+    reviewer = auth.reviewer_of(request)
+    if not reviewer or owner != reviewer:
+        return None
+    auth.audit_self_approval(f"claim:{cid}", reviewer, f"self_approval:claim:{cid}:{attempt}",
+                             claim_id=cid, attempt=attempt)
+    return label("self_approval_blocked")
+
+
+def back_to_claim(cid: str, message: str) -> RedirectResponse:
+    """Redirect to the claim page with the message in `msg` (the page shows it as a tag)."""
+    return RedirectResponse(f"/admin/claims/{cid}?msg={quote(message, safe='')}", status_code=303)
 
 
 def pending_items(cid: str) -> dict[str, list[str]]:
@@ -467,7 +494,23 @@ def admin(batch: str = BATCH, msg: str = ""):
 
 
 @app.post("/admin/batch/approve")
-def batch_approve(batch: str = Form(...), claim_ids: list[str] = Form([]), reviewer_confirmed: str = Form("false")):
+def batch_approve(request: Request, batch: str = Form(...), claim_ids: list[str] = Form([]),
+                  reviewer_confirmed: str = Form("false")):
+    reviewer = auth.reviewer_of(request)
+    mine = []
+    for cid in claim_ids:
+        try:
+            if store.get_claim(cid)["employee_id"] == reviewer:
+                mine.append(cid)
+        except KeyError:
+            continue  # approve_cleared_batch reports the unknown ID itself
+    if mine:
+        # Refuse the whole batch rather than dropping the reviewer's own claim silently: the reviewer
+        # must see that their claim is still waiting for someone else.
+        auth.audit_self_approval(f"batch:{batch}", reviewer, f"self_approval:batch:{batch}:{mine[0]}",
+                                 claim_id=mine[0], batch=batch)
+        msg = f"{label('self_approval_blocked')} Batch tidak disetujui; klaim Anda: {', '.join(mine)}."
+        return RedirectResponse(f"/admin?batch={batch}&msg={quote(msg, safe='')}", status_code=303)
     held = [c for c in claim_ids if pending_items(c)]
     claim_ids = [c for c in claim_ids if c not in held]
     res = approve_cleared_batch(store, batch, claim_ids, reviewer_confirmed == "true")
@@ -482,12 +525,15 @@ def reset():
 
 
 @app.get("/admin/claims/{cid}", response_class=HTMLResponse)
-def claim_detail(cid: str, q: str = "", msg: str = ""):
+def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
     try:
         claim = store.get_claim(cid)
     except KeyError:
         raise HTTPException(404, f"Unknown claim {cid}")
     emp, trip = claim["employee_id"], claim["trip"]
+    # The reviewer cannot approve their own claim: the buttons are hidden here and the server refuses
+    # the request anyway (self_approval_refusal).
+    self_blocked = emp == auth.reviewer_of(request)
     r = review(cid)
     c = investigate(cid)
     pending = pending_items(cid)
@@ -528,6 +574,8 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
                        f"<div class=note>{e(mid)}: <span title='{e(p['reason'])}'>{e(why)}</span></div>"
                        f"<button name=verdict value=accept>Accept evidence</button> "
                        f"<button name=verdict value=reject>Reject evidence</button></form>") + dec
+        if self_blocked:  # UX only: the server refuses these requests anyway
+            dec = f"<div class=note id='self-approval'>{e(label('self_approval_note'))}</div>"
         item_rows += (f"<tr id='item-{e(it.item_id)}'><td>{e(it.item_id)}</td>"
                       f"<td>{e(label(it.category))}<div class=note>{e(src['description'])}</div></td>"
                       f"<td class=num>{e(rupiah(it.claimed))}</td><td class=num>{e(rupiah(it.approvable))}</td>"
@@ -535,7 +583,10 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
     needs = [(it, [g for g in it.gaps if g in DECISION_GAPS]) for it in c.items
              if any(g in DECISION_GAPS for g in it.gaps) and not it.human_decision
              and it.item_id not in pending]
-    if needs:
+    if self_blocked:
+        needs_you = (f"<div class='box' id='needs-you'>{e(label('self_approval_note'))} "
+                     f"{e(label('self_approval_blocked'))}</div>")
+    elif needs:
         links = ", ".join(f"<a href='#item-{e(it.item_id)}'>{e(', '.join(label(g) for g in gs))}</a>"
                           for it, gs in needs)
         needs_you = (f"<div class='box' id='needs-you'><b>Klaim ini butuh {len(needs)} keputusan Anda:</b> "
@@ -571,6 +622,13 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
     allowed_status = STATUS_FOR_DECISION[c.decision.value]
     if pending_items(cid):
         allowed_status = ["on_hold"]
+    if self_blocked:
+        status_form = (f"<div class='note' id='self-approval-status'>{e(label('self_approval_note'))}</div>")
+    else:
+        status_form = (f"<form method=post action=\"/admin/claims/{e(cid)}/status\"><label>Final status "
+                       f"<select name=status aria-label=\"Status akhir\">{options([(s, label(s)) for s in allowed_status])}"
+                       f"</select></label>\n<label><input type=checkbox name=reviewer_confirmed value=true> "
+                       f"I confirm this decision</label> <button>Apply status</button></form>")
     body = f"""<p><a href="/admin">&larr; Triage</a> &middot; <a href="/admin/claims/{e(cid)}/audit">Lihat jejak audit</a></p>{f'<p class="tag ok">{e(msg)}</p>' if msg else ''}
 <p><span title="{e(emp)}">{e(person(store, emp))}</span> &middot; {e(claim['purpose'])} &middot; {e(trip['destination'])}
 {e(trip['start_date'])} &rarr; {e(trip['end_date'])} &middot; status {status_tag(claim['status'])}</p>
@@ -593,8 +651,7 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
 <label>Isi <input name=body aria-label="Isi pesan" size=60 placeholder="Mohon kirim struk taksi tanggal 3 Okt (IT-5)." required></label>
 <button>Send</button></form>{f'<ul>{sent_rows}</ul>' if sent_rows else ''}</div>
 <div class="box"><h2>Decision note preview (EN + ID)</h2><pre>{e(note)}</pre>
-<form method=post action="/admin/claims/{e(cid)}/status"><label>Final status <select name=status aria-label="Status akhir">{options([(s, label(s)) for s in allowed_status])}</select></label>
-<label><input type=checkbox name=reviewer_confirmed value=true> I confirm this decision</label> <button>Apply status</button></form>
+{status_form}
 <p class="note">Status options follow the engine decision ({e(label(c.decision.value))}). To override, record an item decision above.
 Status changes only after you confirm. Notes are sent only by you.</p></div>"""
     return page(f"Claim {cid}", body)
@@ -650,11 +707,15 @@ def add_evidence(cid: str, evidence_id: str = Form(...), q: str = Form("")):
 
 
 @app.post("/admin/claims/{cid}/evidence/{mid}/review")
-def review_evidence(cid: str, mid: str, verdict: str = Form(...)):
+def review_evidence(cid: str, mid: str, request: Request, verdict: str = Form(...)):
     """Explicit reviewer verdict on evidence that extraction could not verify. Logged."""
     from datetime import datetime
 
     store.get_claim(cid)
+    if verdict == "accept":  # accepting evidence for your own claim is the approval direction
+        refused = self_approval_refusal(request, cid, f"evidence:{mid}:accept")
+        if refused:
+            return back_to_claim(cid, refused)
     r = review(cid)
     p = r["pending"].get(mid)
     if not p:
@@ -674,9 +735,13 @@ def review_evidence(cid: str, mid: str, verdict: str = Form(...)):
 
 
 @app.post("/admin/claims/{cid}/decide")
-def decide(cid: str, item_id: str = Form(...), choice: str = Form(...)):
+def decide(cid: str, request: Request, item_id: str = Form(...), choice: str = Form(...)):
     if choice not in CHOICES:
         raise HTTPException(400, f"choice must be one of {CHOICES}")
+    if choice != "reject":  # an approval-direction decision on your own claim
+        refused = self_approval_refusal(request, cid, f"decide:{item_id}:{choice}")
+        if refused:
+            return back_to_claim(cid, refused)
     if item_id in pending_items(cid):
         raise HTTPException(409, f"{item_id} has evidence awaiting review: accept or reject it first")
     review(cid)["decisions"][item_id] = choice
@@ -696,9 +761,13 @@ def message(cid: str, subject: str = Form(...), body: str = Form(...)):
 
 
 @app.post("/admin/claims/{cid}/status")
-def set_status(cid: str, status: str = Form(...), reviewer_confirmed: str = Form("false")):
+def set_status(cid: str, request: Request, status: str = Form(...), reviewer_confirmed: str = Form("false")):
     if reviewer_confirmed != "true":
         return RedirectResponse(f"/admin/claims/{cid}?msg=Not+changed:+tick+the+confirmation+first", status_code=303)
+    if status != "on_hold":  # holding your own claim is not an approval; anything else is
+        refused = self_approval_refusal(request, cid, f"status:{status}")
+        if refused:
+            return back_to_claim(cid, refused)
     c = run_check(cid)
     if pending_items(cid) and status != "on_hold":
         return RedirectResponse(f"/admin/claims/{cid}?msg=Not+changed:+evidence+is+awaiting+review", status_code=303)
@@ -811,8 +880,11 @@ def run_started_at(run, start: dict) -> float:
 
 
 @app.get("/admin/investigations/{rid}", response_class=HTMLResponse)
-def investigation_page(rid: str):
+def investigation_page(rid: str, request: Request):
     run = _get_run(rid)
+    # A reviewer may not approve a write on their own claim; the approve control is hidden here and
+    # /resume refuses it server-side.
+    self_blocked = store.get_claim(run.claim_id)["employee_id"] == auth.reviewer_of(request)
     evs = run.snapshot()
     start = next((x for x in evs if x["type"] == "start"), {})
     rows = ""
@@ -833,13 +905,20 @@ def investigation_page(rid: str):
                      f"<code>{e(x['tool'])}</code></td></tr>")
     pend = run.pending
     pending_html = ""
+    approve_form = ""
+    if pend and not self_blocked:
+        approve_form = (f"<form method=post action=\"/admin/investigations/{e(rid)}/resume\" style=\"display:inline\">"
+                        f"<input type=hidden name=approval_id value=\"{e(pend['approval_id'])}\">"
+                        f"<input type=hidden name=approved value=true><button>Approve</button></form>")
+    elif pend:
+        approve_form = (f"<p class='note' id='self-approval'>{e(label('self_approval_note'))}</p>")
     if pend:
         pending_html = f"""<div class="box" id=pending><h2>Pending write: awaiting your approval</h2>
 <p><code>{e(pend['tool'])}</code></p>{('<p><strong>' + e(pend['prompt']) + '</strong></p>') if pend.get('prompt') else ''}<pre>{e(json.dumps(pend['args'], ensure_ascii=False, indent=2))}</pre>
 {decision_box(pend.get('current_decision'))}
 {engine_box(pend.get('engine'))}
 <p class=note>This call runs only if you click Approve. Read-only lookups, and a plain evidence request to the claim's owner (no amounts), run without asking; every other write or message waits here. Unanswered approvals are declined automatically.</p>
-<form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=approval_id value="{e(pend['approval_id'])}"><input type=hidden name=approved value=true><button>Approve</button></form>
+{approve_form}
 <form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=approval_id value="{e(pend['approval_id'])}"><input type=hidden name=approved value=false>
 <label>Alasan <input name=reason aria-label="Alasan penolakan (opsional)" size=40 placeholder="Reason (optional)"></label><button>Decline</button></form></div>"""
     q = run.question
@@ -894,9 +973,13 @@ setInterval(function(){{s+=1;n.textContent=s;}},1000);}})();</script></div>"""
 
 
 @app.post("/admin/investigations/{rid}/resume")
-def investigation_resume(rid: str, approval_id: str = Form(""), approved: str = Form("false"),
+def investigation_resume(rid: str, request: Request, approval_id: str = Form(""), approved: str = Form("false"),
                          reason: str = Form("")):
     run = _get_run(rid)
+    if approved == "true":
+        refused = self_approval_refusal(request, run.claim_id, f"investigation:{rid}:resume")
+        if refused:
+            return back_to_claim(run.claim_id, refused)
     run.resume(approval_id, approved == "true", reason)  # stale/duplicate answers are ignored
     return RedirectResponse(f"/admin/investigations/{rid}", status_code=303)
 
@@ -906,6 +989,10 @@ async def investigation_reply(rid: str, request: Request):
     run = _get_run(rid)
     form = await request.form()
     decisions = {k[4:]: str(v) for k, v in form.items() if k.startswith("dec_") and str(v)}
+    if any(v.startswith("approve") for v in decisions.values()):
+        refused = self_approval_refusal(request, run.claim_id, f"investigation:{rid}:reply")
+        if refused:
+            return back_to_claim(run.claim_id, refused)
     run.reply(str(form.get("question_id", "")), str(form.get("reply", "")), decisions)  # stale answers ignored
     return RedirectResponse(f"/admin/investigations/{rid}", status_code=303)
 

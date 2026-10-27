@@ -13,11 +13,14 @@ import os
 import sys
 import threading
 from html import escape
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from . import auth
 from .agent_bridge import AGENT_DIR
+from .labels import label
 
 if str(AGENT_DIR) not in sys.path:
     sys.path.insert(0, str(AGENT_DIR))
@@ -138,7 +141,7 @@ def plans_index():
 
 
 @router.get("/admin/plans/{run_id}", response_class=HTMLResponse)
-def plan_page(run_id: str, msg: str = ""):
+def plan_page(run_id: str, request: Request, msg: str = ""):
     from . import intake  # late import: intake.py imports this module
 
     question = intake.pending_for(run_id)
@@ -152,8 +155,11 @@ def plan_page(run_id: str, msg: str = ""):
         raise HTTPException(404, "no such plan")
     from . import app as web  # late import: app.py includes this router
 
+    # A requester cannot approve their own plan: the approve control is disabled here and /decide
+    # refuses it server-side (fail closed, nothing is stored).
+    allow_approve = plan.get("requester") != auth.reviewer_of(request)
     markup = page.render(plan, log(), directory(), R.default_rules(),
-                         action_url=f"/admin/plans/{run_id}/decide", msg=msg)
+                         action_url=f"/admin/plans/{run_id}/decide", msg=msg, allow_approve=allow_approve)
     markup = markup.replace("</head>", f"<style>{web.NAV_CSS}</style></head>", 1)
     return HTMLResponse(markup.replace("<body>", f"<body>{web.nav_html()}", 1))
 
@@ -171,12 +177,18 @@ async def decide(run_id: str, request: Request):
                  if k.startswith("decision:") and k.split(":", 1)[1] in ids and v in ("approve", "reject")}
     notes = {k.split(":", 1)[1]: str(v).strip()[:500] for k, v in form.items()
              if k.startswith("note:") and k.split(":", 1)[1] in ids and str(v).strip()}
-    store().save_decisions(run_id, plan["version"], {"plan_id": plan["plan_id"], "decisions": decisions,
-                                                     "notes": notes, "actor": "human:reviewer"})
+    reviewer = auth.reviewer_of(request)
+    if plan.get("requester") == reviewer and any(v == "approve" for v in decisions.values()):
+        # Rejections and notes stay allowed: they cannot approve anything. Nothing is stored.
+        auth.audit_self_approval(run_id, reviewer, f"self_approval:plan:{run_id}:v{plan['version']}",
+                                 plan_id=plan["plan_id"], requester=plan.get("requester"))
+        return RedirectResponse(f"/admin/plans/{run_id}?msg={quote(label('self_approval_blocked'), safe='')}",
+                                status_code=303)
+    decision = {"plan_id": plan["plan_id"], "decisions": decisions, "notes": notes, "actor": f"human:{reviewer}"}
+    store().save_decisions(run_id, plan["version"], decision)
     from . import intake  # late import: intake.py imports this module
 
     # When this process started the run (request intake), resume it here: approval -> executor -> mock
     # tools. Otherwise the decision map is only stored, for an external driver such as plan_demo.py.
-    intake.resume_if_live(run_id, {"plan_id": plan["plan_id"], "decisions": decisions, "notes": notes,
-                                   "actor": "human:reviewer"})
+    intake.resume_if_live(run_id, dict(decision))
     return RedirectResponse(f"/admin/plans/{run_id}?msg=Keputusan+disimpan+/+decisions+saved", status_code=303)

@@ -105,6 +105,12 @@ LABELS = {
                  "Ini hanya untuk pengembangan lokal."),
     "auth_bad_password": "Kata sandi demo salah.",
     "auth_rate_limited": "Terlalu banyak percobaan. Coba lagi dalam satu menit.",
+    # self-approval guard (web/reimburse_web/app.py, plans.py)
+    "self_approval_blocked": "Anda tidak dapat menyetujui permintaan/klaim Anda sendiri.",
+    "self_approval_note": ("Anda tercatat sebagai pemilik klaim ini, jadi tombol persetujuan dimatikan. "
+                           "Minta reviewer lain menyetujuinya."),
+    "self_approval_plan_note": ("Anda tercatat sebagai peminta rencana ini, jadi persetujuan dimatikan. "
+                                "Anda tetap bisa menolak atau meminta rekan lain menyetujuinya."),
 }
 
 
