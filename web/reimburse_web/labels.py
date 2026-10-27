@@ -95,6 +95,16 @@ LABELS = {
     "accepted": "Diterima",
     "accepted_by_reviewer": "Diterima reviewer",
     "rejected_by_reviewer": "Ditolak reviewer",
+    # demo login (web/reimburse_web/auth.py)
+    "sign_in": "Masuk",
+    "sign_in_as": "Masuk sebagai reviewer",
+    "demo_password": "Kata sandi demo",
+    "demo_limited": "Data sintetis. Demo terbatas.",
+    "continue": "Lanjut",
+    "auth_off": ("Gerbang login mati: DEMO_PASSWORD tidak diatur, jadi semua halaman terbuka. "
+                 "Ini hanya untuk pengembangan lokal."),
+    "auth_bad_password": "Kata sandi demo salah.",
+    "auth_rate_limited": "Terlalu banyak percobaan. Coba lagi dalam satu menit.",
 }
 
 
