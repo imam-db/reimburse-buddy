@@ -55,7 +55,7 @@ from langgraph.types import Command
 
 from reimburse_agent import audit
 from reimburse_agent.config import build_chat_model, load_config
-from reimburse_agent.graph import build_graph
+from reimburse_agent.graph import build_graph, message_usage
 from reimburse_agent.mcp_client import mcp_tools
 
 DEFAULT_MODEL = "deepseek-flash"
@@ -233,7 +233,9 @@ async def _run(a) -> int:
     model, name = make_model(a.fake_script)
     emit({"type": "start", "model": name, "compact": True, "claim": a.claim})
     stdin = Stdin()
-    tokens = {"input": 0, "output": 0}
+    # Provider-reported tokens, split the way the price list needs it: cache-hit input is ~10x cheaper
+    # than cache-miss input on DeepSeek, so the daily cap has to bill them separately (spend.cost_of).
+    tokens = {"input": 0, "cache_hit": 0, "output": 0}
     pending: dict[str, dict] = {}
     reviewer = ""  # the signed-in EMP-ID that last answered; attributed to every decision of this run
     n = 0
@@ -252,9 +254,9 @@ async def _run(a) -> int:
                     if node == "__interrupt__" or not isinstance(upd, dict):
                         continue
                     for m in upd.get("messages", []):
-                        um = getattr(m, "usage_metadata", None) or {}
-                        tokens["input"] += um.get("input_tokens", 0)
-                        tokens["output"] += um.get("output_tokens", 0)
+                        u = message_usage(m)  # input / cache_hit / output, from the provider's report
+                        for k in tokens:
+                            tokens[k] += u[k]
                         for c in getattr(m, "tool_calls", None) or []:
                             pending[c["id"]] = c
                         if m.type == "tool":
