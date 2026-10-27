@@ -178,6 +178,26 @@ def test_a_crashed_worker_keeps_the_reservation(client, monkeypatch, ledger_file
     assert [x["kind"] for x in rows(ledger_file)] == ["reserve"]  # no token report: assume spent
 
 
+def test_a_run_crossing_midnight_settles_on_the_day_it_reserved(client, monkeypatch, ledger_file):
+    """The reservation must be replaced by the settle row, whatever the clock says at the end: otherwise
+    the old day keeps a reservation for ever and the new day is charged twice."""
+    monkeypatch.setattr(spend, "today", lambda now=None: "2026-10-26")
+    inv = Investigator(max_per_min=10, fake_script="x")
+    slow = f"import json,time;time.sleep(0.6);print(json.dumps({FINAL!r}))"
+    monkeypatch.setattr(inv, "command", lambda claim_id: [sys.executable, "-c", slow])
+    monkeypatch.setattr(web, "INVESTIGATOR", inv)
+    r = client.post(f"/admin/claims/{HERO}/investigate", follow_redirects=False)
+    run = inv.runs[r.headers["location"].rsplit("/", 1)[1]]
+
+    monkeypatch.setattr(spend, "today", lambda now=None: "2026-10-27")  # midnight WIB passes mid-run
+    run.wait(30)
+
+    assert [(x["kind"], x["day"]) for x in rows(ledger_file)] == [("reserve", "2026-10-26"),
+                                                                 ("settle", "2026-10-26")]
+    assert spend.committed("2026-10-26") == Decimal("0.2")  # settled, not the 0.10 reservation
+    assert spend.committed("2026-10-27") == Decimal(0)
+
+
 def test_the_investigate_button_refuses_at_the_cap_and_logs_it(client, monkeypatch, ledger_file):
     monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "0.15")  # one worst case (0.10) fits, two do not
     spend.reserve("someone-else")
