@@ -272,8 +272,14 @@ One cap for the whole deployment, not one per claim, on a ledger of its own (`we
   (`payload.kind = daily_llm_budget`). Check and insert happen under one lock (a file lock for the JSONL
   ledger, `pg_advisory_xact_lock` for Postgres), so two concurrent starts cannot both take the last slot.
 - When the worker reports tokens (`final`, or `error`/`token_limit`), the run **settles** the real cost
-  from the input hit/miss and output split. A run that ends without a token report (cancel, deadline,
-  crash) keeps its whole reservation: the ledger fails safe instead of assuming the money was not spent.
+  from the input hit/miss and output split (the worker accumulates `graph.message_usage()`, so cache-hit
+  input is billed at the hit price). A run that ends without a token report (cancel, deadline, crash)
+  keeps its whole reservation: the ledger fails safe instead of assuming the money was not spent.
+- The Jakarta day is taken once, when the run is reserved: a run that crosses midnight WIB settles on the
+  day it was reserved, so its reservation is always replaced and never leaks into the next day's cap.
+- If Postgres dropped the connection (a Neon endpoint suspends when idle), the ledger reconnects and
+  retries once; if it is still unreachable the run is refused with "Ledger biaya LLM tidak bisa
+  dihubungi, jadi tidak ada run yang dijalankan." instead of a 500, and nothing is spawned.
 - Committed for a day = every settle, plus the reservation of each run that never settled.
 - The remaining amount is shown in the nav ("Sisa anggaran LLM hari ini: $x.xx") and the ledger is
   append-only: the app role has INSERT + SELECT on `llm_spend`, never UPDATE or DELETE.
