@@ -69,14 +69,12 @@ Retrieval was the bottleneck. With the whole mailbox in hand the no-LLM baseline
 
 | suite (baseline, 1 run, $0) | ranked (BM25+embedding) | BM25 only | whole mailbox, unranked (control) |
 |---|---|---|---|
-| hard, 19 cases | 19/19 † | 17/19 (11, 12 fail) | 19/19 |
-| large set A (tuning), 5 | 3/5 † | 1/5 | 4/5 |
-| large set B (held out), 5 | 2/5 † | 2/5 | 4/5 |
-| reasoning track, 11 | 9/11 (2 false approvals) † | 8/11 | 8/11 (1 false approval) |
+| hard, 19 cases | 19/19 | 17/19 (11, 12 fail) | 19/19 |
+| large set A (tuning), 5 | 2/5 | 1/5 | 4/5 |
+| large set B (held out), 5 | 2/5 | 2/5 | 4/5 |
+| reasoning track, 11 | 8/11 (1 false approval) | 8/11 | 8/11 (1 false approval) |
 
-Run 2026-10-27 at `cc430d2` (BM25 and whole columns; `agent/eval/results/*-20261027T23*.json`). The BM25-only and whole columns are 2 and 1 cases lower than the 25 Oct run on the large sets and the reasoning track; the drop is not from this branch — the same command at `27b2934` gives the same 4/5 on large set A. It comes from the graph changes merged between the two runs (gated evidence requests, the approval executor split), which is why the baseline is re-run whenever a gate changes.
-
-† The ranked column has not been re-run: the machine this was measured on cannot install the `embed` extra (no disk) and cannot download the ONNX weights (`cdn-lfs.huggingface.co` unreachable). Those three numbers are the 25 Oct run and predate the case-2/case-10a scoring fixes in this branch, so treat them as the old baseline, not as a result of the current code.
+Run 2026-10-27 on this branch, all three columns (`agent/eval/results/*-20261027T23*.json`; the eval sources are unchanged since `cc430d2`). Against the 25 Oct run the large sets lose 1 case per column and the reasoning track loses 1 case while halving its false approvals; the hard set goes from 17/19 to 19/19 because two scoring bugs were fixed (see `docs/regression-hard-eval.md`). The large-set and reasoning drop is not from this branch — the same command at `27b2934` gives the same 4/5 on large set A — it comes from the gate changes merged in between (every evidence request waits for the reviewer, gate and executor split apart), which is exactly why the baseline is re-run whenever a gate changes.
 
 - The whole-mailbox control passes everything because every synthetic receipt and schedule change carries structured fields (`claim_id`, `item_id`, `meeting_update`) and the rule engine keeps only what matches. On these fixtures the loss comes from the top-5 cut, not from understanding. Real mail has no such tags.
 - Large sets (`agent/eval/large_fixtures.py`): 46-68 messages per employee over Aug-Oct 2026, hand-written paraphrases combined by a seeded RNG; set A and set B share no paraphrase. Needed message recall@5 / MRR (baseline query): set A lexical 0.2/0.2, ranked 0.2/0.12; set B lexical 0.4/0.12, ranked 0.2/0.15 (`agent/eval/retrieval_metrics.py`). Every large mailbox is flagged `possibly_incomplete` (the 36 probes reach 33-47 of 46-68 messages).

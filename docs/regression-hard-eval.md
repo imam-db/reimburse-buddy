@@ -61,7 +61,7 @@ sent.
 - `agent/tests/test_hard_eval.py`: two declined identical proposals pass; the same call executed without
   an approval still fails.
 
-Result: 19/19 in whole-mailbox mode, 17/19 with BM25 only (cases 11 and 12, unchanged).
+Result: 19/19 in ranked and whole-mailbox mode, 17/19 with BM25 only (cases 11 and 12, unchanged).
 
 ## What is still open
 
