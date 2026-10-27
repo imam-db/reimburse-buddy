@@ -27,7 +27,8 @@ from typing import Any, Iterable, Protocol
 
 EVENT_TYPES = frozenset({
     "request", "plan", "tool_call", "staged_action", "approval", "rejection", "execution", "clarification",
-    "limit", "refusal", "access_denied", "injection_notice", "expired", "error",
+    "limit", "refusal", "access_denied", "injection_notice", "injection_detected", "notice_shown", "expired",
+    "error",
 })
 OUTCOME_TYPES = frozenset({"approval", "rejection", "expired"})
 ACTION_TYPES = frozenset({"staged_action", "approval", "rejection", "execution", "expired"})
@@ -187,7 +188,7 @@ class JsonlAuditLog:
 
 
 class PostgresAuditLog:
-    """Same contract on Postgres (psycopg 3). Expects agent/migrations/001_audit_log.sql applied by the
+    """Same contract on Postgres (psycopg 3). Expects agent/migrations/001_audit_log.sql and 002_injection_events.sql applied by the
     owner role; connect with the app role (INSERT + SELECT only). Not exercised without DATABASE_URL."""
 
     def __init__(self, dsn: str):
