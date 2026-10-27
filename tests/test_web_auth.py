@@ -96,6 +96,8 @@ def test_login_form_renders_in_indonesian(client):
     assert r.status_code == 200
     for text in ("Kata sandi demo", "Masuk sebagai reviewer", "Data sintetis. Demo terbatas.", "EMP-100"):
         assert text in r.text, text
+    for reviewer in auth.REVIEWERS:  # EMP-100, EMP-101 and the third (Finance) reviewer
+        assert reviewer in r.text, reviewer
     assert 'type="password"' in r.text
 
 

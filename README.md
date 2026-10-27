@@ -215,7 +215,8 @@ intake and plan confirmation, and employee Q&A (offline router) need no LLM.
 One shared password closes the whole app. With `DEMO_PASSWORD` set, every route except `/login`,
 `/logout` and `/healthz` needs the signed `rb_auth` cookie: a browser navigation is redirected to the
 form, anything else gets `401`. The form also picks which synthetic reviewer the session acts as
-(`EMP-100` by default, `EMP-101` the other), which is what makes a self-approval refusable.
+(`EMP-100` by default, `EMP-101` and `EMP-102` Finance the others), which is what makes a self-approval
+refusable.
 
 - Session: `issued_at|reviewer|nonce` plus an HMAC, 12 hours, `httponly`, `samesite=lax`, `secure` in
   production, checked on every request.
@@ -234,6 +235,9 @@ The reviewer picked at login is the actor on every decision. Nobody may approve 
 
 - A plan whose `requester` is the reviewer cannot be approved (`POST /admin/plans/<run_id>/decide`);
   the approve radio is disabled on the confirmation page.
+- Neither can a plan the reviewer **submitted**: the intake records `submitted_by` (the signed-in
+  reviewer), so picking a colleague as the requester does not make the plan approvable by its author.
+  The page shows both lines: `peminta / requester` and `Diajukan oleh / submitted by`.
 - A claim owned by the reviewer cannot be approved: item decisions (`approve_full`, `approve_capped`),
   a status change off `on_hold`, `Accept evidence`, an agent write (`/resume`) or an agent question
   answered with an approve decision (`/reply`).
@@ -242,8 +246,10 @@ The reviewer picked at login is the actor on every decision. Nobody may approve 
 
 Rejecting, adding a note and putting your own claim `on_hold` stay available: they cannot approve
 anything. A refusal changes no state and is written to the audit log as `access_denied` with actor
-`human:<reviewer>` and `payload.reason = "self_approval"`. The intake form defaults the requester to
-`EMP-101`, so the demo reviewer is `EMP-100` (the login form's default).
+`human:<reviewer>`, `payload.reason = "self_approval"` and `payload.blocked` naming the rule that fired
+(`requester` or `submitted_by`). The intake form defaults the requester to `EMP-101`, so the demo
+reviewer is `EMP-100` (the login form's default) and the third reviewer is `EMP-102` (Finance): the demo
+shows the refusal as `EMP-100`, then the approval as `EMP-102`.
 
 The server checks are the guard; the hidden/disabled buttons are only there so the page does not offer
 an action that will be refused. The plan gate in `plan_graph.py` is unchanged: this is a web-layer

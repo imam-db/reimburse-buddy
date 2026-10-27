@@ -119,6 +119,22 @@ def back_to_claim(cid: str, message: str) -> RedirectResponse:
     return RedirectResponse(f"/admin/claims/{cid}?msg={quote(message, safe='')}", status_code=303)
 
 
+def submitter_of(request: Request) -> str:
+    """The signed-in reviewer, recorded as the plan's submitter; "" when the demo gate is off.
+
+    With the gate off there is no identity to record, so the intake keeps the old behaviour (the requester
+    field is the only source, and tests/test_request_intake.py is unaffected)."""
+    return auth.reviewer_of(request) if auth.enabled() else ""
+
+
+def submitted_by_note(reviewer: str) -> str:
+    """Intake form note: the request is filed under the signed-in reviewer, whatever requester is picked."""
+    if not reviewer:
+        return ""
+    return (f'<p class="note" id="submitted-by">{e(label("submitted_by_note"))} '
+            f'<b>{e(person(store, reviewer))}</b>.</p>')
+
+
 def pending_items(cid: str) -> dict[str, list[str]]:
     """Items whose uploaded evidence still awaits explicit reviewer acceptance: item_id -> message IDs.
 
