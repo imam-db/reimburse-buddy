@@ -228,6 +228,28 @@ form, anything else gets `401`. The form also picks which synthetic reviewer the
   behave as before. In production a missing or short password, or an unset
   `REIMBURSE_DEMO_SESSION_KEY`, stops startup with `auth.AuthConfigError`.
 
+### Who may approve
+
+The reviewer picked at login is the actor on every decision. Nobody may approve their own work:
+
+- A plan whose `requester` is the reviewer cannot be approved (`POST /admin/plans/<run_id>/decide`);
+  the approve radio is disabled on the confirmation page.
+- A claim owned by the reviewer cannot be approved: item decisions (`approve_full`, `approve_capped`),
+  a status change off `on_hold`, `Accept evidence`, an agent write (`/resume`) or an agent question
+  answered with an approve decision (`/reply`).
+- `POST /admin/batch/approve` refuses the **whole** batch and names the claim, rather than dropping it
+  silently.
+
+Rejecting, adding a note and putting your own claim `on_hold` stay available: they cannot approve
+anything. A refusal changes no state and is written to the audit log as `access_denied` with actor
+`human:<reviewer>` and `payload.reason = "self_approval"`. The intake form defaults the requester to
+`EMP-101`, so the demo reviewer is `EMP-100` (the login form's default).
+
+The server checks are the guard; the hidden/disabled buttons are only there so the page does not offer
+an action that will be refused. The plan gate in `plan_graph.py` is unchanged: this is a web-layer
+refusal, so an external driver calling the graph directly (for example `agent/plan_demo.py`) is not
+covered.
+
 ### Environment variables
 
 Secrets come from the environment (or a git-ignored `.env.local`) and are never committed.

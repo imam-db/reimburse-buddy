@@ -30,6 +30,11 @@ office tools only after a logged approval.
    holds the live graph for the run, resumes it (`approval -> executor -> mock tools`). Without a live
    graph the decisions are only stored, exactly as before, so an external driver such as
    `agent/plan_demo.py` keeps working.
+   The decision map records the reviewer from the demo login as `human:<EMP-ID>`. A reviewer who is the
+   plan's `requester` cannot approve it: the request is refused before anything is stored (an
+   `access_denied` event with `reason: self_approval`), and the approve radio is disabled on the page.
+   Rejecting and notes stay available. The gate in `plan_graph.py` is not changed by this check, so a
+   driver that calls the graph directly bypasses it.
 
 ## Clarification
 
