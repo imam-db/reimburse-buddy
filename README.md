@@ -202,12 +202,31 @@ uv run --no-dev reimburse-buddy-mcp   # starts the server on stdio (WorkBuddy no
 ```bash
 uv sync && (cd agent && uv sync)
 export DEEPSEEK_API_KEY=...   # only for "Selidiki dengan agent"; never commit it
+export DEMO_PASSWORD='...'    # 12+ characters; without it the demo login is off outside production
 EMPLOYEE_QA=1 uv run uvicorn --app-dir web reimburse_web.app:app --port 8000
-# open http://127.0.0.1:8000/
+# open http://127.0.0.1:8000/ (sign in at /login)
 ```
 
 Without a model key everything except the agent investigation works: triage, claim pages, request
 intake and plan confirmation, and employee Q&A (offline router) need no LLM.
+
+### Demo password
+
+One shared password closes the whole app. With `DEMO_PASSWORD` set, every route except `/login`,
+`/logout` and `/healthz` needs the signed `rb_auth` cookie: a browser navigation is redirected to the
+form, anything else gets `401`. The form also picks which synthetic reviewer the session acts as
+(`EMP-100` by default, `EMP-101` the other), which is what makes a self-approval refusable.
+
+- Session: `issued_at|reviewer|nonce` plus an HMAC, 12 hours, `httponly`, `samesite=lax`, `secure` in
+  production, checked on every request.
+- Five wrong passwords per IP per minute; after that the form refuses even the right one. Failures are
+  written to the audit log as `access_denied` (`run_id=auth`, actor `system`, `payload.reason`), one
+  event per IP and minute, without the password or the IP in clear.
+- `next=` only accepts a local path, so the form cannot be used as an open redirect.
+- `GET /healthz` answers `ok` without touching the audit log, the store or the LLM.
+- Outside production an unset `DEMO_PASSWORD` turns the gate off, so local runs and the test suite
+  behave as before. In production a missing or short password, or an unset
+  `REIMBURSE_DEMO_SESSION_KEY`, stops startup with `auth.AuthConfigError`.
 
 ### Environment variables
 
@@ -215,7 +234,9 @@ Secrets come from the environment (or a git-ignored `.env.local`) and are never 
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `APP_ENV` | unset | `prod` / `production` requires a Postgres audit log and refuses JSONL or memory |
+| `APP_ENV` | unset | `prod` / `production` requires a Postgres audit log, a demo password and a session key; refuses JSONL or memory |
+| `DEMO_PASSWORD` | unset | Shared demo password, 12+ characters (secret). Unset outside production means the login gate is off; unset in production aborts startup |
+| `REIMBURSE_DEMO_SESSION_KEY` | random per process | HMAC key for the demo session cookies (`rb_auth`, `rb_demo_session`); required in production, set it in any shared deploy (secret) |
 | `REIMBURSE_AUDIT_DATABASE_URL` | unset | Postgres DSN for the audit log (secret; app role, Neon direct endpoint) |
 | `REIMBURSE_AUDIT_LOG` | unset | JSONL audit log path outside production; unset means in memory |
 | `DEEPSEEK_API_KEY` or `REIMBURSE_AGENT_API_KEY` | unset | Model key for the claim agent (secret) |
@@ -226,7 +247,6 @@ Secrets come from the environment (or a git-ignored `.env.local`) and are never 
 | `REIMBURSE_INVESTIGATE_MAX_PER_MIN` | 3 | Agent runs started per minute per web process (one live run at a time) |
 | `REIMBURSE_APPROVAL_DEADLINE_MIN` | 30 | Minutes before an unanswered staged action of a dead run is expired |
 | `EMPLOYEE_QA` | off | Employee Q&A box and `POST /employee/qa` (see [docs/employee-qa.md](docs/employee-qa.md)) |
-| `REIMBURSE_DEMO_SESSION_KEY` | random per process | HMAC key for the demo session cookie; set it in any shared deploy |
 | `REIMBURSE_PLAN_STORE` | `agent/.plans` | Where plans, requests and per-run mock office state are stored |
 | `REIMBURSE_OFFICE_CONTACTS` / `REIMBURSE_OFFICE_RULES` | bundled synthetic files | Contact directory and operating rules for request intake |
 | `REIMBURSE_EXTRACTOR` | `ocr` | Upload extraction: `ocr`, `dual`, `rapidocr` or `vision` (see [File extraction](#file-extraction)) |
@@ -254,6 +274,8 @@ Production refuses JSONL and in-memory audit logs. When `APP_ENV` is `prod` or `
 ```bash
 export APP_ENV=prod
 export REIMBURSE_AUDIT_DATABASE_URL='postgresql://user:pass@db.example:5432/reimburse'
+export DEMO_PASSWORD='...'                 # 12+ characters (secret)
+export REIMBURSE_DEMO_SESSION_KEY='...'    # stable HMAC key (secret)
 ```
 
 - `REIMBURSE_AUDIT_DATABASE_URL` is required and must start with `postgres://` or `postgresql://`;
@@ -263,6 +285,8 @@ export REIMBURSE_AUDIT_DATABASE_URL='postgresql://user:pass@db.example:5432/reim
   `REIMBURSE_AUDIT_LOG` (JSONL) or the in-memory log.
 - The web app checks this in its FastAPI startup hook, so it fails before serving the first request.
   `agent/investigate_worker.py` checks it before running, and `audit.default_log()` enforces it too.
+- Production startup also refuses a missing `DEMO_PASSWORD` (or one shorter than 12 characters) and a
+  missing `REIMBURSE_DEMO_SESSION_KEY`, so a deploy cannot come up with every route open.
 - Outside production (`APP_ENV` unset or any other value), behaviour is unchanged: JSONL via
   `REIMBURSE_AUDIT_LOG`, otherwise a fresh in-memory log.
 
@@ -290,8 +314,9 @@ HTTP route for this: the web simulation has no admin authentication, so it is CL
 ## Project layout
 
 ```
-web/reimburse_web/      version B web app (FastAPI): app.py, intake.py, plans.py, qa.py, upload_flow.py,
-                        agent_bridge.py (starts the agent worker), labels.py (Indonesian UI labels)
+web/reimburse_web/      version B web app (FastAPI): app.py, auth.py (demo password), intake.py, plans.py,
+                        qa.py, upload_flow.py, agent_bridge.py (starts the agent worker), labels.py
+                        (Indonesian UI labels)
 agent/
   reimburse_agent/      graph.py (claim agent), plan_graph.py, office/ (plan, directory, rules, mock tools),
                         audit.py, injection.py, qa/, retrieval.py, audit_selftest.py
@@ -426,8 +451,11 @@ Synthetic sample uploads live in `web/sample_uploads/` (`make_samples.py` regene
 (TOTAL (3 item), cash larger than the total, 2-digit year, TOTAL DISKON last) not used to tune the parser.
 `uv run python web/sample_uploads/measure_accuracy.py` reports both (see the table above). Both sets are synthetic and small.
 
-Known limits before any public deploy: shared in-memory state, no auth, local uploads (basic 5 MB / type
-limits only), and a self-declared field is only flagged, not verified. Dual mode detects OCR misreads, not edited
+Known limits before any public deploy: shared in-memory state (claims, drafts, reviewer decisions and agent
+runs live in one process, so a restart loses them and a second instance sees a different demo); one shared
+demo password rather than accounts, so the app cannot tell two reviewers apart beyond the ID chosen at login
+and there is no way to revoke one person's access; local uploads (basic 5 MB / type limits only); and a
+self-declared field is only flagged, not verified. Dual mode detects OCR misreads, not edited
 receipts; PDFs, single-engine reads and near-duplicate files are not cross-checked yet (planned after the hackathon).
 
 Known limitation: the cross-checks compare the item with what OCR read from the same file, so a convincingly
