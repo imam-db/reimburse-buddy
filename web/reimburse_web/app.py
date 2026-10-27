@@ -29,7 +29,7 @@ from reimburse_buddy.triage import approve_cleared_batch, triage_claims
 
 from .agent_bridge import NO_KEY_MESSAGE, Investigator, RateLimited, key_configured
 from .labels import label, person
-from .plans import router as plans_router
+from .plans import router as plans_router, startup_config_check, startup_sweep
 from .qa import router as qa_router
 
 BATCH = "2026-W43"
@@ -39,7 +39,9 @@ SIGNED, UNSIGNED = "signed", '<span class="tag bad">unsigned</span>'
 CHOICES = ("approve_full", "approve_capped", "reject")
 UPLOAD_DIR = Path(os.environ.get("REIMBURSE_WEB_UPLOADS", Path(__file__).resolve().parent.parent / "uploads"))
 
-app = FastAPI(title="reimburse-buddy web simulation")
+# Startup order matters: refuse a production deployment without a Postgres audit log before doing any work,
+# then run the one-per-process expiry sweep (agent workers opening the log never sweep).
+app = FastAPI(title="reimburse-buddy web simulation", on_startup=[startup_config_check, startup_sweep])
 app.include_router(plans_router)
 app.include_router(qa_router)
 store = DataStore()
@@ -658,6 +660,24 @@ def decision_box(d: dict | None) -> str:
             f"of {rp(d.get('total_claimed'))}, pending {rp(d.get('total_pending'))}</div>")
 
 
+def engine_box(engine: dict | None) -> str:
+    """The exact engine basis the approval is bound to (the snapshot that goes into args_hash)."""
+    if not engine:
+        return ""
+
+    def rp(v):
+        try:
+            return "Rp" + f"{int(float(v)):,}".replace(",", ".")
+        except (TypeError, ValueError):
+            return e(v)
+
+    ev = ", ".join(str(x) for x in engine.get("evidence_ids") or []) or "tidak ada (none)"
+    hd = json.dumps(engine.get("human_decisions") or {}, ensure_ascii=False, sort_keys=True)
+    return (f"<div class=box id=approved-engine><b>Dasar persetujuan (what this approval is bound to):</b> "
+            f"status <code>{e(engine.get('status'))}</code>, approvable {rp(engine.get('approvable_amount'))} "
+            f"&middot; evidence {e(ev)} &middot; keputusan reviewer {e(hd)}</div>")
+
+
 PROGRESS_STEPS = {
     "search_reimburse_mailbox": "Mencari boarding pass/struk di mailbox…",
     "get_calendar": "Memeriksa kalender…",
@@ -711,6 +731,7 @@ def investigation_page(rid: str):
         pending_html = f"""<div class="box" id=pending><h2>Pending write: awaiting your approval</h2>
 <p><code>{e(pend['tool'])}</code></p>{('<p><strong>' + e(pend['prompt']) + '</strong></p>') if pend.get('prompt') else ''}<pre>{e(json.dumps(pend['args'], ensure_ascii=False, indent=2))}</pre>
 {decision_box(pend.get('current_decision'))}
+{engine_box(pend.get('engine'))}
 <p class=note>This call runs only if you click Approve. Read-only lookups, and a plain evidence request to the claim's owner (no amounts), run without asking; every other write or message waits here. Unanswered approvals are declined automatically.</p>
 <form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=approval_id value="{e(pend['approval_id'])}"><input type=hidden name=approved value=true><button>Approve</button></form>
 <form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=approval_id value="{e(pend['approval_id'])}"><input type=hidden name=approved value=false>

@@ -216,11 +216,23 @@ def propose_slot(hint: dict | None, now: datetime, duration_min: int, people, re
 
 
 # --- building the plan ----------------------------------------------------------------------------------
+def _clean_lines(text: str) -> list[str]:
+    """Lines of clean text: any line or sentence segment carrying the model-only withheld placeholder is
+    dropped, so a planned email body never includes the marker (or the withheld content)."""
+    out = []
+    for ln in (text or "").splitlines():
+        parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", ln)]
+        clean = " ".join(p for p in parts if p and not inj.contains_withheld_marker(p))
+        if clean:
+            out.append(clean)
+    return out
+
+
 def _summary(documents: list[dict]) -> str:
     lines = []
     for d in documents or []:
         text = d.get("model_text", d.get("text", ""))
-        for ln in [x.strip() for x in text.splitlines() if x.strip()][:6]:
+        for ln in _clean_lines(text)[:6]:
             lines.append(f"- {ln}")
     return "\n".join(lines)
 
@@ -293,6 +305,10 @@ def validate_action(action: dict, directory: Directory, rules: R.Rules, operatin
     if args_hash(tool, args) != action["args_hash"]:
         bad.append("args changed after staging (args_hash mismatch)")
     bad += inj.arg_source_violations(tool, args, directory_ids=directory.ids(), operating_times=operating_times)
+    marker = inj.withheld_marker_fields(args)
+    if marker:
+        bad.append("withheld instruction text from a source document in " + ", ".join(marker)
+                   + "; rewrite it without the withheld marker or the withheld content")
     people = args.get("to") or args.get("attendees") or ([args["assignee"]] if args.get("assignee") else [])
     if not people:
         bad.append("no recipient resolved from the directory")
