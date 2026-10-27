@@ -1,14 +1,16 @@
-"""Two-sided web simulation for reimburse-buddy (portfolio version B, not part of the hackathon demo).
+"""Two-sided web simulation for reimburse-buddy (version B, the Challenge B demo).
 
 Employee side: submit a claim, forward evidence to the shared reimburse@ mailbox, read messages from finance.
 Finance side: batch triage, reviewer-confirmed bulk approval, exception detail with findings and evidence tools.
 
-No LLM runs here: the reviewer drives the investigation and every amount comes from the rule engine.
-A LangGraph agent will later plug in at `investigate()` and call the same tools over MCP.
+The only LLM path is "Selidiki dengan agent", which starts `agent/investigate_worker.py` as a subprocess
+(see agent_bridge.py); every amount still comes from the rule engine. All routes sit behind the demo
+password in auth.py when DEMO_PASSWORD is set (always, in production).
 """
 
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import re
@@ -19,7 +21,7 @@ from html import escape
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 
 from reimburse_buddy.data_store import DataStore
 from reimburse_buddy.decision import draft_decision
@@ -27,6 +29,7 @@ from reimburse_buddy.models import rupiah
 from reimburse_buddy.rules import check_claim
 from reimburse_buddy.triage import approve_cleared_batch, triage_claims
 
+from . import auth
 from .agent_bridge import NO_KEY_MESSAGE, Investigator, RateLimited, key_configured
 from .intake import router as intake_router
 from .labels import label, person
@@ -41,8 +44,10 @@ CHOICES = ("approve_full", "approve_capped", "reject")
 UPLOAD_DIR = Path(os.environ.get("REIMBURSE_WEB_UPLOADS", Path(__file__).resolve().parent.parent / "uploads"))
 
 # Startup order matters: refuse a production deployment without a Postgres audit log before doing any work,
-# then run the one-per-process expiry sweep (agent workers opening the log never sweep).
-app = FastAPI(title="reimburse-buddy web simulation", on_startup=[startup_config_check, startup_sweep])
+# then refuse one without a demo password / session key, then run the one-per-process expiry sweep (agent
+# workers opening the log never sweep).
+app = FastAPI(title="reimburse-buddy web simulation",
+              on_startup=[startup_config_check, auth.startup_check, startup_sweep])
 app.include_router(plans_router)
 app.include_router(intake_router)
 app.include_router(qa_router)
@@ -53,6 +58,34 @@ REVIEW: dict[str, dict] = {}
 DRAFTS: dict[str, dict] = {}
 # LangGraph agent runs (subprocess per run, see agent_bridge.py).
 INVESTIGATOR = Investigator()
+
+
+# --- demo password gate ------------------------------------------------------------------
+def client_ip(request: Request) -> str:
+    """Rate-limit key. Behind a proxy every request shares one address, which only makes the limit
+    stricter; X-Forwarded-For is deliberately not trusted here."""
+    return request.client.host if request.client else ""
+
+
+@app.middleware("http")
+async def require_demo_login(request: Request, call_next):
+    """Close every route except /login, /logout and /healthz when DEMO_PASSWORD is set.
+
+    A browser navigation (GET/HEAD) is redirected to the form; anything else gets 401, so a script
+    cannot post its way in. With DEMO_PASSWORD unset outside production the gate is off and every
+    request passes through untouched, exactly as before this change."""
+    if not auth.enabled() or request.url.path in auth.PUBLIC_PATHS:
+        return await call_next(request)
+    session = auth.session_of(request)
+    if session is None:
+        if request.method in ("GET", "HEAD"):
+            return RedirectResponse(auth.login_url(request.url.path), status_code=303)
+        return JSONResponse({"detail": "Silakan masuk dulu. / Please sign in first."}, status_code=401)
+    token = auth.set_current(session.reviewer)
+    try:
+        return await call_next(request)
+    finally:
+        auth.reset_current(token)
 
 
 def review(cid: str) -> dict:
@@ -130,17 +163,23 @@ NAV_CSS = ("nav{margin-bottom:12px}nav a{margin-right:14px}nav .note{margin-left
 
 
 def nav_html() -> str:
+    reviewer = auth.current_reviewer()
+    account = ""
+    if reviewer:
+        account = (f'<span class="note" id="signed-in">Masuk sebagai <b>{e(auth.reviewer_name(reviewer))}</b></span>'
+                   f'<form method="post" action="/logout" style="display:inline">'
+                   f'<button type="submit" id="logout">Keluar</button></form>')
     return (f'<nav><b>reimburse-buddy</b> &middot; <a href="/">Beranda</a>\n'
             f'<a href="/employee">Employee</a> <a href="/admin">Finance admin</a> '
-            f'<a href="/admin/intake">Permintaan baru</a>{_pending_nav()}'
+            f'<a href="/admin/intake">Permintaan baru</a>{_pending_nav()}{account}'
             f'<span class="note">Synthetic data. Simulation only.</span></nav>')
 
 
-def page(title: str, body: str) -> HTMLResponse:
+def page(title: str, body: str, status_code: int = 200) -> HTMLResponse:
     return HTMLResponse(f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>{escape(title)}</title>
 <style>{CSS}</style></head><body>{nav_html()}
-<h1>{escape(title)}</h1>{body}</body></html>""")
+<h1>{escape(title)}</h1>{body}</body></html>""", status_code=status_code)
 
 
 def e(x) -> str:
@@ -173,6 +212,70 @@ def status_tag(s: str) -> str:
     cls = {"approved": "ok", "partially_approved": "warn", "rejected": "bad", "on_hold": "warn"}.get(s, "")
     icon = STATUS_ICON.get(s, "")
     return f'<span class="tag {cls}" title="{e(s)}">{e(icon + label(s))}</span>'
+
+
+# --- login / logout / health ---------------------------------------------------------------
+@app.get("/login", response_class=HTMLResponse)
+def login_page(next: str = "", error: str = ""):
+    """The only public form. With the gate off (no DEMO_PASSWORD outside production) it says so."""
+    target = auth.safe_next(next)
+    if not auth.enabled():
+        return page(label("sign_in"), f"""<div class="box" id="login-off">
+<p id="auth-off">{e(label("auth_off"))}</p>
+<p><a class="btn" href="{e(target)}">{e(label("continue"))}</a></p></div>""")
+    opts = "".join(f'<option value="{e(v)}"{" selected" if v == auth.DEFAULT_REVIEWER else ""}>{e(text)}</option>'
+                   for v, text in auth.reviewer_options())
+    body = f"""<div class="box" id="login">
+{f'<p class="tag bad" id="login-error">{e(error)}</p>' if error else ''}
+<form method="post" action="/login">
+<input type="hidden" name="next" value="{e(target)}">
+<label>{e(label("sign_in_as"))}<br><select name="reviewer" aria-label="{e(label("sign_in_as"))}">{opts}</select></label>
+<label>{e(label("demo_password"))}<br><input type="password" name="password" aria-label="{e(label("demo_password"))}"
+ autocomplete="current-password" required></label>
+<p><button type="submit" id="login-submit">{e(label("sign_in"))}</button></p></form>
+<p class="note">{e(label("demo_limited"))}</p></div>"""
+    return page(label("sign_in"), body, status_code=401 if error else 200)
+
+
+@app.post("/login")
+def login_submit(request: Request, reviewer: str = Form(auth.DEFAULT_REVIEWER),
+                 password: str = Form(""), next: str = Form("/")):
+    target = auth.safe_next(next)
+    if not auth.enabled():
+        return RedirectResponse(target, status_code=303)
+    ip = client_ip(request)
+    if auth.too_many_failures(ip):
+        auth.audit_denied("rate_limited", ip=ip)
+        return login_page(next=target, error=label("auth_rate_limited"))
+    if not hmac.compare_digest(password, auth.password()):
+        auth.record_failure(ip)
+        auth.audit_denied("bad_password", ip=ip)  # reason only: never the password, never the IP
+        return login_page(next=target, error=label("auth_bad_password"))
+    auth.clear_failures(ip)
+    chosen = reviewer if reviewer in auth.REVIEWERS else auth.DEFAULT_REVIEWER
+    r = RedirectResponse(target, status_code=303)
+    r.set_cookie(auth.COOKIE, auth.new_cookie_value(chosen), max_age=auth.TTL_SECONDS, path="/",
+                 httponly=True, samesite="lax", secure=auth.is_production())
+    return r
+
+
+@app.get("/logout")
+def logout_page():
+    """A bookmark or a back button should land on the form, not on a 404."""
+    return RedirectResponse("/login", status_code=303)
+
+
+@app.post("/logout")
+def logout():
+    r = RedirectResponse("/login", status_code=303)
+    r.delete_cookie(auth.COOKIE, path="/")
+    return r
+
+
+@app.get("/healthz", response_class=PlainTextResponse)
+def healthz():
+    """Liveness only: no audit write, no LLM, no store access, and no login (the platform probes it)."""
+    return PlainTextResponse("ok")
 
 
 # --- index ------------------------------------------------------------------
