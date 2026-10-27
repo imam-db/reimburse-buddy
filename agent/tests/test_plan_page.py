@@ -60,4 +60,6 @@ def test_page_shows_status_after_decision(tmp_path):
     a1, a2 = (a["action_id"] for a in plan["actions"])
     g.invoke(Command(resume={"decisions": {a1: "approve", a2: "reject"}}), c)
     html = page.render(plan, log, D, R.default_rules(), action_url="/x")
-    assert "Status: execution" in html and "Status: rejection" in html and "decision:" not in html
+    assert "Status: Dijalankan" in html and "Status: Ditolak" in html
+    assert "title='execution'" in html and "title='rejection'" in html
+    assert "decision:" not in html

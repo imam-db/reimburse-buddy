@@ -56,7 +56,7 @@ def test_employee_submit_and_forward(client):
     r = client.post("/employee/forward", data={"emp": "EMP-004", "subject": "Taxi receipt", "claim_id": "CLM-2026-W001",
                                                "att_type": "receipt", "item_id": "IT-1"},
                     files={"file": ("taxi.png", b"synthetic receipt", "image/png")})
-    assert "MSG-W001" in r.text
+    assert "File diteruskan" in r.text
     assert web.run_check("CLM-2026-W001").items[0].gaps == ["receipt_missing"]
     web.review("CLM-2026-W001")["evidence"].append("MSG-W001")
     assert web.run_check("CLM-2026-W001").items[0].gaps == []

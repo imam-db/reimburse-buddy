@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from datetime import date
 from decimal import Decimal
 from html import escape
@@ -27,6 +28,7 @@ from reimburse_buddy.rules import check_claim
 from reimburse_buddy.triage import approve_cleared_batch, triage_claims
 
 from .agent_bridge import NO_KEY_MESSAGE, Investigator, RateLimited, key_configured
+from .labels import label, person
 from .plans import router as plans_router
 from .qa import router as qa_router
 
@@ -84,22 +86,55 @@ def investigate(cid: str):
 
 
 # --- HTML helpers -----------------------------------------------------------
-CSS = """body{font-family:system-ui,sans-serif;max-width:1100px;margin:0 auto;padding:16px;color:#1d1d1f}
+CSS = """*{box-sizing:border-box}body{font-family:system-ui,sans-serif;max-width:1100px;margin:0 auto;padding:16px;
+color:#1d1d1f;overflow-x:hidden}
 nav a{margin-right:14px}table{border-collapse:collapse;width:100%;margin:8px 0}td,th{border-bottom:1px solid #ddd;
 padding:6px;text-align:left;vertical-align:top}th{background:#f4f4f6}.num{text-align:right}.tag{display:inline-block;
 padding:1px 6px;border-radius:8px;background:#eef;font-size:12px;margin:1px}.warn{background:#fff3cd}.bad{background:#f8d7da}
-.ok{background:#d1e7dd}.low{background:#fff3cd;border:1px solid #e0a800}.btn{display:inline-block;padding:6px 12px;
+.ok{background:#d1e7dd}.low{background:#fff3cd;border:1px solid #e0a800}
+.table-wrap{overflow-x:auto;max-width:100%}img,pre{max-width:100%}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:6px 12px;
 border:1px solid #888;border-radius:6px;text-decoration:none;color:inherit}.drop{display:block;border:2px dashed #999;
 border-radius:10px;padding:30px;text-align:center;margin:10px 0}.drop.over{background:#eef}.cards{display:flex;flex-wrap:wrap;gap:12px}
-.card{border:1px solid #ccc;border-radius:8px;padding:10px;width:330px}.card label{display:block;font-size:13px;margin-top:4px}
+.card{border:1px solid #ccc;border-radius:8px;padding:10px;flex:1 1 300px;max-width:100%;box-sizing:border-box}
+.card label{display:block;font-size:13px;margin-top:4px}
 .err{color:#a00;font-size:13px}.box{border:1px solid #ddd;border-radius:8px;padding:12px;margin:12px 0}pre{white-space:pre-wrap;
-background:#f7f7f9;padding:10px;border-radius:6px}.note{color:#666;font-size:13px}button{cursor:pointer}"""
+background:#f7f7f9;padding:10px;border-radius:6px}.note{color:#666;font-size:13px}
+.badge{display:inline-block;min-width:18px;padding:0 6px;border-radius:9px;background:#c62828;color:#fff;
+font-size:12px;text-align:center;line-height:18px}
+button{cursor:pointer;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+.visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);
+white-space:nowrap;border:0}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,label:focus-visible{outline:3px solid #1a5fb4;outline-offset:2px}"""
+
+
+def _pending_nav() -> str:
+    """Link to the pending-plan list with its count. A broken plan store must never break every page."""
+    try:
+        from .plans import pending_count  # lazy: plans.py imports this module
+        n = pending_count()
+    except Exception:
+        return ""
+    return (f'<a href="/admin/plans" id="nav-pending">Menunggu persetujuan '
+            f'<span class="badge" id="pending-badge">{n}</span></a>')
+
+
+# Nav rules for pages rendered outside page() (the plan confirmation screen has its own stylesheet).
+NAV_CSS = ("nav{margin-bottom:12px}nav a{margin-right:14px}nav .note{margin-left:8px}"
+           ".badge{display:inline-block;min-width:18px;padding:0 6px;border-radius:9px;background:#c62828;color:#fff;"
+           "text-align:center;font-size:12px;margin-left:4px}")
+
+
+def nav_html() -> str:
+    return (f'<nav><b>reimburse-buddy</b> &middot; <a href="/">Beranda</a>\n'
+            f'<a href="/employee">Employee</a> <a href="/admin">Finance admin</a>{_pending_nav()}'
+            f'<span class="note">Synthetic data. Simulation only.</span></nav>')
 
 
 def page(title: str, body: str) -> HTMLResponse:
-    return HTMLResponse(f"""<!doctype html><html><head><meta charset="utf-8"><title>{escape(title)}</title>
-<style>{CSS}</style></head><body><nav><b>reimburse-buddy</b> &middot; <a href="/employee">Employee</a>
-<a href="/admin">Finance admin</a><span class="note">Synthetic data. Simulation only.</span></nav>
+    return HTMLResponse(f"""<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>{escape(title)}</title>
+<style>{CSS}</style></head><body>{nav_html()}
 <h1>{escape(title)}</h1>{body}</body></html>""")
 
 
@@ -117,19 +152,52 @@ def provenance_badges(item: dict) -> str:
         return ""
     def badge(k, v):
         cls = "warn" if v == "self_declared" else "ok"
-        return f"<span class='tag {cls}' title='{e(k)} came from {e(v)}'>{e(k)}: {e(v)}</span>"
+        return f"<span class='tag {cls}' title='{e(k)}: {e(v)}'>{e(label(k))}: {e(label(v))}</span>"
     return "<div>" + "".join(badge(k, v) for k, v in prov.items()) + "</div>"
+
+
+def gap_tag(g: str, cls: str = "") -> str:
+    return f'<span class="tag {cls}" title="{e(g)}">{e(label(g))}</span>'
+
+
+STATUS_ICON = {"approved": "✓ ", "rejected": "✕ ", "on_hold": "! ", "partially_approved": "! ",
+               "needs_action": "! "}
 
 
 def status_tag(s: str) -> str:
     cls = {"approved": "ok", "partially_approved": "warn", "rejected": "bad", "on_hold": "warn"}.get(s, "")
-    return f'<span class="tag {cls}">{e(s)}</span>'
+    icon = STATUS_ICON.get(s, "")
+    return f'<span class="tag {cls}" title="{e(s)}">{e(icon + label(s))}</span>'
 
 
 # --- index ------------------------------------------------------------------
+def demo_claim_id() -> str:
+    """The claim the landing page links to: the first employee's richest Surabaya claim (CLM-2026-0110)."""
+    def gap_count(c: dict) -> int:
+        return len({g for item in check_claim(store, c["id"]).items for g in item.gaps})
+
+    candidates = [c for c in store.claims
+                  if c["employee_id"] == "EMP-001" and c["trip"]["destination"] == "Surabaya"]
+    return max(candidates, key=gap_count)["id"] if candidates else store.claims[0]["id"]
+
+
 @app.get("/", response_class=HTMLResponse)
 def index():
-    return RedirectResponse("/admin", status_code=303)
+    cid = demo_claim_id()
+    owner = next((c["employee_id"] for c in store.claims if c["id"] == cid), "EMP-001")
+    first_name = person(store, owner).split()[0]
+    body = f"""<div class="cards">
+<div class="card"><h2>Finance</h2><p>Triage klaim masuk, tinjau pengecualian, dan setujui rencana.
+Semua angka dan keputusan tetap di tangan Anda.</p></div>
+<div class="card"><h2>Karyawan</h2><p>Kirim klaim, unggah bukti, dan tanyakan status klaim Anda sendiri.</p></div>
+</div>
+<div class="box"><h2>Panduan singkat</h2>
+<p><a class="btn" href="/admin">Lihat triage finance</a>
+<a class="btn" href="/admin/claims/{e(cid)}">Buka klaim contoh ({e(first_name)}, Surabaya)</a>
+<a class="btn" href="/employee/claims/{e(cid)}">Coba tanya sebagai karyawan</a></p>
+<form method="post" action="/admin/reset"><button type="submit">Reset demo</button></form></div>
+<p class="note">Data sintetis. Tidak ada email atau pesan sungguhan yang dikirim.</p>"""
+    return page("Selamat datang di reimburse-buddy", body)
 
 
 # --- employee side ------------------------------------------------------------
@@ -144,20 +212,20 @@ def employee_page(emp: str = "EMP-001", msg: str = ""):
         f"<td class=num>{e(rupiah(sum(Decimal(i['amount']) for i in c['items'])))}</td><td>{status_tag(c['status'])}</td></tr>"
         for c in claims)
     inbox = [m for m in store.outbox if m["to"] == emp]
-    msgs = "".join(f"<tr><td>{e(m['id'])}</td><td>{e(m['claim_id'])}</td><td>{e(m['subject'])}</td><td>{e(m['body'])}</td></tr>"
+    msgs = "".join(f"<tr><td>{e(m['claim_id'])}</td><td>{e(m['subject'])}</td><td>{e(m['body'])}</td></tr>"
                    for m in inbox) or ""
     fwd = [m for m in store.inbox if m.get("owner_id") == emp]
-    fwd_rows = "".join(f"<tr><td>{e(m['id'])}</td><td>{e(m['date'])}</td><td>{e(m['subject'])}</td>"
+    fwd_rows = "".join(f"<tr><td>{e(m['date'])}</td><td>{e(m['subject'])}</td>"
                        f"<td>{e(', '.join(a['name'] for a in m.get('attachments', [])))}</td></tr>" for m in fwd)
     body = f"""
-<form method="get" action="/employee">Signed in as (simulated):
-<select name="emp" onchange="this.form.submit()">{options([(x['id'], x['id'] + ' ' + x['name']) for x in staff], emp)}</select></form>
+<form method="get" action="/employee"><label>Signed in as (simulated):
+<select name="emp" aria-label="Pilih karyawan" onchange="this.form.submit()">{options([(x['id'], x['name']) for x in staff], emp)}</select></label></form>
 {f'<p class="tag ok">{e(msg)}</p>' if msg else ''}
-<h2>My claims</h2><table><tr><th>ID</th><th>Purpose</th><th>Trip</th><th class=num>Claimed</th><th>Status</th></tr>{rows}</table>
-<h2>Messages from finance</h2>{'<table><tr><th>ID</th><th>Claim</th><th>Subject</th><th>Body</th></tr>' + msgs + '</table>' if msgs else '<p class=note>No messages yet.</p>'}
+<h2>My claims</h2><div class="table-wrap"><table><tr><th>ID</th><th>Purpose</th><th>Trip</th><th class=num>Claimed</th><th>Status</th></tr>{rows}</table></div>
+<h2>Messages from finance</h2>{'<div class="table-wrap"><table><tr><th>Claim</th><th>Subject</th><th>Body</th></tr>' + msgs + '</table></div>' if msgs else '<p class=note>No messages yet.</p>'}
 <div class="box"><h2>New claim</h2><p>Drop all your receipts and boarding passes at once; we draft the items for you.</p>
 <p><a class="btn" href="/employee/new?emp={e(emp)}">Start a new claim</a></p></div>
-<h2>Forwarded to the reimburse mailbox</h2><table><tr><th>ID</th><th>Date</th><th>Subject</th><th>Attachments</th></tr>{fwd_rows}</table>
+<h2>Forwarded to the reimburse mailbox</h2><div class="table-wrap"><table><tr><th>Date</th><th>Subject</th><th>Attachments</th></tr>{fwd_rows}</table></div>
 <p class="note">Employee: {e(me['name'])} &middot; {e(me['email'])}</p>"""
     return page("Employee portal", body)
 
@@ -171,6 +239,17 @@ ALLOWED_UPLOAD_EXT = {".pdf", ".png", ".jpg", ".jpeg"}
 # Final statuses the reviewer may pick for each engine decision. Overrides go through logged item decisions.
 STATUS_FOR_DECISION = {"approve": ["approved", "on_hold"], "partial_approve": ["partially_approved", "on_hold"],
                        "reject": ["rejected", "on_hold"], "needs_info": ["on_hold"]}
+# Gap codes an override decision (approve_full / approve_capped / reject) can settle. These are exactly the
+# gaps src/reimburse_buddy/rules.py resolves through the `choice in ("approve_full", "approve_capped")`
+# branch, minus MULTIPLE_RECEIPTS (the engine only accepts `use:<message id>` for it, never these buttons)
+# and minus the document gaps (receipt_missing / boarding_pass_missing): those need the document attached,
+# an override is not a substitute.
+DECISION_GAPS = frozenset({
+    "hotel_over_cap", "late_checkout_unjustified", "hotel_nights_mismatch",
+    "duplicate_suspected", "receipt_amount_mismatch", "receipt_shared",
+})
+# Gaps only a document can close; an override decision is not a substitute.
+DOCUMENT_GAPS = frozenset({"receipt_missing", "boarding_pass_missing"})
 
 
 def parse_amount(text: str) -> Decimal:
@@ -239,24 +318,33 @@ async def forward_evidence(emp: str = Form(...), subject: str = Form(...), claim
     store.inbox.append({"id": mid, "owner_id": emp, "from": me["email"], "date": date.today().isoformat(),
                         "subject": subject, "body": body, "attachments": [att] if att else [],
                         "mailbox": MAILBOX, "forwarded_by": me["email"]})
-    return RedirectResponse(f"/employee?emp={emp}&msg=Forwarded+{mid}", status_code=303)
+    return RedirectResponse(f"/employee?emp={emp}&msg=File+diteruskan", status_code=303)
 
 
 # --- finance admin side --------------------------------------------------------
 @app.get("/admin", response_class=HTMLResponse)
 def admin(batch: str = BATCH, msg: str = ""):
     t = triage_claims(store, batch)
-    exc = "".join(
-        f"<tr><td><a href='/admin/claims/{e(x['claim_id'])}'>{e(x['claim_id'])}</a></td><td>{e(x['employee_id'])}</td>"
-        f"<td>{''.join(f'<span class=tag>{e(g)}</span>' for g in x['gaps'])}</td><td>{e(', '.join(x['rejected_items']))}</td></tr>"
-        for x in t["exceptions"])
+    rows = []
+    for x in t["exceptions"]:
+        held = run_check(x["claim_id"]).total_pending
+        row = (f"<tr><td><a href='/admin/claims/{e(x['claim_id'])}'>{e(x['claim_id'])}</a></td>"
+               f"<td title='{e(x['employee_id'])}'>{e(person(store, x['employee_id']))}</td>"
+               f"<td class=num>{e(rupiah(held))}</td>"
+               f"<td>{''.join(gap_tag(g) for g in x['gaps'])}</td>"
+               f"<td>{e(', '.join(x['rejected_items']))}</td>"
+               f"<td><form method=post action=\"/admin/claims/{e(x['claim_id'])}/investigate\">"
+               f"<button>Selidiki dengan agent</button></form></td></tr>")
+        rows.append((held, row))
+    exc = "".join(row for _, row in sorted(rows, key=lambda r: r[0], reverse=True))
     cleared = t["auto_cleared"]
     hidden = "".join(f'<input type="hidden" name="claim_ids" value="{e(c)}">' for c in cleared)
-    others = "".join(f"<tr><td><a href='/admin/claims/{e(c['id'])}'>{e(c['id'])}</a></td><td>{e(c['employee_id'])}</td>"
+    others = "".join(f"<tr><td><a href='/admin/claims/{e(c['id'])}'>{e(c['id'])}</a></td>"
+                     f"<td title='{e(c['employee_id'])}'>{e(person(store, c['employee_id']))}</td>"
                      f"<td>{e(c.get('batch', ''))}</td><td>{status_tag(c['status'])}</td></tr>" for c in store.claims)
     est = t["time_saved_estimate"]
     body = f"""{f'<p class="tag ok">{e(msg)}</p>' if msg else ''}
-<form method="get">Batch <select name="batch" onchange="this.form.submit()">{options([(BATCH, BATCH), (WEB_BATCH, WEB_BATCH)], batch)}</select></form>
+<form method="get"><label>Batch <select name="batch" aria-label="Pilih batch" onchange="this.form.submit()">{options([(BATCH, BATCH), (WEB_BATCH, WEB_BATCH)], batch)}</select></label></form>
 <div class="box"><h2>Triage: {t['claims']} claims, {len(cleared)} cleared, {len(t['exceptions'])} exceptions</h2>
 <p>Time saved: {e(est['minutes'])} min <span class="tag warn">estimate</span> <span class="note">{e(est['assumption'])}</span></p>
 <p class="note">Triage is read-only. Statuses change only after you confirm below.</p>
@@ -264,8 +352,8 @@ def admin(batch: str = BATCH, msg: str = ""):
 {f'''<form method="post" action="/admin/batch/approve"><input type="hidden" name="batch" value="{e(batch)}">{hidden}
 <label><input type="checkbox" name="reviewer_confirmed" value="true"> I reviewed these {len(cleared)} claims and approve them</label>
 <button type="submit">Approve cleared batch</button></form>''' if cleared else ''}
-<h3>Exceptions</h3><table><tr><th>Claim</th><th>Employee</th><th>Gaps</th><th>Rejected items</th></tr>{exc}</table></div>
-<h2>All claims</h2><table><tr><th>Claim</th><th>Employee</th><th>Batch</th><th>Status</th></tr>{others}</table>
+<h3>Exceptions</h3><div class="table-wrap"><table><tr><th>Claim</th><th>Employee</th><th class=num>Uang tertahan</th><th>Yang kurang</th><th>Rejected items</th><th></th></tr>{exc}</table></div></div>
+<h2>All claims</h2><div class="table-wrap"><table><tr><th>Claim</th><th>Employee</th><th>Batch</th><th>Status</th></tr>{others}</table></div>
 <form method="post" action="/admin/reset"><button type="submit">Reset demo data</button></form>"""
     return page("Finance admin: triage", body)
 
@@ -294,34 +382,63 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
     emp, trip = claim["employee_id"], claim["trip"]
     r = review(cid)
     c = investigate(cid)
+    pending = pending_items(cid)
     item_rows = ""
     for it in c.items:
         src = next(x for x in claim["items"] if x["id"] == it.item_id)
-        finds = "<br>".join(f"<span class=tag>{e(f.rule)}</span> {e(f.message)}" for f in it.findings)
-        gaps = "".join(f"<span class='tag warn'>{e(g)}</span>" for g in it.gaps)
+        finds = "<br>".join(f"<span class=tag title='{e(f.rule)}'>{e(label(f.rule))}</span> {e(f.message)}"
+                            for f in it.findings)
+        gaps = "".join(f"<span class='tag warn' title='{e(g)}'>{e(label(g))}</span>" for g in it.gaps)
+        pend = pending.get(it.item_id, [])
         dec = ""
-        if (it.gaps or it.human_decision) and it.item_id not in pending_items(cid):
+        decision_gaps = [g for g in it.gaps if g in DECISION_GAPS]
+        document_only = bool(it.gaps) and set(it.gaps) <= DOCUMENT_GAPS
+        if document_only and not pend:
             dec = (f"<form method=post action='/admin/claims/{e(cid)}/decide' style='display:inline'>"
                    f"<input type=hidden name=item_id value='{e(it.item_id)}'>"
-                   + "".join(f"<button name=choice value='{ch}'{' disabled' if it.human_decision == ch else ''}>{ch}</button> "
+                   f"<button name=choice value='reject'{' disabled' if it.human_decision == 'reject' else ''}>"
+                   f"{e(label('reject'))}</button></form>"
+                   f"<div class=note>Perlu dokumen: {e(', '.join(label(g) for g in it.gaps))}</div>")
+            if it.human_decision:
+                dec += f"<div class=note>Reviewer: {e(label(it.human_decision))}</div>"
+        elif (decision_gaps or it.human_decision) and not pend:
+            dec = (f"<form method=post action='/admin/claims/{e(cid)}/decide' style='display:inline'>"
+                   f"<input type=hidden name=item_id value='{e(it.item_id)}'>"
+                   + "".join(f"<button name=choice value='{ch}'{' disabled' if it.human_decision == ch else ''}>{e(label(ch))}</button> "
                              for ch in CHOICES) + "</form>")
             if it.human_decision:
-                dec += f"<div class=note>Reviewer: {e(it.human_decision)}</div>"
-        pend = pending_items(cid).get(it.item_id, [])
-        status_cell = e(it.status.value)
+                dec += f"<div class=note>Reviewer: {e(label(it.human_decision))}</div>"
+        elif it.gaps and not pend:
+            dec = f"<div class=note>Perlu ditinjau: {e(', '.join(label(g) for g in it.gaps))}</div>"
+        status_cell = f"<span title='{e(it.status.value)}'>{e(label(it.status.value))}</span>"
         if pend:
             status_cell = "<span class='tag warn'>pending review</span>"
             for mid in pend:
                 p = r["pending"][mid]
+                why = ", ".join(label(x) for x in (p.get("reasons") or [p["reason"]]))
                 dec = (f"<form method=post action='/admin/claims/{e(cid)}/evidence/{e(mid)}/review' style='display:inline'>"
-                       f"<div class=note>{e(mid)}: {e(p['reason'])}</div><button name=verdict value=accept>Accept evidence</button> "
+                       f"<div class=note>{e(mid)}: <span title='{e(p['reason'])}'>{e(why)}</span></div>"
+                       f"<button name=verdict value=accept>Accept evidence</button> "
                        f"<button name=verdict value=reject>Reject evidence</button></form>") + dec
-        item_rows += (f"<tr><td>{e(it.item_id)}</td><td>{e(it.category)}<div class=note>{e(src['description'])}</div></td>"
+        item_rows += (f"<tr id='item-{e(it.item_id)}'><td>{e(it.item_id)}</td>"
+                      f"<td>{e(label(it.category))}<div class=note>{e(src['description'])}</div></td>"
                       f"<td class=num>{e(rupiah(it.claimed))}</td><td class=num>{e(rupiah(it.approvable))}</td>"
                       f"<td>{status_cell}</td><td>{provenance_badges(src)}{finds}<div>{gaps}</div></td><td>{e(', '.join(it.evidence_used))}</td><td>{dec}</td></tr>")
-    log_rows = "".join(f"<li>{e(x['at'])} {e(x['evidence_id'])} ({e(x['item_id'])}, {e(x['reason'])}): "
-                       f"<b>{e(x['verdict'])}</b> by reviewer</li>" for x in r["evidence_log"])
-    ignored = "".join(f"<li>{e(i.id)}: <span class='tag bad'>{e(i.reason)}</span></li>" for i in c.ignored_evidence)
+    needs = [(it, [g for g in it.gaps if g in DECISION_GAPS]) for it in c.items
+             if any(g in DECISION_GAPS for g in it.gaps) and not it.human_decision
+             and it.item_id not in pending]
+    if needs:
+        links = ", ".join(f"<a href='#item-{e(it.item_id)}'>{e(', '.join(label(g) for g in gs))}</a>"
+                          for it, gs in needs)
+        needs_you = (f"<div class='box' id='needs-you'><b>Klaim ini butuh {len(needs)} keputusan Anda:</b> "
+                     f"{links}</div>")
+    else:
+        needs_you = "<div class='box' id='needs-you'>Klaim ini tidak butuh keputusan Anda.</div>"
+    log_rows = "".join(f"<li>{e(x['at'])} {e(x['evidence_id'])} ({e(x['item_id'])}, "
+                       f"<span title='{e(x['reason'])}'>{e(', '.join(label(v) for v in x['reason'].split(', ')))}</span>): "
+                       f"<b>{e(label(x['verdict']))}</b> by reviewer</li>" for x in r["evidence_log"])
+    ignored = "".join(f"<li>{e(i.id)}: <span class='tag bad' title='{e(i.reason)}'>{e(label(i.reason))}</span></li>"
+                      for i in c.ignored_evidence)
     warns = "".join(f"<li>{e(w.message)}</li>" for w in c.warnings)
 
     def attach_btn(eid: str) -> str:
@@ -341,35 +458,74 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
                         f"<td>{e(m.get('reason', ''))}</td><td>{attach_btn(m['id'])}</td></tr>" for m in memos)
     sent = [m for m in store.outbox if m.get("claim_id") == cid]
     sent_rows = "".join(f"<li>{e(m['id'])} to {e(m['to'])}: {e(m['subject'])}</li>" for m in sent)
-    note = draft_decision(store, c, language="both")
+    note = re.sub(r"\b[a-z]+(?:_[a-z]+)+\b", lambda m: label(m.group(0)),
+                  draft_decision(store, c, language="both"))
     allowed_status = STATUS_FOR_DECISION[c.decision.value]
     if pending_items(cid):
         allowed_status = ["on_hold"]
-    body = f"""<p><a href="/admin">&larr; Triage</a></p>{f'<p class="tag ok">{e(msg)}</p>' if msg else ''}
-<p>{e(emp)} {e(store.get_employee(emp)['name'])} &middot; {e(claim['purpose'])} &middot; {e(trip['destination'])}
+    body = f"""<p><a href="/admin">&larr; Triage</a> &middot; <a href="/admin/claims/{e(cid)}/audit">Lihat jejak audit</a></p>{f'<p class="tag ok">{e(msg)}</p>' if msg else ''}
+<p><span title="{e(emp)}">{e(person(store, emp))}</span> &middot; {e(claim['purpose'])} &middot; {e(trip['destination'])}
 {e(trip['start_date'])} &rarr; {e(trip['end_date'])} &middot; status {status_tag(claim['status'])}</p>
-<div class="box"><h2>Rule engine: {e(c.decision.value)}</h2>
+<div class="box"><h2>Rule engine: {e(label(c.decision.value))}</h2>
 <p>Approvable <b>{e(rupiah(c.total_approvable))}</b> of {e(rupiah(c.total_claimed))} &middot; pending {e(rupiah(c.total_pending))}</p>
-<p class="note">Every amount on this page comes from check_claim. Evidence attached: {e(', '.join(r['evidence']) or 'none')}</p>
-<table><tr><th>Item</th><th>Category</th><th class=num>Claimed</th><th class=num>Approvable</th><th>Status</th><th>Findings / gaps</th><th>Evidence</th><th>Reviewer decision</th></tr>{item_rows}</table>
+<p class="note">Semua angka dihitung oleh mesin aturan, bukan oleh AI. Evidence attached: {e(', '.join(r['evidence']) or 'none')}</p>
+{needs_you}
+<div class="table-wrap"><table><tr><th>Item</th><th>Category</th><th class=num>Claimed</th><th class=num>Approvable</th><th>Status</th><th>Findings / gaps</th><th>Evidence</th><th>Reviewer decision</th></tr>{item_rows}</table></div>
 {f'<h3>Evidence review log</h3><ul>{log_rows}</ul>' if log_rows else ''}{f'<h3>Ignored evidence</h3><ul>{ignored}</ul>' if ignored else ''}{f'<h3>Warnings</h3><ul>{warns}</ul>' if warns else ''}</div>
 <div class="box"><h2>Investigate</h2>
-<form method=post action="/admin/claims/{e(cid)}/investigate"><button>Investigate with agent</button>
+<form method=post action="/admin/claims/{e(cid)}/investigate"><button>Selidiki dengan agent</button>
 <span class="note">Runs the LangGraph agent on this claim. It pauses for your approval before any write or decision message.</span></form>
 <p class="note">Or investigate by hand:</p>
-<h3>Search the reimburse mailbox</h3><form method=get><input name=q value="{e(q)}" size=40 placeholder="boarding pass QZ 7520"><button>Search</button></form>
-{f'<table><tr><th>ID</th><th>Date</th><th>Subject</th><th>Attachments</th><th></th></tr>{hit_rows}</table>' if hits else ''}
-<h3>Calendar during the trip</h3><table><tr><th>ID</th><th>When</th><th>Title</th><th>Location</th><th></th></tr>{cal_rows}</table>
-<h3>Approval memos ({e(trip['destination'])})</h3><table><tr><th>ID</th><th>Signed</th><th>Reason</th><th></th></tr>{memo_rows}</table>
+<h3>Search the reimburse mailbox</h3><form method=get><label>Cari di mailbox <input name=q aria-label="Cari di mailbox" value="{e(q)}" size=40 placeholder="boarding pass QZ 7520"></label><button>Search</button></form>
+{f'<div class="table-wrap"><table><tr><th>ID</th><th>Date</th><th>Subject</th><th>Attachments</th><th></th></tr>{hit_rows}</table></div>' if hits else ''}
+<h3>Calendar during the trip</h3><div class="table-wrap"><table><tr><th>ID</th><th>When</th><th>Title</th><th>Location</th><th></th></tr>{cal_rows}</table></div>
+<h3>Approval memos ({e(trip['destination'])})</h3><div class="table-wrap"><table><tr><th>ID</th><th>Signed</th><th>Reason</th><th></th></tr>{memo_rows}</table></div>
 <h3>Ask the employee</h3><form method=post action="/admin/claims/{e(cid)}/message">
-<input name=subject size=40 value="Claim {e(cid)}: missing document"> <input name=body size=60 placeholder="Mohon kirim struk taksi tanggal 3 Okt (IT-5)." required>
+<label>Subjek <input name=subject aria-label="Subjek pesan" size=40 value="Claim {e(cid)}: missing document"></label>
+<label>Isi <input name=body aria-label="Isi pesan" size=60 placeholder="Mohon kirim struk taksi tanggal 3 Okt (IT-5)." required></label>
 <button>Send</button></form>{f'<ul>{sent_rows}</ul>' if sent_rows else ''}</div>
 <div class="box"><h2>Decision note preview (EN + ID)</h2><pre>{e(note)}</pre>
-<form method=post action="/admin/claims/{e(cid)}/status">Final status <select name=status>{options([(s, s) for s in allowed_status])}</select>
+<form method=post action="/admin/claims/{e(cid)}/status"><label>Final status <select name=status aria-label="Status akhir">{options([(s, label(s)) for s in allowed_status])}</select></label>
 <label><input type=checkbox name=reviewer_confirmed value=true> I confirm this decision</label> <button>Apply status</button></form>
-<p class="note">Status options follow the engine decision ({e(c.decision.value)}). To override, record an item decision above.
+<p class="note">Status options follow the engine decision ({e(label(c.decision.value))}). To override, record an item decision above.
 Status changes only after you confirm. Notes are sent only by you.</p></div>"""
     return page(f"Claim {cid}", body)
+
+
+@app.get("/admin/claims/{cid}/audit", response_class=HTMLResponse)
+def claim_audit(cid: str):
+    """Read-only audit trail for one claim. Raw system codes are shown here and only here."""
+    try:
+        store.get_claim(cid)
+    except KeyError:
+        raise HTTPException(404, f"Unknown claim {cid}")
+    r = review(cid)
+    status_rows = "".join(
+        f"<tr><td>{e(x.get('claim_id'))}</td><td>{e(x.get('from'))}</td><td>{e(x.get('to'))}</td>"
+        f"<td>{e(x.get('note', ''))}</td></tr>"
+        for x in store.status_log if x.get("claim_id") == cid)
+    evidence_rows = "".join(
+        f"<tr><td>{e(x.get('at'))}</td><td>{e(x.get('evidence_id'))}</td><td>{e(x.get('item_id'))}</td>"
+        f"<td>{e(x.get('reason'))}</td><td>{e(x.get('verdict'))}</td></tr>" for x in r["evidence_log"])
+    decision_rows = "".join(f"<tr><td>{e(item_id)}</td><td>{e(choice)}</td></tr>"
+                            for item_id, choice in r["decisions"].items())
+    outbox_rows = "".join(
+        f"<tr><td>{e(m.get('id'))}</td><td>{e(m.get('to'))}</td><td>{e(m.get('subject'))}</td>"
+        f"<td>{e(m.get('body'))}</td></tr>" for m in store.outbox if m.get("claim_id") == cid)
+
+    def table(head: list[str], rows: str, empty: str) -> str:
+        if not rows:
+            return f"<p class=note>{empty}</p>"
+        return ("<div class='table-wrap'><table><tr>"
+                + "".join(f"<th>{h}</th>" for h in head) + f"</tr>{rows}</table></div>")
+
+    body = f"""<p><a href="/admin/claims/{e(cid)}">&larr; Kembali ke klaim / Back to claim</a></p>
+<p class="note">Jejak audit mentah untuk {e(cid)}; kode sistem ditampilkan apa adanya.</p>
+<div class="box"><h2>Riwayat status</h2>{table(["Claim", "Dari", "Ke", "Catatan"], status_rows, "Tidak ada perubahan status.")}</div>
+<div class="box"><h2>Log bukti peninjau</h2>{table(["Waktu", "Bukti", "Item", "Alasan", "Verdict"], evidence_rows, "Tidak ada catatan bukti.")}</div>
+<div class="box"><h2>Keputusan item</h2>{table(["Item", "Keputusan"], decision_rows, "Tidak ada keputusan item.")}</div>
+<div class="box"><h2>Pesan keluar</h2>{table(["ID", "Ke", "Subjek", "Isi"], outbox_rows, "Tidak ada pesan keluar.")}</div>"""
+    return page(f"Jejak audit {cid}", body)
 
 
 @app.post("/admin/claims/{cid}/evidence")
@@ -439,10 +595,11 @@ def set_status(cid: str, status: str = Form(...), reviewer_confirmed: str = Form
     if pending_items(cid) and status != "on_hold":
         return RedirectResponse(f"/admin/claims/{cid}?msg=Not+changed:+evidence+is+awaiting+review", status_code=303)
     if status not in STATUS_FOR_DECISION[c.decision.value]:
-        return RedirectResponse(f"/admin/claims/{cid}?msg=Not+changed:+{status}+is+not+allowed+while+the+engine+says+"
-                                f"{c.decision.value}", status_code=303)
+        return RedirectResponse(f"/admin/claims/{cid}?msg=Not+changed:+{label(status).replace(' ', '+')}"
+                                f"+is+not+allowed+while+the+engine+says+"
+                                f"{label(c.decision.value).replace(' ', '+')}", status_code=303)
     store.update_claim_status(cid, status, f"Reviewer decision; rule engine approvable {rupiah(c.total_approvable)}")
-    return RedirectResponse(f"/admin/claims/{cid}?msg=Status+set+to+{status}", status_code=303)
+    return RedirectResponse(f"/admin/claims/{cid}?msg=Status+set+to+{label(status).replace(' ', '+')}", status_code=303)
 
 
 from .upload_flow import router as upload_router  # noqa: E402  (needs the names above)
@@ -501,6 +658,32 @@ def decision_box(d: dict | None) -> str:
             f"of {rp(d.get('total_claimed'))}, pending {rp(d.get('total_pending'))}</div>")
 
 
+PROGRESS_STEPS = {
+    "search_reimburse_mailbox": "Mencari boarding pass/struk di mailbox…",
+    "get_calendar": "Memeriksa kalender…",
+    "find_approval_memo": "Mencari memo persetujuan…",
+    "check_claim": "Menghitung dengan mesin aturan…",
+}
+WRITE_OR_PLAN_PREFIXES = ("propose", "plan", "write", "send_", "request_", "update_", "reset_")
+
+
+def progress_step_text(tool: str) -> str:
+    if tool in PROGRESS_STEPS:
+        return PROGRESS_STEPS[tool]
+    if tool.startswith(WRITE_OR_PLAN_PREFIXES):
+        return "Menyusun rencana…"
+    return label(tool) + "…"
+
+
+def run_started_at(run, start: dict) -> float:
+    """Epoch seconds of the run start: the start event's timestamp when the worker sends one, else the run."""
+    for key in ("started_at", "timestamp", "time"):
+        value = start.get(key)
+        if isinstance(value, (int, float)):
+            return float(value)
+    return float(getattr(run, "started_at", time.time()))
+
+
 @app.get("/admin/investigations/{rid}", response_class=HTMLResponse)
 def investigation_page(rid: str):
     run = _get_run(rid)
@@ -531,23 +714,33 @@ def investigation_page(rid: str):
 <p class=note>This call runs only if you click Approve. Read-only lookups, and a plain evidence request to the claim's owner (no amounts), run without asking; every other write or message waits here. Unanswered approvals are declined automatically.</p>
 <form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=approval_id value="{e(pend['approval_id'])}"><input type=hidden name=approved value=true><button>Approve</button></form>
 <form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=approval_id value="{e(pend['approval_id'])}"><input type=hidden name=approved value=false>
-<input name=reason size=40 placeholder="Reason (optional)"><button>Decline</button></form></div>"""
+<label>Alasan <input name=reason aria-label="Alasan penolakan (opsional)" size=40 placeholder="Reason (optional)"></label><button>Decline</button></form></div>"""
     q = run.question
     if q:
         sel = "".join(
             f"<tr><td><code>{e(i['item_id'])}</code> {e(i.get('category') or '')}</td><td>{e(', '.join(i.get('gaps', [])))}</td>"
-            f"<td><select name='dec_{e(i['item_id'])}'><option value=''>no decision</option>"
+            f"<td><select name='dec_{e(i['item_id'])}' aria-label='Keputusan untuk {e(i['item_id'])}'><option value=''>no decision</option>"
             "<option value=approve_full>approve full</option><option value=approve_capped>approve capped</option>"
             "<option value=reject>reject</option></select></td></tr>" for i in q.get("items", []))
         pending_html += f"""<div class="box" id=question><h2>The agent is asking you</h2><pre>{e(q['text'])}</pre>
 <form method=post action="/admin/investigations/{e(rid)}/reply"><input type=hidden name=question_id value="{e(q['question_id'])}">
-<table>{sel}</table><p><textarea name=reply rows=3 cols=60 placeholder="Reply in your own words (optional)"></textarea></p>
+<div class="table-wrap"><table>{sel}</table></div><p><label>Jawaban <textarea name=reply aria-label="Jawaban bebas (opsional)" rows=3 cols=60 placeholder="Reply in your own words (optional)"></textarea></label></p>
 <p class=note>Decisions chosen here are the only ones the agent's tools will use; the agent cannot set them itself.</p>
 <button>Send and resume</button></form></div>"""
     final = next((x for x in evs if x["type"] == "final"), None)
     err = next((x for x in evs if x["type"] == "error"), None)
     status = ("finished" if final else "stopped" if err else "awaiting approval" if pend
               else "awaiting your answer" if q else "running")
+    progress_html = ""
+    if not (final or err):
+        steps = [progress_step_text(x["tool"]) for x in evs if x["type"] == "step"]
+        steps_text = " → ".join(steps) or "Menunggu langkah pertama…"
+        elapsed = max(0, int(time.time() - run_started_at(run, start)))
+        progress_html = f"""<div class="box" id="progress"><h2>Progres agent</h2>
+<p id="progress-steps">{e(steps_text)}</p>
+<p>Waktu berjalan: <b id="elapsed">{elapsed}</b> detik</p>
+<script>(function(){{var n=document.getElementById('elapsed');if(!n)return;var s=parseInt(n.textContent,10)||0;
+setInterval(function(){{s+=1;n.textContent=s;}},1000);}})();</script></div>"""
     tail = ""
     if final:
         t = final.get("tokens", {})
@@ -568,8 +761,8 @@ def investigation_page(rid: str):
 <div class="box"><h2>Agent investigation: {e(run.claim_id)}</h2>
 <p>Status <b id=status>{e(status)}</b> &middot; model {e(start.get('model', '...'))} &middot; compact mode {'on' if start.get('compact') else '...'}</p>
 <p class=note>The agent runs against its own MCP server session (fresh demo state), not this page's store.</p>
-<table id=trace style="table-layout:fixed;width:100%;word-break:break-word"><tr><th>#</th><th>Tool</th><th>Args</th><th>Result</th></tr>{rows}</table></div>
-{pending_html}{tail}"""
+<div class="table-wrap"><table id=trace style="table-layout:fixed;width:100%;word-break:break-word"><tr><th>#</th><th>Tool</th><th>Args</th><th>Result</th></tr>{rows}</table></div></div>
+{progress_html}{pending_html}{tail}"""
     return page(f"Investigate {run.claim_id}", body)
 
 

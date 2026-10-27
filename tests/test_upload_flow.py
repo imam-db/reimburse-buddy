@@ -57,7 +57,7 @@ def test_drop_makes_cards_and_pairs_flight_files(client):
     assert cards[3]["amount"] is None  # unreadable -> empty card for manual input
     assert d["cards"][0]["fields"]["amount"]["source"] == "ocr"
     page = client.get(f"/employee/drafts/{d['id']}").text
-    assert "extracted (ocr" in page and "Could not read this file" in page
+    assert "extracted (OCR" in page and "Could not read this file" in page
 
 
 def test_edits_are_self_declared_and_submit_forwards_files(client):
@@ -99,7 +99,7 @@ def test_missing_evidence_then_add_file(client):
                                 f"c_{new}_merchant": "Taksi"})
     r = client.post(f"/employee/drafts/{d['id']}", data=dict(form, action="submit"), follow_redirects=False)
     cid = r.headers["location"].split("/")[3].split("?")[0]
-    assert "receipt missing" in client.get(f"/employee/claims/{cid}").text
+    assert "Struk belum ada" in client.get(f"/employee/claims/{cid}").text
     client.post(f"/employee/claims/{cid}/items/IT-2/files",
                 files={"file": ("taxi2.jpg", (SAMPLES / "heldout" / "taxi_2digit_year_cash.jpg").read_bytes())})
     assert all("receipt_missing" not in i.gaps for i in web.run_check(cid).items)
@@ -170,7 +170,7 @@ def test_rejected_evidence_leaves_item_missing(client):
     chk = web.run_check(cid)
     assert "receipt_missing" in chk.items[1].gaps and chk.decision.value == "needs_info"
     assert web.review(cid)["evidence_log"][-1]["verdict"] == "rejected"
-    assert "receipt missing" in client.get(loc).text
+    assert "Struk belum ada" in client.get(loc).text
 
 
 def test_self_declared_doc_type_needs_review(client):
