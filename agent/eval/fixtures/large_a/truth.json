@@ -1,0 +1,52 @@
+{
+  "taxi_body": {
+    "claim_id": "CLM-2026-6001",
+    "employee_id": "EMP-005",
+    "items": [
+      "IT-3"
+    ],
+    "needed": "MSG-6359",
+    "event": null,
+    "via_reply": false
+  },
+  "reschedule_later": {
+    "claim_id": "CLM-2026-6002",
+    "employee_id": "EMP-003",
+    "items": [
+      "IT-4"
+    ],
+    "needed": "MSG-6360",
+    "event": "EVT-6001",
+    "via_reply": false
+  },
+  "reschedule_earlier": {
+    "claim_id": "CLM-2026-6003",
+    "employee_id": "EMP-002",
+    "items": [
+      "IT-4"
+    ],
+    "needed": "MSG-6338",
+    "event": "EVT-6002",
+    "via_reply": false
+  },
+  "slang_reply": {
+    "claim_id": "CLM-2026-6004",
+    "employee_id": "EMP-004",
+    "items": [
+      "IT-3"
+    ],
+    "needed": "MSG-6099",
+    "event": null,
+    "via_reply": true
+  },
+  "quoted": {
+    "claim_id": "CLM-2026-6005",
+    "employee_id": "EMP-001",
+    "items": [
+      "IT-3"
+    ],
+    "needed": "MSG-6377",
+    "event": null,
+    "via_reply": false
+  }
+}

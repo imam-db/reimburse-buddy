@@ -32,6 +32,67 @@ flowchart LR
 - **WorkBuddy** does the reasoning: planning, tool choice, plan revision and the human-in-the-loop.
 - **Python** does what must be exact: data access and policy arithmetic.
 
+## How the AI agent works (version B)
+
+<picture>
+  <source srcset="docs/agent-how-it-works.svg" type="image/svg+xml">
+  <img src="docs/agent-how-it-works.png" alt="How the Reimburse Buddy agent works">
+</picture>
+
+Source: [docs/agent-how-it-works.excalidraw](docs/agent-how-it-works.excalidraw) (open it at excalidraw.com).
+
+- The LangGraph agent (`agent/reimburse_agent/graph.py`) reads the claim and the policy, then calls `check_claim`. Every amount and gap comes from that deterministic rule engine, never from the LLM.
+- For each open gap it searches the mailbox with `search_for_gap`: 2 searches before asking the employee and 1 after. If a document is still missing, it asks the employee with the fixed-template `request_missing_evidence` and checks the claim again.
+- Read-only tools run freely. Every other write or message stops at an approval gate, apart from the capped evidence request.
+- Decisions that need judgment (`approve_full`, `approve_capped`, `reject`) come only from the finance reviewer, through the web question form or a reply. The graph refuses decisions the model tries to set itself.
+- Once the check is clean, or every gap has been searched and asked about, the graph drafts the decision note. Finance takes the final action.
+- Version B also offers `find_messages(employee_id, query, date_from, date_to)` (agent only, not a WorkBuddy tool). It collects the employee's messages through the same mailbox search, ranks them with BM25 plus a small local multilingual embedding model (fused with reciprocal rank fusion), and returns the top 5. Each call counts as one search against the gap's budget. If the model cannot be loaded, ranking falls back to BM25 and the result says so.
+
+### What the evaluation shows so far (synthetic data, small n, no LLM runs in this round)
+
+Retrieval was the bottleneck. With semantic retrieval, the no-LLM baseline passes 4/4 of the heuristic-hostile cases 11-14 (19/19 hard cases, 0 unsafe, 0 false approvals) and 2/5 on the held-out large set B (3/5 on tuning set A). What the LLM adds is so far untested and is measured on the reasoning track.
+
+| suite (baseline, 1 run, $0) | ranked (BM25+embedding) | BM25 only | whole mailbox, unranked (control) |
+|---|---|---|---|
+| hard, 19 cases | 19/19 | 17/19 (11, 12 fail) | 19/19 |
+| large set A (tuning), 5 | 3/5 | 2/5 | 5/5 |
+| large set B (held out), 5 | 2/5 | 3/5 | 5/5 |
+| reasoning track, 11 | 9/11 (2 false approvals) | - | 9/11 |
+
+- The whole-mailbox control passes everything because every synthetic receipt and schedule change carries structured fields (`claim_id`, `item_id`, `meeting_update`) and the rule engine keeps only what matches. On these fixtures the loss comes from the top-5 cut, not from understanding. Real mail has no such tags.
+- Large sets (`agent/eval/large_fixtures.py`): 46-68 messages per employee over Aug-Oct 2026, hand-written paraphrases combined by a seeded RNG; set A and set B share no paraphrase. Needed message recall@5 / MRR (baseline query): set A lexical 0.2/0.2, ranked 0.2/0.12; set B lexical 0.4/0.12, ranked 0.2/0.15 (`agent/eval/retrieval_metrics.py`). Every large mailbox is flagged `possibly_incomplete` (the 36 probes reach 33-47 of 46-68 messages).
+- Reasoning track (`agent/eval/reasoning_fixtures.py`, labels in `fixtures/reasoning/labels.json`, to be reviewed by Imam): the baseline falsely approves R1 (meeting moved, then moved back) and R1x (moved, then cancelled in free text). R1 exposes an engine issue: `meeting_update`s are applied in evidence-list order, not message date order.
+- Results: `agent/eval/results/{hard,large_a,large_b,reasoning}-baseline*.json` and `retrieval-*.json`; each records a SHA-256 of the fixtures.
+
+### Prepared, not yet run: model screening and an optional judge
+
+- `agent/eval/screen_models.py` screens SumoPod models on the 30 hard, large and reasoning cases. It is a dry
+  run by default. `--live` needs `--max-usd` (hard cap; `--strict-cap` stops mid-model). It runs a preflight
+  that forces each tool once, freezes the conditions (temperature 0, no parallel tool calls, the same token cap),
+  retries infrastructure errors and drops a model after two in a row, reads the cost from the gateway header,
+  ranks by unsafe actions, then false approvals, correct, protocol, cost and latency, adds the $0 baseline as
+  a reference row, and runs a gateway control (deepseek-flash direct vs. via SumoPod). The dry-run estimate is
+  about $0.81 (worst case $1.10), using third-party prices that have not been verified.
+- `agent/reimburse_agent/judge.py` is an optional Jev (`jev-1.13.0`) judge. It is off by default; set
+  `RB_JUDGE=jev`. It only escalates: a yes or unsettled answer adds a review flag. It never closes a gap,
+  picks evidence or changes an amount. Each request sends one candidate message. Code computes dates and
+  weekdays. Questions are Nouls, never Choices. A failed call is recorded as an error, never as "no". All
+  wording and thresholds are in `judge_questions.py`. Today the judge is wired only into the contradiction
+  scan of a calendar-only late checkout, and it sees the 160-character snippet, not the full body.
+- `agent/eval/judge_set.jsonl` has 62 hand-written labelled pairs (formal Indonesian, slang Indonesian,
+  English; 27 positives; hard negatives and injection attempts). `agent/eval/judge_score.py` compares Jev
+  with a flash model using structured output. It reports AUROC, Brier, miss rate at the review threshold,
+  false escalations and repeatability, overall and per register. It is a dry run by default; the estimate
+  for 3 repeats is about $0.017.
+
+### find_messages: setup and limits
+
+- Embedding model: `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`, loaded by fastembed 0.9.1 (pinned) from `Qdrant/paraphrase-multilingual-MiniLM-L12-v2-onnx-Q` at commit `faf4aa42` (pinned in `retrieval.py`). Install with `uv sync --extra embed`. The first run downloads about 240 MB into `RB_EMBED_CACHE`, else `FASTEMBED_CACHE_PATH`, else `~/.cache/fastembed`.
+- `RB_NO_EMBED=1` skips the model: BM25 only, and the result's `ranker` says so.
+- Scope: only the dedicated `reimburse@` mailbox, limited to messages the employee sent or forwarded. Personal inboxes are never read.
+- Limitation: the server offers only a substring search capped at 5 results, so `find_messages` builds its pool with 36 one-character probes (a-z, 0-9). Any probe that returns 5 may have hidden more, so the pool is flagged `possibly_incomplete`; that happens for any mailbox with 5 or more messages. A contradiction scan on an incomplete pool counts as unavailable and sends the item to review. A server-side list or paged search would remove the workaround.
+- Guards: a late checkout resolved by the calendar alone gets a graph-side scan (event title and date over the trip window; a hit at similarity >= 0.45, tuned on set A, or a schedule-change word sends it to review). After an evidence request, a reply that arrived since the pre-request mailbox snapshot and that the latest `check_claim` did not consider holds the draft once per mailbox version; a repeat draft goes through, flagged "new evidence found but not used". The same check runs when the model ends in plain text.
+
 ## Tools
 
 | Tool | Purpose |

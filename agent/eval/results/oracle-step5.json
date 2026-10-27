@@ -1,0 +1,109 @@
+{
+  "fixtures_sha256": "986e2d2e2014e0cbc46272f07d287344bb6e494278635b25a8bbd92640c8c9d7",
+  "oracles": {
+    "11": {
+      "pass": true,
+      "why": "ok",
+      "severity": "ok",
+      "budget_ok": true,
+      "searches": 1,
+      "oracle_query (hindsight)": "jadwal meeting klien",
+      "plausible_queries_hit": {
+        "late checkout meeting moved": false,
+        "meeting rescheduled": false,
+        "meeting diundur": false,
+        "late checkout hotel Surabaya": false,
+        "jadwal meeting": true,
+        "meeting PT Arunika Niaga": true
+      },
+      "find_messages_rank (top 5 = hit)": {
+        "late checkout meeting moved": "rank 2/4",
+        "meeting rescheduled": "rank 2/4",
+        "meeting diundur": "rank 1/4",
+        "late checkout hotel Surabaya": "rank 2/4",
+        "jadwal meeting": "rank 1/4",
+        "meeting PT Arunika Niaga": "rank 2/4"
+      },
+      "find_messages_ranker": "bm25+embedding rrf",
+      "error": null
+    },
+    "12": {
+      "pass": true,
+      "why": "ok",
+      "severity": "ok",
+      "budget_ok": true,
+      "searches": 1,
+      "oracle_query (hindsight)": "bukti bayar taksi bandara",
+      "plausible_queries_hit": {
+        "taxi receipt": false,
+        "taxi airport hotel receipt": false,
+        "struk taksi": false,
+        "kuitansi taksi bandara": true,
+        "bukti bayar taksi": true,
+        "Taxi airport to hotel taxi taksi receipt struk kuitansi 2026-10-13": false
+      },
+      "find_messages_rank (top 5 = hit)": {
+        "taxi receipt": "rank 2/2",
+        "taxi airport hotel receipt": "rank 2/2",
+        "struk taksi": "rank 2/2",
+        "kuitansi taksi bandara": "rank 1/2",
+        "bukti bayar taksi": "rank 1/2",
+        "Taxi airport to hotel taxi taksi receipt struk kuitansi 2026-10-13": "rank 2/2"
+      },
+      "find_messages_ranker": "bm25+embedding rrf",
+      "error": null
+    },
+    "13": {
+      "pass": true,
+      "why": "ok",
+      "severity": "ok",
+      "budget_ok": true,
+      "searches": 2,
+      "oracle_query (hindsight)": "bon",
+      "plausible_queries_hit": {
+        "CLM-2026-0303 IT-3": false,
+        "taxi receipt": false,
+        "struk taksi": false,
+        "receipt": false,
+        "nota taksi": false,
+        "bon taksi": true
+      },
+      "find_messages_rank (top 5 = hit)": {
+        "CLM-2026-0303 IT-3": "rank 2/11",
+        "taxi receipt": "rank 8/11",
+        "struk taksi": "rank 5/11",
+        "receipt": "rank 6/11",
+        "nota taksi": "rank 5/11",
+        "bon taksi": "rank 5/11"
+      },
+      "find_messages_ranker": "bm25+embedding rrf",
+      "error": null
+    },
+    "14": {
+      "pass": true,
+      "why": "ok",
+      "severity": "ok",
+      "budget_ok": true,
+      "searches": 1,
+      "oracle_query (hindsight)": "Partner review PT Bahari",
+      "plausible_queries_hit": {
+        "late checkout meeting moved": false,
+        "meeting rescheduled": false,
+        "late checkout hotel Makassar": false,
+        "meeting dimajukan": true,
+        "Partner review with PT Bahari Sejahtera": true,
+        "jadwal review": true
+      },
+      "find_messages_rank (top 5 = hit)": {
+        "late checkout meeting moved": "rank 4/4",
+        "meeting rescheduled": "rank 4/4",
+        "late checkout hotel Makassar": "rank 4/4",
+        "meeting dimajukan": "rank 1/4",
+        "Partner review with PT Bahari Sejahtera": "rank 1/4",
+        "jadwal review": "rank 1/4"
+      },
+      "find_messages_ranker": "bm25+embedding rrf",
+      "error": null
+    }
+  }
+}

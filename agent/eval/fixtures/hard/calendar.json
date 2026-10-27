@@ -58,5 +58,25 @@
     "end": "11:30",
     "location": "Surabaya",
     "type": "business"
+  },
+  {
+    "id": "EVT-7301",
+    "owner_id": "EMP-003",
+    "title": "Meeting with PT Arunika Niaga",
+    "date": "2026-10-16",
+    "start": "10:00",
+    "end": "12:00",
+    "location": "Surabaya",
+    "type": "business"
+  },
+  {
+    "id": "EVT-7341",
+    "owner_id": "EMP-003",
+    "title": "Partner review with PT Bahari Sejahtera",
+    "date": "2026-10-09",
+    "start": "13:00",
+    "end": "14:30",
+    "location": "Makassar",
+    "type": "business"
   }
 ]

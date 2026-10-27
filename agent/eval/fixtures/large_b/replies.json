@@ -1,0 +1,32 @@
+[
+  {
+    "id": "RPL-7001",
+    "to": "EMP-004",
+    "claim_id": "CLM-2026-7004",
+    "item_id": "IT-3",
+    "gap_code": "receipt_missing",
+    "keywords_any": [
+      "IT-3"
+    ],
+    "reply": {
+      "id": "MSG-7099",
+      "owner_id": "EMP-004",
+      "from": "yoga.firmansyah@nusantara-niaga.example",
+      "date": "2026-10-24",
+      "subject": "wkwk maap telat",
+      "body": "dah tak attach, maap telat",
+      "attachments": [
+        {
+          "name": "scan0058.pdf",
+          "type": "receipt",
+          "claim_id": "CLM-2026-7004",
+          "item_id": "IT-3",
+          "receipt_no": "TX-CLM-2026-7004-3",
+          "amount": 98000
+        }
+      ],
+      "mailbox": "reimburse@nusantara-niaga.example",
+      "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+    }
+  }
+]

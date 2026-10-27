@@ -17,7 +17,7 @@ from decimal import Decimal
 from html import escape
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from reimburse_buddy.data_store import DataStore
@@ -510,6 +510,11 @@ def investigation_page(rid: str):
                      f"<td><code>{e(x['args_summary'])}</code></td><td>{e(x['result_summary'])}</td></tr>")
         elif x["type"] == "auto_declined":
             rows += "<tr><td></td><td colspan=3 class=note>No answer in time: auto-declined</td></tr>"
+        elif x["type"] == "question":
+            rows += f"<tr><td></td><td colspan=3 class=note>Agent asked: {e(x['text'][:300])}</td></tr>"
+        elif x["type"] == "reply_applied":
+            dec = ", ".join(f"{k}: {v}" for k, v in (x.get("decisions") or {}).items()) or "none"
+            rows += f"<tr><td></td><td colspan=3 class=note>Reviewer replied (decisions: {e(dec)})</td></tr>"
         elif x["type"] == "answer_applied":  # shown only once the worker acknowledged it
             rows += (f"<tr><td></td><td colspan=3 class=note>Reviewer {'approved' if x['approved'] else 'declined'} "
                      f"<code>{e(x['tool'])}</code></td></tr>")
@@ -517,15 +522,28 @@ def investigation_page(rid: str):
     pending_html = ""
     if pend:
         pending_html = f"""<div class="box" id=pending><h2>Pending write: awaiting your approval</h2>
-<p><code>{e(pend['tool'])}</code></p><pre>{e(json.dumps(pend['args'], ensure_ascii=False, indent=2))}</pre>
+<p><code>{e(pend['tool'])}</code></p>{('<p><strong>' + e(pend['prompt']) + '</strong></p>') if pend.get('prompt') else ''}<pre>{e(json.dumps(pend['args'], ensure_ascii=False, indent=2))}</pre>
 {decision_box(pend.get('current_decision'))}
 <p class=note>This call runs only if you click Approve. Read-only lookups, and a plain evidence request to the claim's owner (no amounts), run without asking; every other write or message waits here. Unanswered approvals are declined automatically.</p>
 <form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=approval_id value="{e(pend['approval_id'])}"><input type=hidden name=approved value=true><button>Approve</button></form>
 <form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=approval_id value="{e(pend['approval_id'])}"><input type=hidden name=approved value=false>
 <input name=reason size=40 placeholder="Reason (optional)"><button>Decline</button></form></div>"""
+    q = run.question
+    if q:
+        sel = "".join(
+            f"<tr><td><code>{e(i['item_id'])}</code> {e(i.get('category') or '')}</td><td>{e(', '.join(i.get('gaps', [])))}</td>"
+            f"<td><select name='dec_{e(i['item_id'])}'><option value=''>no decision</option>"
+            "<option value=approve_full>approve full</option><option value=approve_capped>approve capped</option>"
+            "<option value=reject>reject</option></select></td></tr>" for i in q.get("items", []))
+        pending_html += f"""<div class="box" id=question><h2>The agent is asking you</h2><pre>{e(q['text'])}</pre>
+<form method=post action="/admin/investigations/{e(rid)}/reply"><input type=hidden name=question_id value="{e(q['question_id'])}">
+<table>{sel}</table><p><textarea name=reply rows=3 cols=60 placeholder="Reply in your own words (optional)"></textarea></p>
+<p class=note>Decisions chosen here are the only ones the agent's tools will use; the agent cannot set them itself.</p>
+<button>Send and resume</button></form></div>"""
     final = next((x for x in evs if x["type"] == "final"), None)
     err = next((x for x in evs if x["type"] == "error"), None)
-    status = ("finished" if final else "stopped" if err else "awaiting approval" if pend else "running")
+    status = ("finished" if final else "stopped" if err else "awaiting approval" if pend
+              else "awaiting your answer" if q else "running")
     tail = ""
     if final:
         t = final.get("tokens", {})
@@ -541,7 +559,7 @@ def investigation_page(rid: str):
     if not (final or err):
         tail += (f"<form method=post action='/admin/investigations/{e(rid)}/cancel' id=cancel>"
                  "<button>Cancel run</button></form>")
-    refresh = "" if (final or err or pend) else '<meta http-equiv="refresh" content="2">'
+    refresh = "" if (final or err or pend or q) else '<meta http-equiv="refresh" content="2">'
     body = f"""{refresh}<p><a href="/admin/claims/{e(run.claim_id)}">&larr; Claim {e(run.claim_id)}</a></p>
 <div class="box"><h2>Agent investigation: {e(run.claim_id)}</h2>
 <p>Status <b id=status>{e(status)}</b> &middot; model {e(start.get('model', '...'))} &middot; compact mode {'on' if start.get('compact') else '...'}</p>
@@ -556,6 +574,15 @@ def investigation_resume(rid: str, approval_id: str = Form(""), approved: str = 
                          reason: str = Form("")):
     run = _get_run(rid)
     run.resume(approval_id, approved == "true", reason)  # stale/duplicate answers are ignored
+    return RedirectResponse(f"/admin/investigations/{rid}", status_code=303)
+
+
+@app.post("/admin/investigations/{rid}/reply")
+async def investigation_reply(rid: str, request: Request):
+    run = _get_run(rid)
+    form = await request.form()
+    decisions = {k[4:]: str(v) for k, v in form.items() if k.startswith("dec_") and str(v)}
+    run.reply(str(form.get("question_id", "")), str(form.get("reply", "")), decisions)  # stale answers ignored
     return RedirectResponse(f"/admin/investigations/{rid}", status_code=303)
 
 

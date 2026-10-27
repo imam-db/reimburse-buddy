@@ -10,6 +10,11 @@ dependencies = [
     "langchain-mcp-adapters>=0.1",
 ]
 
+[project.optional-dependencies]
+embed = [
+    "fastembed==0.9.1",
+]
+
 [dependency-groups]
 dev = ["pytest>=8", "pytest-asyncio>=0.23"]
 

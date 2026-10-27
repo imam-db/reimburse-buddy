@@ -1,0 +1,72 @@
+[
+  {
+    "id": "RPL-8006",
+    "to": "EMP-206",
+    "claim_id": "CLM-2026-8006",
+    "item_id": "IT-3",
+    "gap_code": "receipt_missing",
+    "keywords_any": [
+      "IT-3",
+      "IT-4"
+    ],
+    "reply": {
+      "id": "MSG-5057",
+      "owner_id": "EMP-206",
+      "from": "pegawai6@nusantara-niaga.example",
+      "date": "2026-10-24",
+      "subject": "Re: bukti",
+      "body": "ini struknya, yang hotel nyusul ya",
+      "attachments": [
+        {
+          "name": "IMG.jpg",
+          "type": "receipt",
+          "claim_id": "CLM-2026-8006",
+          "item_id": "IT-3",
+          "receipt_no": "TX-C1",
+          "amount": 120000
+        }
+      ],
+      "mailbox": "reimburse@nusantara-niaga.example",
+      "forwarded_by": "pegawai6@nusantara-niaga.example"
+    }
+  },
+  {
+    "id": "RPL-8007",
+    "to": "EMP-207",
+    "claim_id": "CLM-2026-8007",
+    "item_id": "IT-3",
+    "gap_code": "receipt_missing",
+    "keywords_any": [
+      "IT-3",
+      "IT-4"
+    ],
+    "reply": {
+      "id": "MSG-5066",
+      "owner_id": "EMP-207",
+      "from": "pegawai7@nusantara-niaga.example",
+      "date": "2026-10-24",
+      "subject": "Re: bukti",
+      "body": "ini struk taksi sama hotelnya ya",
+      "attachments": [
+        {
+          "name": "IMG.jpg",
+          "type": "receipt",
+          "claim_id": "CLM-2026-8007",
+          "item_id": "IT-3",
+          "receipt_no": "TX-D1",
+          "amount": 120000
+        },
+        {
+          "name": "hotel.pdf",
+          "type": "receipt",
+          "claim_id": "CLM-2026-8007",
+          "item_id": "IT-4",
+          "receipt_no": "HTL-D1",
+          "amount": 700000
+        }
+      ],
+      "mailbox": "reimburse@nusantara-niaga.example",
+      "forwarded_by": "pegawai7@nusantara-niaga.example"
+    }
+  }
+]

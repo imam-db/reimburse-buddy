@@ -1,0 +1,613 @@
+[
+  {
+    "id": "CLM-2026-8001",
+    "employee_id": "EMP-201",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-REASON",
+    "purpose": "Client meeting (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Surabaya",
+      "start_date": "2026-10-13",
+      "end_date": "2026-10-14"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-13",
+        "description": "outbound flight GA 410",
+        "amount": "1300000",
+        "flight_no": "GA 410",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8001-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-14",
+        "description": "return flight GA 417",
+        "amount": "1300000",
+        "flight_no": "GA 417",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8001-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "hotel",
+        "date": "2026-10-13",
+        "description": "Hotel Surabaya, 1 night",
+        "amount": "700000",
+        "nights": 1,
+        "receipt": true,
+        "receipt_no": "HTL-CLM-2026-8001"
+      },
+      {
+        "id": "IT-4",
+        "category": "late_checkout",
+        "date": "2026-10-14",
+        "description": "Late check-out until 16:00",
+        "amount": "300000",
+        "checkout_time": "16:00",
+        "location": "Surabaya",
+        "receipt": true,
+        "receipt_no": "LC-CLM-2026-8001"
+      }
+    ]
+  },
+  {
+    "id": "CLM-2026-8002",
+    "employee_id": "EMP-202",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-REASON",
+    "purpose": "Client meeting (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Surabaya",
+      "start_date": "2026-10-13",
+      "end_date": "2026-10-14"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-13",
+        "description": "outbound flight GA 410",
+        "amount": "1300000",
+        "flight_no": "GA 410",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8002-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-14",
+        "description": "return flight GA 417",
+        "amount": "1300000",
+        "flight_no": "GA 417",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8002-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "hotel",
+        "date": "2026-10-13",
+        "description": "Hotel Surabaya, 1 night",
+        "amount": "700000",
+        "nights": 1,
+        "receipt": true,
+        "receipt_no": "HTL-CLM-2026-8002"
+      },
+      {
+        "id": "IT-4",
+        "category": "late_checkout",
+        "date": "2026-10-14",
+        "description": "Late check-out until 16:00",
+        "amount": "300000",
+        "checkout_time": "16:00",
+        "location": "Surabaya",
+        "receipt": true,
+        "receipt_no": "LC-CLM-2026-8002"
+      }
+    ]
+  },
+  {
+    "id": "CLM-2026-8003",
+    "employee_id": "EMP-203",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-REASON",
+    "purpose": "Client meeting (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Surabaya",
+      "start_date": "2026-10-13",
+      "end_date": "2026-10-14"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-13",
+        "description": "outbound flight GA 410",
+        "amount": "1300000",
+        "flight_no": "GA 410",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8003-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-14",
+        "description": "return flight GA 417",
+        "amount": "1300000",
+        "flight_no": "GA 417",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8003-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "hotel",
+        "date": "2026-10-13",
+        "description": "Hotel Surabaya, 1 night",
+        "amount": "700000",
+        "nights": 1,
+        "receipt": true,
+        "receipt_no": "HTL-CLM-2026-8003"
+      },
+      {
+        "id": "IT-4",
+        "category": "late_checkout",
+        "date": "2026-10-14",
+        "description": "Late check-out until 16:00",
+        "amount": "300000",
+        "checkout_time": "16:00",
+        "location": "Surabaya",
+        "receipt": true,
+        "receipt_no": "LC-CLM-2026-8003"
+      }
+    ]
+  },
+  {
+    "id": "CLM-2026-8004",
+    "employee_id": "EMP-204",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-REASON",
+    "purpose": "Client visit (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Surabaya",
+      "start_date": "2026-10-13",
+      "end_date": "2026-10-14"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-13",
+        "description": "outbound flight GA 410",
+        "amount": "1300000",
+        "flight_no": "GA 410",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8004-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-14",
+        "description": "return flight GA 417",
+        "amount": "1300000",
+        "flight_no": "GA 417",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8004-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "taxi",
+        "date": "2026-10-14",
+        "description": "Taxi hotel to client office (PT Arunika)",
+        "amount": "85000",
+        "receipt": false
+      }
+    ]
+  },
+  {
+    "id": "CLM-2026-8005",
+    "employee_id": "EMP-205",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-REASON",
+    "purpose": "Client visit (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Surabaya",
+      "start_date": "2026-10-13",
+      "end_date": "2026-10-14"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-13",
+        "description": "outbound flight GA 410",
+        "amount": "1300000",
+        "flight_no": "GA 410",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8005-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-14",
+        "description": "return flight GA 417",
+        "amount": "1300000",
+        "flight_no": "GA 417",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8005-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "taxi",
+        "date": "2026-10-14",
+        "description": "Taxi hotel to client office (PT Arunika)",
+        "amount": "85000",
+        "receipt": false
+      }
+    ]
+  },
+  {
+    "id": "CLM-2026-8006",
+    "employee_id": "EMP-206",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-REASON",
+    "purpose": "Supplier visit (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Surabaya",
+      "start_date": "2026-10-13",
+      "end_date": "2026-10-14"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-13",
+        "description": "outbound flight GA 410",
+        "amount": "1300000",
+        "flight_no": "GA 410",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8006-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-14",
+        "description": "return flight GA 417",
+        "amount": "1300000",
+        "flight_no": "GA 417",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8006-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "taxi",
+        "date": "2026-10-13",
+        "description": "Taxi airport to hotel",
+        "amount": "120000",
+        "receipt": false
+      },
+      {
+        "id": "IT-4",
+        "category": "hotel",
+        "date": "2026-10-13",
+        "description": "Hotel Surabaya, 1 night",
+        "amount": "700000",
+        "nights": 1,
+        "receipt": false
+      }
+    ]
+  },
+  {
+    "id": "CLM-2026-8007",
+    "employee_id": "EMP-207",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-REASON",
+    "purpose": "Supplier visit (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Surabaya",
+      "start_date": "2026-10-13",
+      "end_date": "2026-10-14"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-13",
+        "description": "outbound flight GA 410",
+        "amount": "1300000",
+        "flight_no": "GA 410",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8007-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-14",
+        "description": "return flight GA 417",
+        "amount": "1300000",
+        "flight_no": "GA 417",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8007-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "taxi",
+        "date": "2026-10-13",
+        "description": "Taxi airport to hotel",
+        "amount": "120000",
+        "receipt": false
+      },
+      {
+        "id": "IT-4",
+        "category": "hotel",
+        "date": "2026-10-13",
+        "description": "Hotel Surabaya, 1 night",
+        "amount": "700000",
+        "nights": 1,
+        "receipt": false
+      }
+    ]
+  },
+  {
+    "id": "CLM-2026-8008",
+    "employee_id": "EMP-208",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-REASON",
+    "purpose": "Client meeting (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Surabaya",
+      "start_date": "2026-10-13",
+      "end_date": "2026-10-14"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-13",
+        "description": "outbound flight GA 410",
+        "amount": "1300000",
+        "flight_no": "GA 410",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8008-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-14",
+        "description": "return flight GA 417",
+        "amount": "1300000",
+        "flight_no": "GA 417",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8008-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "hotel",
+        "date": "2026-10-13",
+        "description": "Hotel Surabaya, 1 night",
+        "amount": "700000",
+        "nights": 1,
+        "receipt": true,
+        "receipt_no": "HTL-CLM-2026-8008"
+      },
+      {
+        "id": "IT-4",
+        "category": "late_checkout",
+        "date": "2026-10-14",
+        "description": "Late check-out until 16:00",
+        "amount": "300000",
+        "checkout_time": "16:00",
+        "location": "Surabaya",
+        "receipt": true,
+        "receipt_no": "LC-CLM-2026-8008"
+      }
+    ]
+  },
+  {
+    "id": "CLM-2026-8009",
+    "employee_id": "EMP-209",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-REASON",
+    "purpose": "Client meeting (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Surabaya",
+      "start_date": "2026-10-13",
+      "end_date": "2026-10-14"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-13",
+        "description": "outbound flight GA 410",
+        "amount": "1300000",
+        "flight_no": "GA 410",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8009-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-14",
+        "description": "return flight GA 417",
+        "amount": "1300000",
+        "flight_no": "GA 417",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8009-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "hotel",
+        "date": "2026-10-13",
+        "description": "Hotel Surabaya, 1 night",
+        "amount": "700000",
+        "nights": 1,
+        "receipt": true,
+        "receipt_no": "HTL-CLM-2026-8009"
+      },
+      {
+        "id": "IT-4",
+        "category": "late_checkout",
+        "date": "2026-10-14",
+        "description": "Late check-out until 16:00",
+        "amount": "300000",
+        "checkout_time": "16:00",
+        "location": "Surabaya",
+        "receipt": true,
+        "receipt_no": "LC-CLM-2026-8009"
+      }
+    ]
+  },
+  {
+    "id": "CLM-2026-8010",
+    "employee_id": "EMP-210",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-REASON",
+    "purpose": "Client visit (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Surabaya",
+      "start_date": "2026-10-12",
+      "end_date": "2026-10-13"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-12",
+        "description": "outbound flight GA 410",
+        "amount": "1300000",
+        "flight_no": "GA 410",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8010-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-13",
+        "description": "return flight GA 417",
+        "amount": "1300000",
+        "flight_no": "GA 417",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8010-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "taxi",
+        "date": "2026-10-13",
+        "description": "Taxi hotel to client office",
+        "amount": "90000",
+        "receipt": false
+      }
+    ]
+  },
+  {
+    "id": "CLM-2026-8011",
+    "employee_id": "EMP-211",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-REASON",
+    "purpose": "Client visit (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Surabaya",
+      "start_date": "2026-10-12",
+      "end_date": "2026-10-13"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-12",
+        "description": "outbound flight GA 410",
+        "amount": "1300000",
+        "flight_no": "GA 410",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8011-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-13",
+        "description": "return flight GA 417",
+        "amount": "1300000",
+        "flight_no": "GA 417",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-8011-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "taxi",
+        "date": "2026-10-13",
+        "description": "Taxi hotel to client office",
+        "amount": "90000",
+        "receipt": false
+      }
+    ]
+  }
+]

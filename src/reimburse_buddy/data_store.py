@@ -12,6 +12,8 @@ from typing import Any
 DEFAULT_DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 
 
+from .amounts import normalize_message
+
 class DataStore:
     def __init__(self, data_dir: str | Path | None = None):
         self.data_dir = Path(data_dir or os.environ.get("REIMBURSE_BUDDY_DATA") or DEFAULT_DATA_DIR)
@@ -34,7 +36,7 @@ class DataStore:
 
     @cached_property
     def inbox(self) -> list[dict]:
-        return self._load("inbox")
+        return [normalize_message(m) for m in self._load("inbox")]
 
     @cached_property
     def calendar(self) -> list[dict]:
@@ -175,7 +177,7 @@ class DataStore:
                 hit = any(k.lower() in text for k in r["keywords_any"])
             if hit:
                 r["_delivered"] = True
-                self.inbox.append(dict(r["reply"], in_reply_to=msg["id"]))
+                self.inbox.append(normalize_message(dict(r["reply"], in_reply_to=msg["id"])))
                 delivered.append(r["reply"]["id"])
         return {"status": "sent", "message_id": msg["id"], "replies_received": len(delivered)}
 

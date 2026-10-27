@@ -106,6 +106,38 @@ class Run:
         return self._pending(self.snapshot())
 
     @property
+    def question(self) -> dict | None:
+        """The agent's open question for the reviewer, until it is answered or the run ends."""
+        evs = self.snapshot()
+        for i in range(len(evs) - 1, -1, -1):
+            if evs[i]["type"] in ("reply_applied", "final", "error", "interrupt"):
+                return None
+            if evs[i]["type"] == "question":
+                return evs[i]
+        return None
+
+    def reply(self, question_id: str, text: str, decisions: dict[str, str]) -> bool:
+        """Answer the agent's open question; decisions become the graph's reviewer_decisions."""
+        with self.lock:
+            q = None
+            for ev in reversed(self.events):
+                if ev["type"] in ("reply_applied", "final", "error", "interrupt"):
+                    break
+                if ev["type"] == "question":
+                    q = ev
+                    break
+            if q is None or q.get("question_id") != question_id or question_id in self.answered:
+                return False
+            self.answered.add(question_id)
+            try:
+                self.proc.stdin.write(json.dumps({"question_id": question_id, "reply": text,
+                                                  "decisions": decisions}) + "\n")
+                self.proc.stdin.flush()
+            except (BrokenPipeError, ValueError):
+                return False
+        return True
+
+    @property
     def done(self) -> bool:
         return any(e["type"] in ("final", "error") for e in self.snapshot())
 
