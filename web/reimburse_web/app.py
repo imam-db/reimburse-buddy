@@ -855,11 +855,21 @@ def investigate_start(cid: str):
     except RateLimited as exc:
         return page(f"Investigate {cid}", f"<p><a href='/admin/claims/{e(cid)}'>&larr; Claim</a></p>"
                     f"<div class='box'><p class='tag warn' id=rate-limited>{e(exc)}</p></div>")
+    except spend.LedgerUnavailable as exc:
+        # The ledger could not be reached even after a reconnect: refuse the run, say so plainly. Do not
+        # ask the ledger for the remaining budget here - it is the thing that is down.
+        return page(f"Investigate {cid}", f"<p><a href='/admin/claims/{e(cid)}'>&larr; Claim</a></p>"
+                    f"<div class='box'><p class='tag bad' id=ledger-unavailable>{e(str(exc))}</p></div>")
     except spend.BudgetRefused:
-        _audit_limit(cid, "daily_llm_budget", budget=str(spend.budget()), committed=str(spend.committed()))
+        # A second ledger call here must not turn the refusal into a 500 if the database drops meanwhile.
+        try:
+            left = f"${spend.remaining():.2f}"
+            _audit_limit(cid, "daily_llm_budget", budget=str(spend.budget()), committed=str(spend.committed()))
+        except Exception:  # noqa: BLE001 - the refusal itself already happened
+            left = "?"
         return page(f"Investigate {cid}", f"<p><a href='/admin/claims/{e(cid)}'>&larr; Claim</a></p>"
                     f"<div class='box'><p class='tag warn' id=budget-exhausted>{e(label('budget_exhausted'))}</p>"
-                    f"<p class='note'>{e(label('budget_remaining'))}: ${spend.remaining():.2f}</p></div>")
+                    f"<p class='note'>{e(label('budget_remaining'))}: {e(left)}</p></div>")
     return RedirectResponse(f"/admin/investigations/{run.id}", status_code=303)
 
 

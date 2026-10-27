@@ -8,6 +8,7 @@ No model is called here: the "worker" is a tiny python process that prints the s
 investigate_worker.py prints.
 """
 
+import contextlib
 import json
 import sys
 from decimal import Decimal
@@ -291,3 +292,120 @@ def test_prod_with_budget_and_prices_serves_the_app(prod):
     with TestClient(web.app) as c:
         assert c.get("/").status_code == 200
         assert "Sisa anggaran LLM hari ini: $1.00" in c.get("/").text
+
+
+# --- a dropped Postgres connection --------------------------------------------------------------
+class _FakeOperationalError(Exception):
+    pass
+
+
+class _FakeCursor:
+    def __init__(self, conn):
+        self.conn = conn
+        self._row = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def execute(self, sql, params=None):
+        self.conn.bump()
+        head = sql.strip().upper()
+        if head.startswith("SELECT COALESCE"):
+            self._row = (self.conn.spent,)
+        elif head.startswith("INSERT"):
+            self.conn.inserted.append(params)
+
+    def fetchone(self):
+        return self._row
+
+
+class _FakeConn:
+    def __init__(self, fake, fail_left):
+        self.fake, self.fail_left = fake, fail_left
+        self.spent = Decimal(0)
+        self.inserted: list = []
+
+    def bump(self):
+        if self.fail_left:
+            self.fail_left -= 1
+            raise self.fake.OperationalError("server closed the connection unexpectedly")
+
+    def cursor(self):
+        return _FakeCursor(self)
+
+    def transaction(self):
+        return contextlib.nullcontext()
+
+    def close(self):
+        pass
+
+
+class _FakePsycopg:
+    """Just enough of the module: connect() hands out connections that may fail their first statement."""
+
+    def __init__(self, fail_first=0, always=False):
+        self.OperationalError = _FakeOperationalError
+        self.fail_first, self.always, self.conns = fail_first, always, []
+
+    def connect(self, dsn, **kwargs):
+        fail = self.fail_first if (not self.conns or self.always) else 0
+        conn = _FakeConn(self, fail)
+        self.conns.append(conn)
+        return conn
+
+
+def test_postgres_ledger_reconnects_once_after_a_dropped_connection(monkeypatch):
+    fake = _FakePsycopg(fail_first=1)  # a suspended Neon endpoint: the first statement fails
+    monkeypatch.setitem(sys.modules, "psycopg", fake)
+    led = spend.PostgresSpendLedger("postgresql://user@db.example:5432/reimburse", Decimal("1.00"))
+
+    led.reserve("run-1", Decimal("0.10"), "2026-10-26")
+
+    assert len(fake.conns) == 2  # the dead one, then a fresh one
+    assert len(fake.conns[1].inserted) == 1 and fake.conns[1].inserted[0][1] == "run-1"
+
+
+def test_postgres_ledger_refuses_the_run_when_it_stays_unreachable(monkeypatch):
+    fake = _FakePsycopg(fail_first=1, always=True)
+    monkeypatch.setitem(sys.modules, "psycopg", fake)
+    led = spend.PostgresSpendLedger("postgresql://user@db.example:5432/reimburse", Decimal("1.00"))
+
+    with pytest.raises(spend.LedgerUnavailable) as exc:
+        led.reserve("run-1", Decimal("0.10"), "2026-10-26")
+    assert "Ledger biaya LLM tidak bisa dihubungi" in str(exc.value)
+    assert len(fake.conns) == 2  # exactly one retry, not a loop
+
+
+def test_an_unreachable_ledger_refuses_the_run_instead_of_a_500(prod, monkeypatch):
+    configure(prod)
+
+    class DeadLedger:
+        def __init__(self, dsn, budget_usd):
+            self.budget = budget_usd
+
+        def reserve(self, *a, **kw):
+            raise spend.LedgerUnavailable("Ledger biaya LLM tidak bisa dihubungi, jadi tidak ada run "
+                                          "yang dijalankan. Coba lagi sebentar lagi.")
+
+        def settle(self, *a, **kw):
+            return None
+
+        def committed(self, day):
+            raise spend.LedgerUnavailable("down")
+
+    monkeypatch.setattr(spend, "PostgresSpendLedger", DeadLedger)
+    spend.reset()
+    inv = Investigator(max_per_min=10, fake_script="x")
+    monkeypatch.setattr(web, "INVESTIGATOR", inv)
+
+    # https, because in production the session cookie is Secure and TestClient would not send it otherwise
+    with TestClient(web.app, base_url="https://testserver") as c:
+        c.post("/login", data={"password": "correct-horse-battery-staple", "reviewer": "EMP-100",
+                               "next": "/admin"}, follow_redirects=False)  # production needs the gate
+        r = c.post(f"/admin/claims/{HERO}/investigate", follow_redirects=False)
+    assert r.status_code == 200  # not a 500
+    assert "id=ledger-unavailable" in r.text and "tidak ada run yang dijalankan" in r.text
+    assert inv.runs == {}  # nothing was spawned
