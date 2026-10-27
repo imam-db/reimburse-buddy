@@ -3,6 +3,8 @@
     "id": "RPL-0001",
     "to": "EMP-003",
     "claim_id": "CLM-2026-0104",
+    "item_id": "IT-6",
+    "gap_code": "receipt_missing",
     "keywords_any": [
       "IT-6",
       "receipt",
@@ -37,6 +39,8 @@
     "id": "RPL-0002",
     "to": "EMP-001",
     "claim_id": "CLM-2026-0110",
+    "item_id": "IT-5",
+    "gap_code": "receipt_missing",
     "keywords_any": [
       "IT-5",
       "receipt",

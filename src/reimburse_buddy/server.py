@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import os
+
 from mcp.server.fastmcp import FastMCP
 
 from .data_store import DataStore
 from .decision import draft_decision as _draft
+from .evidence_request import request_missing_evidence as _request_evidence
 from .models import to_jsonable
 from .rules import check_claim as _check
 from .triage import approve_cleared_batch as _approve_batch
@@ -104,6 +107,19 @@ def send_message(to: str, body: str, subject: str = "", claim_id: str = "") -> d
     """(Mock) Email an employee, e.g. to ask for a missing receipt. Goes to the outbox.
     The employee's scripted reply arrives in the reimburse@ mailbox; check with search_reimburse_mailbox."""
     return store.send_message(to, body, subject, claim_id)
+
+
+def request_missing_evidence(claim_id: str, item_id: str, gap_code: str, evidence_ids: list[str] | None = None,
+                             human_decisions: dict[str, str] | None = None) -> dict:
+    """(Mock) Ask the claim's owner for a missing document, using a fixed template (no free text,
+    no amounts, no decision). gap_code must still be reported by check_claim for that item given
+    evidence_ids and human_decisions. An unanswered identical request is returned, not resent."""
+    return _request_evidence(store, claim_id, item_id, gap_code, evidence_ids, human_decisions)
+
+
+# Version B only: WorkBuddy's server (version A) keeps exactly its 15 tools.
+if os.environ.get("REIMBURSE_ENABLE_EVIDENCE_TOOL") == "1":
+    mcp.tool()(request_missing_evidence)
 
 
 @mcp.tool()
