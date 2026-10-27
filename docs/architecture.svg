@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="880" viewBox="0 0 1600 880" font-family="Helvetica,Arial,sans-serif"><rect width="100%" height="100%" fill="white"/><defs><marker id="ah" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8z" fill="#1e1e1e"/></marker><marker id="ahs" markerWidth="10" markerHeight="8" refX="1" refY="4" orient="auto"><path d="M10,0 L0,4 L10,8z" fill="#1e1e1e"/></marker></defs>
+<rect x="30" y="20" width="1540" height="56" rx="8" fill="#e9ecef" stroke="#495057" stroke-width="2"/>
+<text x="800.0" y="52.55" font-size="13" text-anchor="middle" font-weight="bold">Reimburse Buddy version B: architecture</text>
+<rect x="30" y="92" width="240" height="28" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+<text x="150" y="110.5" font-size="13" text-anchor="middle">Employee</text>
+<rect x="288" y="92" width="240" height="28" rx="8" fill="#a5d8ff" stroke="#1971c2" stroke-width="2"/>
+<text x="408" y="110.5" font-size="13" text-anchor="middle">AI agent / UI flow</text>
+<rect x="546" y="92" width="240" height="28" rx="8" fill="#d0bfff" stroke="#6741d9" stroke-width="2"/>
+<text x="666" y="110.5" font-size="13" text-anchor="middle">Deterministic code</text>
+<rect x="804" y="92" width="240" height="28" rx="8" fill="#ffd8a8" stroke="#e8590c" stroke-width="2"/>
+<text x="924" y="110.5" font-size="13" text-anchor="middle">Finance (human)</text>
+<rect x="1062" y="92" width="240" height="28" rx="8" fill="#e9ecef" stroke="#495057" stroke-width="2"/>
+<text x="1182" y="110.5" font-size="13" text-anchor="middle">Data / mock systems</text>
+<rect x="1320" y="92" width="240" height="28" rx="8" fill="#fff5f5" stroke="#c92a2a" stroke-width="2"/>
+<text x="1440" y="110.5" font-size="13" text-anchor="middle">Guardrail</text>
+<rect x="30" y="150" width="150" height="90" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+<text x="105.0" y="191.43" font-size="13" text-anchor="middle" font-weight="bold">Employee</text>
+<text x="105.0" y="207.68" font-size="13" text-anchor="middle">(browser)</text>
+<rect x="215" y="150" width="225" height="90" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+<text x="327.5" y="175.18" font-size="13" text-anchor="middle" font-weight="bold">Employee portal</text>
+<text x="327.5" y="191.43" font-size="13" text-anchor="middle">claims, uploads, OCR draft;</text>
+<text x="327.5" y="207.68" font-size="13" text-anchor="middle">files go to the reimburse@</text>
+<text x="327.5" y="223.93" font-size="13" text-anchor="middle">mailbox</text>
+<rect x="475" y="150" width="250" height="90" rx="8" fill="#a5d8ff" stroke="#1971c2" stroke-width="2"/>
+<text x="600.0" y="175.18" font-size="13" text-anchor="middle" font-weight="bold">Claim agent</text>
+<text x="600.0" y="191.43" font-size="13" text-anchor="middle">LangGraph + DeepSeek, own process;</text>
+<text x="600.0" y="207.68" font-size="13" text-anchor="middle">searches evidence, drafts the</text>
+<text x="600.0" y="223.93" font-size="13" text-anchor="middle">decision note</text>
+<rect x="215" y="280" width="225" height="80" rx="8" fill="#a5d8ff" stroke="#1971c2" stroke-width="2"/>
+<text x="327.5" y="308.30" font-size="13" text-anchor="middle" font-weight="bold">Employee Q&amp;A</text>
+<text x="327.5" y="324.55" font-size="13" text-anchor="middle">flag EMPLOYEE_QA; own claims +</text>
+<text x="327.5" y="340.80" font-size="13" text-anchor="middle">rulebook only; cites a source</text>
+<rect x="475" y="280" width="250" height="80" rx="8" fill="#d0bfff" stroke="#6741d9" stroke-width="2"/>
+<text x="600.0" y="308.30" font-size="13" text-anchor="middle" font-weight="bold">Rule engine (check_claim)</text>
+<text x="600.0" y="324.55" font-size="13" text-anchor="middle">Decimal; every amount and gap</text>
+<text x="600.0" y="340.80" font-size="13" text-anchor="middle">+ read-only MCP tools</text>
+<rect x="30" y="440" width="150" height="90" rx="8" fill="#ffd8a8" stroke="#e8590c" stroke-width="2"/>
+<text x="105.0" y="481.43" font-size="13" text-anchor="middle" font-weight="bold">Finance reviewer</text>
+<text x="105.0" y="497.68" font-size="13" text-anchor="middle">(browser)</text>
+<rect x="215" y="440" width="225" height="90" rx="8" fill="#ffd8a8" stroke="#e8590c" stroke-width="2"/>
+<text x="327.5" y="473.30" font-size="13" text-anchor="middle" font-weight="bold">Request intake</text>
+<text x="327.5" y="489.55" font-size="13" text-anchor="middle">/admin/intake: request in</text>
+<text x="327.5" y="505.80" font-size="13" text-anchor="middle">own words + pasted document</text>
+<rect x="475" y="440" width="250" height="90" rx="8" fill="#a5d8ff" stroke="#1971c2" stroke-width="2"/>
+<text x="600.0" y="465.18" font-size="13" text-anchor="middle" font-weight="bold">Plan graph (no LLM)</text>
+<text x="600.0" y="481.43" font-size="13" text-anchor="middle">propose -&gt; resolve -&gt; schedule;</text>
+<text x="600.0" y="497.68" font-size="13" text-anchor="middle">asks &quot;which Budi?&quot; before</text>
+<text x="600.0" y="513.92" font-size="13" text-anchor="middle">anything is staged</text>
+<rect x="475" y="570" width="250" height="70" rx="8" fill="#d0bfff" stroke="#6741d9" stroke-width="2"/>
+<text x="600.0" y="593.30" font-size="13" text-anchor="middle" font-weight="bold">Directory + operating rules</text>
+<text x="600.0" y="609.55" font-size="13" text-anchor="middle">recipients are EMP- IDs; times</text>
+<text x="600.0" y="625.80" font-size="13" text-anchor="middle">come from the rules tool</text>
+<rect x="760" y="150" width="230" height="490" rx="8" fill="#ffd8a8" stroke="#e8590c" stroke-width="2"/>
+<text x="875.0" y="302.05" font-size="13" text-anchor="middle" font-weight="bold">Approval gate</text>
+<text x="875.0" y="318.30" font-size="13" text-anchor="middle"></text>
+<text x="875.0" y="334.55" font-size="13" text-anchor="middle">Claim agent: one interrupt</text>
+<text x="875.0" y="350.80" font-size="13" text-anchor="middle">per write, evidence requests</text>
+<text x="875.0" y="367.05" font-size="13" text-anchor="middle">included</text>
+<text x="875.0" y="383.30" font-size="13" text-anchor="middle"></text>
+<text x="875.0" y="399.55" font-size="13" text-anchor="middle">Plans: confirmation page</text>
+<text x="875.0" y="415.80" font-size="13" text-anchor="middle">/admin/plans/&lt;run_id&gt;,</text>
+<text x="875.0" y="432.05" font-size="13" text-anchor="middle">Reject is pre-selected</text>
+<text x="875.0" y="448.30" font-size="13" text-anchor="middle"></text>
+<text x="875.0" y="464.55" font-size="13" text-anchor="middle">Approval is bound to the</text>
+<text x="875.0" y="480.80" font-size="13" text-anchor="middle">args_hash of what the</text>
+<text x="875.0" y="497.05" font-size="13" text-anchor="middle">reviewer saw</text>
+<rect x="1025" y="150" width="230" height="490" rx="8" fill="#d0bfff" stroke="#6741d9" stroke-width="2"/>
+<text x="1140.0" y="310.18" font-size="13" text-anchor="middle" font-weight="bold">Executor (separate node)</text>
+<text x="1140.0" y="326.43" font-size="13" text-anchor="middle"></text>
+<text x="1140.0" y="342.68" font-size="13" text-anchor="middle">Runs an action only if the</text>
+<text x="1140.0" y="358.93" font-size="13" text-anchor="middle">audit log holds a matching</text>
+<text x="1140.0" y="375.18" font-size="13" text-anchor="middle">approval (same action_id</text>
+<text x="1140.0" y="391.43" font-size="13" text-anchor="middle">and args_hash)</text>
+<text x="1140.0" y="407.68" font-size="13" text-anchor="middle"></text>
+<text x="1140.0" y="423.93" font-size="13" text-anchor="middle">Claim writes re-run</text>
+<text x="1140.0" y="440.18" font-size="13" text-anchor="middle">check_claim first</text>
+<text x="1140.0" y="456.43" font-size="13" text-anchor="middle"></text>
+<text x="1140.0" y="472.68" font-size="13" text-anchor="middle">Anything else is refused:</text>
+<text x="1140.0" y="488.93" font-size="13" text-anchor="middle">fail closed</text>
+<rect x="1290" y="150" width="280" height="490" rx="8" fill="#e9ecef" stroke="#495057" stroke-width="2"/>
+<text x="1430.0" y="342.68" font-size="13" text-anchor="middle" font-weight="bold">Mock office tools</text>
+<text x="1430.0" y="358.93" font-size="13" text-anchor="middle"></text>
+<text x="1430.0" y="375.18" font-size="13" text-anchor="middle">email, calendar event, task,</text>
+<text x="1430.0" y="391.43" font-size="13" text-anchor="middle">evidence request,</text>
+<text x="1430.0" y="407.68" font-size="13" text-anchor="middle">claim status, outbox</text>
+<text x="1430.0" y="423.93" font-size="13" text-anchor="middle"></text>
+<text x="1430.0" y="440.18" font-size="13" text-anchor="middle">Synthetic data only;</text>
+<text x="1430.0" y="456.43" font-size="13" text-anchor="middle">nothing real is sent</text>
+<polyline points="180,195 215,195" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="105,240 105,320 215,320" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<text x="150" y="313" font-size="12" text-anchor="middle" fill="#343a40">asks</text>
+<polyline points="440,195 475,195" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="440,320 475,320" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="600,240 600,280" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)" marker-start="url(#ahs)"/>
+<polyline points="725,195 760,195" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="180,485 215,485" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="440,485 475,485" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="600,530 600,570" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)" marker-start="url(#ahs)"/>
+<polyline points="725,485 760,485" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="105,530 105,670 875,670 875,640" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<text x="480" y="663" font-size="12" text-anchor="middle" fill="#343a40">approves / rejects, answers questions</text>
+<polyline points="990,395 1025,395" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<polyline points="1255,395 1290,395" fill="none" stroke="#1e1e1e" stroke-width="2" marker-end="url(#ah)"/>
+<rect x="30" y="700" width="1540" height="34" rx="8" fill="#fff5f5" stroke="#c92a2a" stroke-width="2"/>
+<text x="800.0" y="721.55" font-size="13" text-anchor="middle" font-weight="bold">Safety guardrails (always on)</text>
+<rect x="30.0" y="750" width="370.0" height="100" rx="8" fill="#fff5f5" stroke="#c92a2a" stroke-width="2"/>
+<text x="215.0" y="780.17" font-size="13" text-anchor="middle" font-weight="bold">Audit log, append-only</text>
+<text x="215.0" y="796.42" font-size="13" text-anchor="middle">Postgres (Neon) in prod, unique</text>
+<text x="215.0" y="812.67" font-size="13" text-anchor="middle">event_key; app role may only</text>
+<text x="215.0" y="828.92" font-size="13" text-anchor="middle">INSERT and SELECT</text>
+<rect x="420.0" y="750" width="370.0" height="100" rx="8" fill="#fff5f5" stroke="#c92a2a" stroke-width="2"/>
+<text x="605.0" y="780.17" font-size="13" text-anchor="middle" font-weight="bold">Prompt-injection detector</text>
+<text x="605.0" y="796.42" font-size="13" text-anchor="middle">HIGH/LOW rules, withheld spans,</text>
+<text x="605.0" y="812.67" font-size="13" text-anchor="middle">echo check, argument-source</text>
+<text x="605.0" y="828.92" font-size="13" text-anchor="middle">allowlist, needs_review flag</text>
+<rect x="810.0" y="750" width="370.0" height="100" rx="8" fill="#fff5f5" stroke="#c92a2a" stroke-width="2"/>
+<text x="995.0" y="788.30" font-size="13" text-anchor="middle" font-weight="bold">The rule engine decides money</text>
+<text x="995.0" y="804.55" font-size="13" text-anchor="middle">not the LLM; documents are data,</text>
+<text x="995.0" y="820.80" font-size="13" text-anchor="middle">never instructions; no mass send</text>
+<rect x="1200.0" y="750" width="370.0" height="100" rx="8" fill="#fff5f5" stroke="#c92a2a" stroke-width="2"/>
+<text x="1385.0" y="780.17" font-size="13" text-anchor="middle" font-weight="bold">Caps per claim run</text>
+<text x="1385.0" y="796.42" font-size="13" text-anchor="middle">250k tokens, 600 s, 10 gated calls,</text>
+<text x="1385.0" y="812.67" font-size="13" text-anchor="middle">3 searches per gap; 3 runs/min,</text>
+<text x="1385.0" y="828.92" font-size="13" text-anchor="middle">1 live run at a time</text>
+</svg>
