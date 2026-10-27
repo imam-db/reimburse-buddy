@@ -253,11 +253,15 @@ class Investigator:
         if len(self.started) >= self.max_per_min:
             raise RateLimited(f"Rate limit: at most {self.max_per_min} investigations per minute.")
         # Charge the daily LLM budget before spawning: the worst case of this run is reserved, and the
-        # run is refused outright when it would cross the cap (spend.BudgetRefused).
+        # run is refused outright when it would cross the cap (spend.BudgetRefused). The day is taken
+        # once, here: a run that crosses midnight WIB settles on the day it was reserved, so the
+        # reservation is always replaced and never leaks into the next day's cap.
         run_id = uuid.uuid4().hex[:10]
-        spend.reserve(run_id)
+        day = spend.today()
+        spend.reserve(run_id, day=day)
         self.started.append(now)
-        run = Run(claim_id, self.command(claim_id), run_id=run_id, on_tokens=lambda t: spend.settle(run_id, t))
+        run = Run(claim_id, self.command(claim_id), run_id=run_id,
+                  on_tokens=lambda t: spend.settle(run_id, t, day=day))
         self.runs[run.id] = run
         return run
 
