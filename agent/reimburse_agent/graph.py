@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import uuid
 from pathlib import Path
 from typing import Annotated, Any, TypedDict
 
@@ -22,6 +23,8 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.types import interrupt
 
+from .audit import (AuditLog, args_hash, default_log, execute_approved, make_event, output_summary,
+                    run_versions, sha256, source_ids)
 from .compact import compact as _compact, tool_text
 from .judge import get_judge, review_flags
 from .retrieval import (clean_query, contradiction_hits, find_messages as ranked_find, message_pool,
@@ -144,6 +147,8 @@ class State(TypedDict, total=False):
     blocked_streak: int  # consecutive refused searches
     decisions_source: str  # "form": this turn's reviewer_decisions came structured (web form), no parse/confirm
     instructions: list[dict]  # explicit reviewer instructions not yet carried out (see parse_instructions)
+    exec_queue: list[dict]  # decisions a gate node collected, waiting for its executor node
+    exec_notes: list[str]
     pending_evidence: list[dict]  # graph-queued evidence requests waiting for evidence_gate (not sent)
     graph_proposals: list[dict]  # gated actions the graph proposed itself: {"tool", "args", "id", "approved", "from"}
     unattributed_searches: int  # raw mailbox searches that named no single open gap
@@ -522,7 +527,8 @@ BUDGET_STOP = "graph_budget_stop"  # AIMessage.name of the graph's own stop text
 def build_graph(model, tools, system_prompt: str | None = None, checkpointer=None, compact: bool = True,
                 max_gated: int = MAX_GATED_CALLS, run_claim: str | None = None,
                 served: dict[str, tuple[dict, str]] | None = None, token_budget: int | None = None,
-                model_search: bool = True):
+                model_search: bool = True, audit: AuditLog | None = None,
+                run_prefix: str | None = None):
     """model: any LangChain chat model with bind_tools. tools: LangChain tools (e.g. from MCP).
     compact: shrink tool outputs before the model sees them (see compact.py); False = raw.
     run_claim: the claim this run investigates; without it every evidence request is gated, reviewer
@@ -543,6 +549,55 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
     bound = model.bind_tools(model_tools)
     split = token_split(system.content, model_tools, served)
     log.info("token split (est. tokens per call): %s", split)
+    alog = audit if audit is not None else default_log()
+    nonce = run_prefix or uuid.uuid4().hex[:8]  # one per compiled graph: thread ids repeat across tests and runs
+
+    def run_id_of(config) -> str:
+        return f"{nonce}:{((config or {}).get('configurable') or {}).get('thread_id', 'default')}"
+
+    def record(config, etype: str, ref: str, **kw) -> bool:
+        return alog.append(make_event(run_id_of(config), etype, ref, **kw))
+
+    def stage(config, aid: str, tool: str, args: dict, by: str = "agent") -> None:
+        """Logged BEFORE the interrupt: the proposal exists even if nobody ever answers (startup sweep)."""
+        record(config, "staged_action", aid, actor="agent", action_id=aid, args_hash=args_hash(tool, args),
+               payload={"tool": tool, "args": args, "by": by}, sources=source_ids(args))
+
+    def decide(config, aid: str, tool: str, args: dict, ok: bool, answer) -> bool:
+        """Log the reviewer's answer. Fail closed: an approval that cannot be logged is a decline."""
+        who = (answer.get("reviewer") if isinstance(answer, dict) else None) or "reviewer"
+        actor = "human:" + (re.sub(r"[\s:]+", "_", str(who))[:60] or "reviewer")
+        reason = None if ok else ((answer.get("reason") if isinstance(answer, dict) else "") or "no reason given")
+        h = args_hash(tool, args)
+        shown = [e for e in alog.list(run_id_of(config))
+                 if e["action_id"] == aid and e["event_type"] == "staged_action"]
+        if ok and shown and shown[0]["args_hash"] != h:  # args edited between the prompt and the answer
+            record(config, "refusal", f"{aid}:args_changed_before_approval", actor="system", action_id=aid,
+                   args_hash=h, payload={"tool": tool, "reason": "args differ from what the reviewer was shown",
+                                         "shown_args_hash": shown[0]["args_hash"]})
+            ok, reason = False, "args changed after the reviewer was asked"
+        try:
+            record(config, "approval" if ok else "rejection", aid, actor=actor, action_id=aid,
+                   args_hash=h, payload={"tool": tool, **({"reason": reason} if reason else {})})
+        except Exception as exc:
+            log.error("audit: could not log the %s for %s: %s", "approval" if ok else "rejection", aid, exc)
+            return False
+        return ok
+
+    def with_aid(name: str, args: dict, aid: str) -> dict:
+        """Pass action_id to tools whose schema takes it (the mock outbox refuses a repeated action_id)."""
+        schema = getattr(by_name.get(name), "args_schema", None)
+        props = schema.get("properties", {}) if isinstance(schema, dict) else (
+            getattr(schema, "model_fields", {}) if schema is not None else {})
+        return {**args, "action_id": aid} if "action_id" in props else args
+
+    async def execute(config, aid: str, name: str, args: dict) -> tuple[str | None, str | None]:
+        """Executor: (content, None) on success, (None, why) when refused/duplicate/failed."""
+        res = await execute_approved(alog, run_id_of(config), aid, name, args,
+                                     lambda a: invoke(name, with_aid(name, a, aid)))
+        if res["status"] == "executed":
+            return res["result"], None
+        return None, res.get("reason") or res.get("error") or res["status"]
 
     async def invoke(name: str, args: dict) -> str:
         if served and name in served:
@@ -642,7 +697,9 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                 parts.append(f"{sc['gap']}: contradiction check unavailable, {sc['unavailable']}")
         return "; ".join(parts)
 
-    async def intake(state: State):
+    versions = {**run_versions(model=model), "prompt_sha256": sha256(system.content)}
+
+    async def intake(state: State, config):
         """Human channel: parse decisions out of the newest reviewer message, confirm them with the reviewer
         (interrupt quoting their own words) before storing; note explicit instructions; mark searched gaps
         as 'reviewer asked' when the reviewer answers an agent that stopped."""
@@ -650,6 +707,9 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         last = msgs[-1] if msgs else None
         if not isinstance(last, HumanMessage):
             return {}
+        record(config, "request", f"turn{len(msgs) - 1}", actor="human:reviewer",
+               payload={"text": str(last.content), "claim_id": run_claim, **versions},
+               sources=source_ids(str(last.content)))
         out: dict = {}
         if state.get("decisions_source"):
             out["decisions_source"] = ""  # structured decisions arrived with this turn: nothing to parse
@@ -689,17 +749,26 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             out["gap_attempts"] = att
         return out
 
-    async def agent(state: State):
+    async def agent(state: State, config):
         used = state.get("tokens_used", 0)
         if token_budget is not None and used >= token_budget:
+            record(config, "limit", f"budget{len(state['messages'])}", actor="system",
+                   payload={"kind": "token_budget", "used": used, "budget": token_budget})
             return {"messages": [AIMessage(name=BUDGET_STOP, content=(
                 f"Stopped: this claim run used its model budget ({used} of {token_budget} tokens)."))]}
         prompt = [system, *state["messages"]]
         reply = await bound.ainvoke(prompt)
         n = message_tokens(reply) or estimate_tokens(prompt) + estimate_tokens([reply])
+        ref = f"msg{len(state['messages'])}"
+        calls = getattr(reply, "tool_calls", None) or []
+        if calls:
+            record(config, "plan", ref, payload={"tool_calls": [{"id": c["id"], "tool": c["name"], "args": c.get("args")}
+                                                               for c in calls], "text": str(reply.content)})
+        elif str(reply.content).rstrip().endswith("?"):
+            record(config, "clarification", ref, payload={"text": str(reply.content)})
         return {"messages": [reply], "tokens_used": used + n}
 
-    def gate(state: State):
+    def gate(state: State, config):
         last = state["messages"][-1]
         declined: dict[str, str] = {}
         count = state.get("gated_count", 0)
@@ -717,10 +786,12 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                 declined[call["id"]] = f"limit of {max_gated} approval requests per run reached"
                 continue
             count += 1
+            stage(config, call["id"], call["name"], call["args"])
             answer = interrupt({"tool": call["name"], "args": call["args"], "tool_call_id": call["id"]})
             # The answer must name the call it approves; anything else counts as a decline.
             ok = (isinstance(answer, dict) and answer.get("approved") is True
                   and answer.get("tool_call_id") == call["id"])
+            ok = decide(config, call["id"], call["name"], call["args"], ok, answer)
             if not ok:
                 reason = (answer.get("reason") if isinstance(answer, dict) else "") or "no reason given"
                 declined[call["id"]] = reason
@@ -743,7 +814,7 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             return False
         return bool(calendar_only(pos[2], trusted_decisions(state, run_claim)))
 
-    async def run_tools(state: State):
+    async def run_tools(state: State, config):
         last = state["messages"][-1]
         out = []
         cache = dict(state.get("search_cache", {}))
@@ -812,6 +883,8 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             and only then runs the approved ones (interrupt before any execution, so a resume never
             replays a write)."""
             after = " (including the one after asking the employee)" if lim > SEARCHES_PER_GAP else ""
+            record(config, "limit", f"search:{gap}:{here}:{streak}", actor="system",
+                   payload={"kind": "search_budget", "gap": gap, "limit": lim})
             stuck = streak >= MAX_BLOCKED or all(budget_used(k) for k in gaps_now)
             proposed = []
             if stuck and EVIDENCE_TOOL in by_name:
@@ -886,6 +959,8 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                 content = json.dumps({"error": "reviewer_declined", "reason": state["declined"][call["id"]]})
             elif name not in by_name:  # includes hidden tools like reset_demo
                 content = json.dumps({"error": f"unknown tool {name}"})
+                record(config, "access_denied", call["id"], action_id=call["id"],
+                       payload={"tool": name, "reason": "unknown or hidden tool"})
             elif name == GAP_SEARCH_TOOL:
                 k = f"{args.get('item_id')}:{args.get('gap_code')}"
                 if not check:
@@ -943,7 +1018,16 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                 if content is None:
                     try:
                         snap = await snapshot_for(state, snap, name)
-                        content = await invoke(name, args)
+                        if needs_confirmation(name):  # executor: runs only what the log says was approved
+                            content, why = await execute(config, call["id"], name, args)
+                            if why is not None:
+                                refused = True
+                                content = json.dumps({"error": "not_executed", "reason": why})
+                        else:
+                            content = await invoke(name, args)
+                            record(config, "tool_call", call["id"], action_id=call["id"],
+                                   payload={"tool": name, "args": args, **output_summary(content)},
+                                   sources=source_ids(args))
                         res = _jsonish(content)
                         failed = res is not None and "error" in res
                         if name == "check_claim" and res:
@@ -1053,10 +1137,10 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             return END
         return after_tools(state)  # scan clean: route as if it had not run (guard_checked now holds this check)
 
-    async def evidence_gate(state: State):
-        """Graph-initiated evidence requests. Every queued request is shown to the reviewer with
-        interrupt() first; executions happen only after all answers are in, so resuming (which re-runs
-        this node from the top) never sends anything twice. A decline or a malformed answer sends nothing."""
+    async def evidence_gate(state: State, config):
+        """Gate for graph-initiated evidence requests: only collects decisions (interrupt per queued
+        request, staged/approval/rejection logged). No side effects here; evidence_exec runs the approved
+        ones. A resume re-runs this node from the top, which is harmless because nothing here sends."""
         pend = list(state.get("pending_evidence", []))
         count = state.get("gated_count", 0)
         sigs = list(state.get("declined_sigs", []))
@@ -1068,17 +1152,28 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                 continue
             count += 1
             tcid = f"graph-evidence-{a['item_id']}-{a['gap_code']}-{len(props) + len(answers)}"
+            stage(config, tcid, EVIDENCE_TOOL, a, by="graph")
             answer = interrupt({"tool": EVIDENCE_TOOL, "args": a, "tool_call_id": tcid, "by": "graph",
                                 "prompt": f"Ask the employee for {a['item_id']} ({a['gap_code']}) with the fixed template?"})
             ok = isinstance(answer, dict) and answer.get("approved") is True and answer.get("tool_call_id") == tcid
-            reason = None if ok else ((answer.get("reason") if isinstance(answer, dict) else "") or "no reason given")
-            answers.append((a, tcid, reason))
+            ok = decide(config, tcid, EVIDENCE_TOOL, a, ok, answer)
+            reason = None if ok else ((answer.get("reason") if isinstance(answer, dict) else "") or
+                                      "no reason given (or the approval could not be logged)")
+            answers.append({"args": a, "id": tcid, "reason": reason})
+        return {"pending_evidence": [], "gated_count": count, "exec_queue": answers}
+
+    async def evidence_exec(state: State, config):
+        """Executor for evidence_gate: runs each approved request through execute_approved (approval with the
+        same args_hash must be in the audit log; one execution per action_id)."""
+        sigs = list(state.get("declined_sigs", []))
+        props = list(state.get("graph_proposals", []))
         writes = list(state.get("writes", []))
         attempts = {k: dict(v) for k, v in state.get("gap_attempts", {}).items()}
         snap = state.get("mailbox_before")
         here = len(state["messages"])
         notes, sent_any = [], False
-        for a, tcid, reason in answers:
+        for q in state.get("exec_queue", []):
+            a, tcid, reason = q["args"], q["id"], q["reason"]
             k = f"{a['item_id']}:{a['gap_code']}"
             if reason is not None:
                 sigs.append(call_signature({"name": EVIDENCE_TOOL, "args": a}))
@@ -1092,7 +1187,8 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                 full["evidence_ids"] = ev
             try:
                 snap = await snapshot_for(state, snap, EVIDENCE_TOOL)
-                res = _jsonish(await invoke(EVIDENCE_TOOL, {x: v for x, v in full.items() if v is not None}))
+                text, why = await execute(config, tcid, EVIDENCE_TOOL, {x: v for x, v in full.items() if v is not None})
+                res = {"error": f"not executed: {why}"} if why is not None else _jsonish(text)
                 failed = res is None or "error" in res
             except Exception as exc:
                 res, failed = {"error": str(exc)}, True
@@ -1106,7 +1202,7 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             sent_any = True
             notes.append(f"Sent (reviewer approved): fixed-template evidence request for {k}. "
                          "You may search once more per requested gap, then run check_claim.")
-        out = {"pending_evidence": [], "gated_count": count, "declined_sigs": sigs, "graph_proposals": props,
+        out = {"exec_queue": [], "declined_sigs": sigs, "graph_proposals": props,
                "writes": writes, "gap_attempts": attempts, "mailbox_before": snap}
         if sent_any:
             out["search_cache"] = {}  # a reply may land in the mailbox now
@@ -1238,7 +1334,7 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                     return True
         return False
 
-    async def graph_actions(state: State):
+    async def graph_actions(state: State, config):
         """Carry out explicit reviewer instructions whose arguments are now fully determined. Each one is
         gated (interrupt quoting the reviewer's sentence), runs via invoke() OUTSIDE the model history (no
         AIMessage with tool_calls is ever inserted) and leaves a plain-text note."""
@@ -1273,18 +1369,33 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                 continue
             count += 1
             tcid = f"graph-{name}-{len(props) + len(decided)}"
+            stage(config, tcid, name, call_args, by="graph")
             answer = interrupt({"tool": name, "args": call_args, "tool_call_id": tcid, "by": "graph",
                                 "from": ins["quote"], "prompt": f'Proposed by the graph because you asked: "{ins["quote"]}"'})
             ok = isinstance(answer, dict) and answer.get("approved") is True and answer.get("tool_call_id") == tcid
-            decided.append((ins, name, call_args, tcid, ok, answer))
-        # Phase 2: execute only after every interrupt in this node has its answer. A resume re-runs this
-        # node from the top; nothing above has side effects, so no approved write can run twice.
-        for ins, name, call_args, tcid, ok, answer in decided:
+            ok = decide(config, tcid, name, call_args, ok, answer)
+            reason = None if ok else ((answer.get("reason") if isinstance(answer, dict) else "") or "no reason given")
+            decided.append({"quote": ins["quote"], "tool": name, "args": call_args, "id": tcid, "ok": ok,
+                            "reason": reason})
+        # Gate only: the side effects run in actions_exec, after every answer is in.
+        return {"instructions": keep, "gated_count": count, "exec_queue": decided, "exec_notes": notes}
+
+    async def actions_exec(state: State, config):
+        """Executor for graph_actions (reviewer instructions): approved actions run via execute_approved."""
+        notes = list(state.get("exec_notes", []))
+        writes = list(state.get("writes", []))
+        sigs = list(state.get("declined_sigs", []))
+        snap = state.get("mailbox_before")
+        props = list(state.get("graph_proposals", []))
+        for q in state.get("exec_queue", []):
+            name, call_args, tcid, ok = q["tool"], q["args"], q["id"], q["ok"]
+            ins = {"quote": q["quote"]}
             rec = {"tool": name, "args": call_args, "id": tcid, "approved": ok, "from": ins["quote"]}
             if ok:
                 try:
                     snap = await snapshot_for(state, snap, name)
-                    res = _jsonish(await invoke(name, call_args))
+                    text, why = await execute(config, tcid, name, call_args)
+                    res = {"error": f"not executed: {why}"} if why is not None else _jsonish(text)
                     failed = res is not None and "error" in res
                 except Exception as exc:
                     res, failed = {"error": str(exc)}, True
@@ -1295,12 +1406,12 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                     writes.append({"tool": name, "args": call_args, "by": "graph_action"})
                     notes.append(f'Done: {name} for {run_claim} (you asked: "{ins["quote"]}").')
             else:
-                reason = (answer.get("reason") if isinstance(answer, dict) else "") or "no reason given"
+                reason = q["reason"]
                 sigs.append(call_signature({"name": name, "args": call_args}))
                 notes.append(f"Not done: {name} for {run_claim}; you declined it ({reason}).")
             props.append(rec)
-        out = {"instructions": keep, "writes": writes, "declined_sigs": sigs, "graph_proposals": props,
-               "gated_count": count, "mailbox_before": snap}
+        out = {"exec_queue": [], "exec_notes": [], "writes": writes, "declined_sigs": sigs,
+               "graph_proposals": props, "mailbox_before": snap}
         if notes:
             out["messages"] = [AIMessage(content=" ".join(notes))]
         return out
@@ -1356,16 +1467,20 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
     g.add_conditional_edges("corroborate", after_corroborate, ["auto_draft", "reply_search", "agent", END])
     g.add_edge("reply_search", "auto_draft")
     g.add_node("graph_actions", graph_actions)
+    g.add_node("actions_exec", actions_exec)
+    g.add_node("evidence_exec", evidence_exec)
     g.add_edge(START, "intake")
     g.add_edge("intake", "agent")
     g.add_conditional_edges("agent", route, ["gate", "graph_actions", "auto_draft", "late_reply", END])
     g.add_edge("gate", "tools")
     g.add_node("evidence_gate", evidence_gate)
     g.add_conditional_edges("tools", after_tools, ["evidence_gate", "auto_draft", "reply_search", "corroborate", "agent"])
-    g.add_conditional_edges("evidence_gate", after_tools, ["auto_draft", "reply_search", "corroborate", "agent"])
+    g.add_edge("evidence_gate", "evidence_exec")
+    g.add_conditional_edges("evidence_exec", after_tools, ["auto_draft", "reply_search", "corroborate", "agent"])
     g.add_conditional_edges("auto_draft", lambda s: "graph_actions" if s.get("instructions") else END,
                             ["graph_actions", END])
-    g.add_edge("graph_actions", END)
+    g.add_edge("graph_actions", "actions_exec")
+    g.add_edge("actions_exec", END)
     compiled = g.compile(checkpointer=checkpointer)
     compiled.token_split = split
     return compiled
