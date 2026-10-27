@@ -99,6 +99,7 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
     run = e(plan["run_id"])
     action_ids = {a["action_id"] for a in plan["actions"]}
     expired = {aid for aid in action_ids if _status(events, aid) == "expired"}
+    refused = bool(plan.get("staging_errors"))
     out = [f"<!doctype html><html><head><meta charset=utf-8>"
            f"<meta name=viewport content='width=device-width, initial-scale=1'>"
            f"<title>Konfirmasi rencana {run}</title>"
@@ -116,7 +117,17 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
                    f"<p>Alasan / Reason: {e(reason_id)}{also}</p>"
                    "<p>Tidak ada tindakan yang bisa disetujui lagi. Mulai rencana baru dari halaman Rencana."
                    " / No action can be approved anymore; start a new plan from the Plans page.</p>"
-                   "<p><a class='btn' id='rerun' href='/admin/plans'>Jalankan ulang</a></p></div>")
+                   f"<form method='post' action='/admin/intake/rerun/{run}'>"
+                   "<button class='btn' type='submit' id='rerun'>Jalankan ulang</button></form></div>")
+    if refused:
+        errors = "".join(f"<li>{e(x)}</li>" for x in plan["staging_errors"])
+        out.append("<div class='expired' id='plan-refused'><b>Rencana tidak dibuat / Plan not staged</b>"
+                   "<p>Permintaan ini tidak bisa diubah menjadi tindakan yang aman, jadi tidak ada yang "
+                   "dijadwalkan atau dikirim. / This request cannot be turned into safe actions, so nothing "
+                   "was scheduled or sent.</p>"
+                   f"<ul>{errors}</ul>"
+                   "<p>Tidak ada tindakan yang bisa disetujui di halaman ini. / No action can be approved "
+                   "on this page.</p></div>")
     if msg:
         out.append(f"<p class=tag>{e(msg)}</p>")
     out.append(f"<div class=card><b>Permintaan / Request</b><pre>{e(plan['request'])}</pre></div>")
@@ -131,10 +142,10 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
     by_action: dict[str, list[dict]] = {}
     for a in plan.get("assumptions", []):
         by_action.setdefault(a.get("action_id", ""), []).append(a)
-    form = action_url is not None and not expired
+    form = action_url is not None and not expired and not refused
     if form:
         out.append(f"<form method=post action='{e(action_url)}'><input type=hidden name=plan_id value='{e(plan['plan_id'])}'>")
-    for i, a in enumerate(plan["actions"], 1):
+    for i, a in enumerate([] if refused else plan["actions"], 1):
         aid = a["action_id"]
         st = _status(events, aid)
         cls = " done" if st == "execution" else " rej" if st in ("rejection", "superseded") else ""

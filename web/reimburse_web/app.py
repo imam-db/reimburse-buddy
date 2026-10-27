@@ -28,6 +28,7 @@ from reimburse_buddy.rules import check_claim
 from reimburse_buddy.triage import approve_cleared_batch, triage_claims
 
 from .agent_bridge import NO_KEY_MESSAGE, Investigator, RateLimited, key_configured
+from .intake import router as intake_router
 from .labels import label, person
 from .plans import router as plans_router, startup_config_check, startup_sweep
 from .qa import router as qa_router
@@ -43,6 +44,7 @@ UPLOAD_DIR = Path(os.environ.get("REIMBURSE_WEB_UPLOADS", Path(__file__).resolve
 # then run the one-per-process expiry sweep (agent workers opening the log never sweep).
 app = FastAPI(title="reimburse-buddy web simulation", on_startup=[startup_config_check, startup_sweep])
 app.include_router(plans_router)
+app.include_router(intake_router)
 app.include_router(qa_router)
 store = DataStore()
 # Reviewer working state per claim: evidence IDs attached so far and item decisions.
@@ -129,7 +131,8 @@ NAV_CSS = ("nav{margin-bottom:12px}nav a{margin-right:14px}nav .note{margin-left
 
 def nav_html() -> str:
     return (f'<nav><b>reimburse-buddy</b> &middot; <a href="/">Beranda</a>\n'
-            f'<a href="/employee">Employee</a> <a href="/admin">Finance admin</a>{_pending_nav()}'
+            f'<a href="/employee">Employee</a> <a href="/admin">Finance admin</a> '
+            f'<a href="/admin/intake">Permintaan baru</a>{_pending_nav()}'
             f'<span class="note">Synthetic data. Simulation only.</span></nav>')
 
 

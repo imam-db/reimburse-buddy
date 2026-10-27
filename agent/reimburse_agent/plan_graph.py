@@ -137,7 +137,10 @@ def build_plan_graph(*, log: AuditLog | None = None, directory: Directory | None
             {k: a[k] for k in ("action_id", "tool", "args", "why")} for a in plan["actions"]],
             "assumptions": plan["assumptions"], "errors": errors}, sources=[d["id"] for d in s.get("documents", [])])
         if errors:
+            plan["staging_errors"] = list(errors)
             rec(run_id, "refusal", f"{plan['plan_id']}:staging", actor="system", payload={"errors": errors})
+            if store:
+                store.save_plan(plan)  # read-only: the page shows why nothing was staged, with no approve control
             return {"plan": plan, "operating_times": offered, "staging_errors": errors, "status": "refused"}
         for a in plan["actions"]:
             rec(run_id, "staged_action", a["action_id"], action_id=a["action_id"], args_hash=a["args_hash"],
