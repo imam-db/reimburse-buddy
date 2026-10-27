@@ -191,6 +191,47 @@ uv run --no-dev reimburse-buddy-mcp   # starts the server on stdio (WorkBuddy no
 
 To point the server at another dataset, set `REIMBURSE_BUDDY_DATA=/path/to/data` in the `env` block.
 
+## Deployment notes: audit log
+
+Production refuses JSONL and in-memory audit logs. When `APP_ENV` is `prod` or `production`
+(case-insensitive), the audit log must be Postgres:
+
+```bash
+export APP_ENV=prod
+export REIMBURSE_AUDIT_DATABASE_URL='postgresql://user:pass@db.example:5432/reimburse'
+```
+
+- `REIMBURSE_AUDIT_DATABASE_URL` is required and must start with `postgres://` or `postgresql://`;
+  the connection must open at startup.
+- If it is missing, is not a Postgres URL, or the connection fails, the process exits with
+  `audit.AuditConfigError` (a subclass of `audit.AuditError`). There is no fallback to
+  `REIMBURSE_AUDIT_LOG` (JSONL) or the in-memory log.
+- The web app checks this in its FastAPI startup hook, so it fails before serving the first request.
+  `agent/investigate_worker.py` checks it before running, and `audit.default_log()` enforces it too.
+- Outside production (`APP_ENV` unset or any other value), behaviour is unchanged: JSONL via
+  `REIMBURSE_AUDIT_LOG`, otherwise a fresh in-memory log.
+
+### After deploy: audit log self-test
+
+Use Neon's **direct (unpooled) endpoint** for `REIMBURSE_AUDIT_DATABASE_URL` and connect with the
+application role (INSERT + SELECT only), never the owner role. psycopg connects with
+`prepare_threshold=None`, so it never creates server-side prepared statements even if a pooled/PgBouncer
+endpoint is used by mistake.
+
+Install the optional extra in the agent image and run the self-test as a Cloud Run job (same environment
+as the web/agent service):
+
+```bash
+cd agent
+uv sync --extra postgres
+uv run --extra postgres python -m reimburse_agent.audit_selftest
+```
+
+It prints one PASS/FAIL line per check — append + list roundtrip, duplicate `event_key`, UPDATE/DELETE/
+TRUNCATE denied on `audit_events`, no unmatched executions, and `prepare_threshold=None` — and exits
+non-zero if any check fails. The DSN and its password are masked in the output. There is intentionally no
+HTTP route for this: the web simulation has no admin authentication, so it is CLI/job only.
+
 ## Project layout
 
 ```

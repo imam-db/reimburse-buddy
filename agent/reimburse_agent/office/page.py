@@ -29,13 +29,19 @@ pre{white-space:pre-wrap;background:#f7f8fa;padding:8px;border-radius:6px;margin
 border:1px solid #888;border-radius:6px;font-size:15px;background:#fff;cursor:pointer}
 .decision label input{margin-right:6px}
 .done{background:#e3f6e8} .rej{background:#fde8e8}
+.expired{background:#fde8e8;border:2px solid #c62828;border-radius:8px;padding:10px 14px;margin:10px 0}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:8px 18px;
+border:1px solid #888;border-radius:6px;text-decoration:none;color:inherit;background:#fff}
 button{min-height:44px;display:inline-flex;align-items:center;justify-content:center;padding:8px 18px;font-size:15px}
 a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,label:focus-visible{outline:3px solid #1a5fb4;outline-offset:2px}"""
 
 WHERE = {"email": "Email", "calendar": "Kalender / Calendar", "task": "Tugas / Task"}
 TOOL_LABELS = {"send_email": "Email", "create_calendar_event": "Undangan rapat", "create_task": "Tugas"}
 STATUS_LABELS = {"execution": "Dijalankan", "rejection": "Ditolak", "approval": "Disetujui",
-                 "superseded": "Digantikan"}
+                 "superseded": "Digantikan", "expired": "Kedaluwarsa"}
+EXPIRED_REASON_ID = {"not answered before the deadline": "tidak dijawab sebelum batas waktu",
+                     "server restarted before an answer": "server dimulai ulang sebelum ada jawaban"}
+EXPIRED_FALLBACK_ID = "tidak dijawab sebelum batas waktu"
 DAYS_ID = ("Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu")
 MONTHS_ID = ("", "Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des")
 
@@ -68,9 +74,17 @@ def log_notices_shown(plan: dict, log: AuditLog) -> int:
 
 def _status(events: list[dict], aid: str) -> str | None:
     for ev in reversed(events):
-        if ev.get("action_id") == aid and ev["event_type"] in ("execution", "rejection", "approval", "superseded"):
+        if ev.get("action_id") == aid and ev["event_type"] in ("execution", "rejection", "approval", "superseded",
+                                                               "expired"):
             return ev["event_type"]
     return None
+
+
+def _expired_reason(events: list[dict], aids: set[str]) -> str:
+    for ev in reversed(events):
+        if ev["event_type"] == "expired" and ev.get("action_id") in aids:
+            return str((ev.get("payload") or {}).get("reason") or "")
+    return ""
 
 
 def _person(directory: Directory, emp: str) -> str:
@@ -83,6 +97,8 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
     log_notices_shown(plan, log)
     events = log.list(plan["run_id"])
     run = e(plan["run_id"])
+    action_ids = {a["action_id"] for a in plan["actions"]}
+    expired = {aid for aid in action_ids if _status(events, aid) == "expired"}
     out = [f"<!doctype html><html><head><meta charset=utf-8>"
            f"<meta name=viewport content='width=device-width, initial-scale=1'>"
            f"<title>Konfirmasi rencana {run}</title>"
@@ -92,6 +108,15 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
            f"{_person(directory, plan['requester'])}</p>",
            "<p><b>Belum ada yang dikirim sampai Anda menyetujui.</b> "
            "Nothing is sent or scheduled until you approve. Mock tools only.</p>"]
+    if expired:
+        reason = _expired_reason(events, expired)
+        reason_id = EXPIRED_REASON_ID.get(reason, EXPIRED_FALLBACK_ID)
+        also = f" <span class=muted>({e(reason)})</span>" if reason else ""
+        out.append("<div class='expired' id='plan-expired'><b>Rencana ini sudah kedaluwarsa</b>"
+                   f"<p>Alasan / Reason: {e(reason_id)}{also}</p>"
+                   "<p>Tidak ada tindakan yang bisa disetujui lagi. Mulai rencana baru dari halaman Rencana."
+                   " / No action can be approved anymore; start a new plan from the Plans page.</p>"
+                   "<p><a class='btn' id='rerun' href='/admin/plans'>Jalankan ulang</a></p></div>")
     if msg:
         out.append(f"<p class=tag>{e(msg)}</p>")
     out.append(f"<div class=card><b>Permintaan / Request</b><pre>{e(plan['request'])}</pre></div>")
@@ -106,7 +131,7 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
     by_action: dict[str, list[dict]] = {}
     for a in plan.get("assumptions", []):
         by_action.setdefault(a.get("action_id", ""), []).append(a)
-    form = action_url is not None
+    form = action_url is not None and not expired
     if form:
         out.append(f"<form method=post action='{e(action_url)}'><input type=hidden name=plan_id value='{e(plan['plan_id'])}'>")
     for i, a in enumerate(plan["actions"], 1):

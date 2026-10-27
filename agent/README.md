@@ -34,6 +34,15 @@ OpenAI-compatible tool-calling model (DeepSeek, Qwen, Gemini via its OpenAI endp
   model's `tool_call_id`); an answer without the matching id (stale page, second tab, double click)
   is rejected and never applied to another call. The trace shows a decision only after the worker
   acknowledges it (`answer_applied`). The approval box also shows `check_claim`'s current verdict.
+- **The approval binds to what the reviewer saw.** `args_hash` (`audit.approval_snapshot`) covers the
+  action args including `evidence_ids` and `human_decisions` (only `action_id` is excluded), plus,
+  for claim-affecting tools, the engine snapshot shown: `status`, `approvable_amount`,
+  `evidence_ids`, `human_decisions`. The graph fills the reviewer decisions and the evidence the
+  latest check used into the args *before* the action is staged and the interrupt is shown, so the
+  `staged_action` event, the prompt, the `approval` and the executor all use the same full args. The
+  executor re-runs `check_claim` with the approved inputs and refuses with a `refusal` event
+  (`reason: "engine result differs from what the reviewer approved"`) when the status, amount,
+  evidence or decisions changed; changed args are refused as before.
 - **Fewer prompts:** unknown or hidden tool names return an error without asking; an identical
   repeat of a declined call is declined automatically; at most 10 approval requests per run. A declined call never reaches the server; the model gets `reviewer_declined` back.
 
@@ -462,7 +471,19 @@ start -> propose -> resolve --(question)--> clarify -> resolve
   IDs), assumptions, injection notices and highlighted `influenced_fields`, with per-action
   Approve/Reject and a note. Rendering logs `notice_shown` with the key `<run_id>:notice_shown:<notice
   id>`, so a refresh adds nothing. Submitting the form only stores the decision map
-  (`REIMBURSE_PLAN_STORE`); the graph process resumes from it.
+  (`REIMBURSE_PLAN_STORE`); the graph process resumes from it. An expired plan shows
+  "Rencana ini sudah kedaluwarsa" with the reason and a "Jalankan ulang" link instead of approve
+  controls. Expiry is swept by the **web process once at startup** for staged actions older than
+  `REIMBURSE_APPROVAL_DEADLINE_MIN` (default 30) whose run is no longer in the plan store. Opening a
+  log (`audit.default_log()`) and agent workers never sweep, so a worker cannot expire a plan that is
+  still waiting on someone's page.
+
+Production audit: with `APP_ENV=prod` or `APP_ENV=production` (case-insensitive), only a connected
+Postgres log is allowed. `REIMBURSE_AUDIT_DATABASE_URL` must be set, start with `postgres://` or
+`postgresql://`, and connect; otherwise `audit.check_audit_config()` raises `audit.AuditConfigError`
+and `investigate_worker.py` exits with error code `config` before running. There is no fallback to
+`REIMBURSE_AUDIT_LOG` (JSONL) or the in-memory log. Outside production, nothing changes. See the root
+README "Deployment notes: audit log".
 
 Demo (two terminals, same `REIMBURSE_AUDIT_LOG` and `REIMBURSE_PLAN_STORE`):
 

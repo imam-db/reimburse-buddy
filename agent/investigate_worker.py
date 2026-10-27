@@ -9,7 +9,9 @@ stdout events (one JSON object per line):
     {"type": "start", "model": ..., "compact": true}
     {"type": "step", "n": 1, "tool": ..., "args": {...}, "args_summary": ..., "result_summary": ...}
     {"type": "interrupt", "tool": ..., "args": {...}, "tool_call_id": ..., "approval_id": ...,
+     "engine": {"status", "approvable_amount", "evidence_ids", "human_decisions"} | absent,
      "current_decision": {...check_claim summary...} | null}   -> waits for the matching answer
+       `engine` is the snapshot the approval is bound to (also stored on the staged_action event).
     {"type": "answer_applied", "approval_id": ..., "approved": bool}   the answer took effect
     {"type": "final", "note": ..., "tokens": {...}}
     {"type": "error", "code": "no_key" | "token_limit" | "exception", "message": ...}
@@ -48,6 +50,7 @@ from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
+from reimburse_agent import audit
 from reimburse_agent.config import build_chat_model, load_config
 from reimburse_agent.graph import build_graph
 from reimburse_agent.mcp_client import mcp_tools
@@ -320,6 +323,11 @@ def main() -> None:
                    help="how many times the run may stop for a reviewer answer (question event)")
     p.add_argument("--fake-script")
     a = p.parse_args()
+    try:
+        audit.check_audit_config()  # production refuses JSONL / in-memory audit logs at startup
+    except audit.AuditConfigError as exc:
+        emit({"type": "error", "code": "config", "message": str(exc)})
+        sys.exit(6)
     try:
         code = asyncio.run(run(a))
     except Exception as exc:  # report, never a traceback with env in it

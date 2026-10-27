@@ -23,8 +23,8 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.types import interrupt
 
-from .audit import (AuditLog, args_hash, default_log, execute_approved, make_event, output_summary,
-                    run_versions, sha256, source_ids)
+from .audit import (AuditLog, args_hash, claim_affecting, default_log, engine_snapshot, execute_approved,
+                    make_event, output_summary, run_versions, sha256, source_ids)
 from .compact import compact as _compact, tool_text
 from . import injection as inj
 from .judge import get_judge, review_flags
@@ -156,6 +156,9 @@ class State(TypedDict, total=False):
     instructions: list[dict]  # explicit reviewer instructions not yet carried out (see parse_instructions)
     exec_queue: list[dict]  # decisions a gate node collected, waiting for its executor node
     exec_notes: list[str]
+    # tool_call_id -> the full args (evidence_ids/human_decisions filled in) staged and approved, so the
+    # executor uses exactly the basis the reviewer saw.
+    staged_args: Annotated[dict[str, dict], _merge]
     pending_evidence: list[dict]  # graph-queued evidence requests waiting for evidence_gate (not sent)
     graph_proposals: list[dict]  # gated actions the graph proposed itself: {"tool", "args", "id", "approved", "from"}
     unattributed_searches: int  # raw mailbox searches that named no single open gap
@@ -251,6 +254,8 @@ def attribute_query(query: str, gaps: list[str], check: dict) -> str | None:
 NOT_FROM_REVIEWER = ("human_decisions must come from the reviewer, not from you. The reviewer's decisions so far "
                      "are {d}; omit human_decisions and the graph fills them in. Nothing ran. If a decision is "
                      "needed, ask the reviewer.")
+WITHHELD_REFUSAL = ("text contains the withheld placeholder for instruction-like content. Rewrite it without the "
+                    "withheld marker or the withheld content, then call the tool again.")
 
 
 class GapSearchArgs(BaseModel):
@@ -616,17 +621,22 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
     def record(config, etype: str, ref: str, **kw) -> bool:
         return alog.append(make_event(run_id_of(config), etype, ref, **kw))
 
-    def stage(config, aid: str, tool: str, args: dict, by: str = "agent") -> None:
-        """Logged BEFORE the interrupt: the proposal exists even if nobody ever answers (startup sweep)."""
-        record(config, "staged_action", aid, actor="agent", action_id=aid, args_hash=args_hash(tool, args),
-               payload={"tool": tool, "args": args, "by": by}, sources=source_ids(args))
+    def stage(config, aid: str, tool: str, args: dict, by: str = "agent", engine: dict | None = None) -> None:
+        """Logged BEFORE the interrupt: the proposal exists even if nobody ever answers (the web app's
+        one-per-process startup sweep expires orphaned ones; opening a log never does). The stored args
+        are the full args (evidence_ids/human_decisions already filled in) and the hash covers the engine
+        snapshot the reviewer is about to see."""
+        record(config, "staged_action", aid, actor="agent", action_id=aid,
+               args_hash=args_hash(tool, args, engine=engine),
+               payload={"tool": tool, "args": args, "by": by,
+                        **({"engine": engine} if engine is not None else {})}, sources=source_ids(args))
 
-    def decide(config, aid: str, tool: str, args: dict, ok: bool, answer) -> bool:
+    def decide(config, aid: str, tool: str, args: dict, ok: bool, answer, engine: dict | None = None) -> bool:
         """Log the reviewer's answer. Fail closed: an approval that cannot be logged is a decline."""
         who = (answer.get("reviewer") if isinstance(answer, dict) else None) or "reviewer"
         actor = "human:" + (re.sub(r"[\s:]+", "_", str(who))[:60] or "reviewer")
         reason = None if ok else ((answer.get("reason") if isinstance(answer, dict) else "") or "no reason given")
-        h = args_hash(tool, args)
+        h = args_hash(tool, args, engine=engine)
         shown = [e for e in alog.list(run_id_of(config))
                  if e["action_id"] == aid and e["event_type"] == "staged_action"]
         if ok and shown and shown[0]["args_hash"] != h:  # args edited between the prompt and the answer
@@ -636,11 +646,58 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             ok, reason = False, "args changed after the reviewer was asked"
         try:
             record(config, "approval" if ok else "rejection", aid, actor=actor, action_id=aid,
-                   args_hash=h, payload={"tool": tool, **({"reason": reason} if reason else {})})
+                   args_hash=h, payload={"tool": tool, "args_only_hash": args_hash(tool, args),
+                                         **({"engine": engine} if engine is not None else {}),
+                                         **({"reason": reason} if reason else {})})
         except Exception as exc:
             log.error("audit: could not log the %s for %s: %s", "approval" if ok else "rejection", aid, exc)
             return False
         return ok
+
+    def approval_args(state: State, name: str, raw: dict) -> dict:
+        """The full args a gated call is staged and approved with: reviewer decisions (never the model's)
+        and the evidence the latest check actually used, filled in BEFORE the interrupt."""
+        args = dict(raw or {})
+        if name not in DECISION_TOOLS:
+            return args
+        trusted = trusted_decisions(state, args.get("claim_id"))
+        model_hd = args.get("human_decisions") or {}
+        if model_hd and model_hd != trusted:
+            return args  # run_tools refuses this after the answer; nothing executes
+        args.pop("human_decisions", None)
+        if trusted:
+            args["human_decisions"] = trusted
+        ev = list(args.get("evidence_ids") or [])
+        if not ev and run_claim:
+            pos = check_position(state.get("messages", []), run_claim)
+            if pos:
+                ev = list(state.get("effective_args", {}).get(pos[1], {}).get("evidence_ids") or [])
+        ignored = state.get("ignored_ids", {})
+        ev = [e for e in ev if e not in ignored]
+        if ev:
+            args["evidence_ids"] = ev
+        else:
+            args.pop("evidence_ids", None)
+        return args
+
+    async def engine_for(name: str, args: dict) -> dict | None:
+        """The engine snapshot shown to the reviewer for a claim-affecting action, or None when the call
+        does not touch a claim decision. Built from exactly the args that get staged: the claim_id plus
+        the evidence_ids/human_decisions already in them, never from another source."""
+        if not claim_affecting(name, args) or "check_claim" not in by_name:
+            return None
+        ev = [str(e) for e in (args.get("evidence_ids") or [])]
+        hd = {str(k): str(v) for k, v in (args.get("human_decisions") or {}).items()}
+        check_args: dict = {"claim_id": args["claim_id"]}
+        if ev:
+            check_args["evidence_ids"] = ev
+        if hd:
+            check_args["human_decisions"] = hd
+        try:
+            check = await raw_check(check_args)
+        except Exception:
+            return None
+        return engine_snapshot(check, ev, hd)
 
     def with_aid(name: str, args: dict, aid: str) -> dict:
         """Pass action_id to tools whose schema takes it (the mock outbox refuses a repeated action_id)."""
@@ -714,8 +771,28 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             record(config, "refusal", f"{aid}:arg_source", actor="system", action_id=aid, args_hash=args_hash(name, args),
                    payload={"tool": name, "reason": "argument source not allowed", "violations": bad})
             return None, "argument source not allowed: " + "; ".join(bad)
+        marker = inj.withheld_marker_fields(args)  # defence in depth: staging refuses these too
+        if marker:
+            record(config, "refusal", f"{aid}:withheld_marker", actor="system", action_id=aid,
+                   args_hash=args_hash(name, args),
+                   payload={"tool": name, "reason": "withheld marker in free-text args", "fields": marker})
+            return None, WITHHELD_REFUSAL
+
+        async def engine_check(a: dict, _approved_engine: dict) -> dict:
+            """Re-run check_claim with the executed args' own claim_id/evidence_ids/human_decisions. The
+            approval already bound to these args (args_only_hash matched), so the basis is the args."""
+            ev = [str(e) for e in (a.get("evidence_ids") or [])]
+            hd = {str(k): str(v) for k, v in (a.get("human_decisions") or {}).items()}
+            check_args: dict = {"claim_id": a.get("claim_id")}
+            if ev:
+                check_args["evidence_ids"] = ev
+            if hd:
+                check_args["human_decisions"] = hd
+            return engine_snapshot(await raw_check(check_args), ev, hd)
+
         res = await execute_approved(alog, run_id_of(config), aid, name, args,
-                                     lambda a: invoke(name, with_aid(name, a, aid)))
+                                     lambda a: invoke(name, with_aid(name, a, aid)),
+                                     engine_check=engine_check if claim_affecting(name, args) else None)
         if res["status"] == "executed":
             return res["result"], None
         return None, res.get("reason") or res.get("error") or res["status"]
@@ -889,11 +966,12 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             record(config, "clarification", ref, payload={"text": str(reply.content)})
         return {"messages": [reply], "tokens_used": used + n}
 
-    def gate(state: State, config):
+    async def gate(state: State, config):
         last = state["messages"][-1]
         declined: dict[str, str] = {}
         count = state.get("gated_count", 0)
         sigs = list(state.get("declined_sigs", []))
+        staged: dict[str, dict] = {}
         for call in last.tool_calls:
             if call["name"] not in by_name:
                 continue  # unknown or hidden tool: run_tools returns an error, no prompt for the reviewer
@@ -906,26 +984,39 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             if count >= max_gated:
                 declined[call["id"]] = f"limit of {max_gated} approval requests per run reached"
                 continue
-            bad = arg_check(state, call["name"], call["args"])
+            # Fill reviewer decisions / evidence BEFORE asking, and take the engine snapshot the reviewer
+            # is shown. Stage, interrupt, approval and executor all use these full args.
+            args = approval_args(state, call["name"], call["args"])
+            bad = arg_check(state, call["name"], args)
             if bad:
                 record(config, "refusal", f"{call['id']}:arg_source", actor="system", action_id=call["id"],
-                       args_hash=args_hash(call["name"], call["args"]),
+                       args_hash=args_hash(call["name"], args),
                        payload={"tool": call["name"], "reason": "argument source not allowed", "violations": bad})
                 declined[call["id"]] = "argument source not allowed: " + "; ".join(bad)
                 continue
+            marker = inj.withheld_marker_fields(args)
+            if marker:  # model copied a withheld placeholder: nothing is shown to the reviewer
+                record(config, "refusal", f"{call['id']}:withheld_marker", actor="system", action_id=call["id"],
+                       args_hash=args_hash(call["name"], args),
+                       payload={"tool": call["name"], "reason": "withheld marker in free-text args", "fields": marker})
+                declined[call["id"]] = WITHHELD_REFUSAL
+                continue
             count += 1
-            stage(config, call["id"], call["name"], call["args"])
-            answer = interrupt({"tool": call["name"], "args": call["args"], "tool_call_id": call["id"],
-                                **review_banner(config, state, call["id"], call["args"])})
+            engine = await engine_for(call["name"], args)
+            stage(config, call["id"], call["name"], args, engine=engine)
+            staged[call["id"]] = args
+            answer = interrupt({"tool": call["name"], "args": args, "tool_call_id": call["id"],
+                                **({"engine": engine} if engine is not None else {}),
+                                **review_banner(config, state, call["id"], args)})
             # The answer must name the call it approves; anything else counts as a decline.
             ok = (isinstance(answer, dict) and answer.get("approved") is True
                   and answer.get("tool_call_id") == call["id"])
-            ok = decide(config, call["id"], call["name"], call["args"], ok, answer)
+            ok = decide(config, call["id"], call["name"], args, ok, answer, engine=engine)
             if not ok:
                 reason = (answer.get("reason") if isinstance(answer, dict) else "") or "no reason given"
                 declined[call["id"]] = reason
                 sigs.append(sig)
-        return {"declined": declined, "gated_count": count, "declined_sigs": sigs}
+        return {"declined": declined, "gated_count": count, "declined_sigs": sigs, "staged_args": staged}
 
     def review_banner(config, state: State, aid: str, args: dict) -> dict:
         """Extra interrupt fields when the run has flagged content: the notice banner (logged as injection_notice
@@ -1111,7 +1202,11 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         flagged = list(state.get("needs_review", []))
         n_before = len(notices)
         for call in last.tool_calls:
-            name, args = call["name"], dict(call.get("args") or {})
+            name = call["name"]
+            raw = dict(call.get("args") or {})
+            # A gated call runs with exactly the full args staged and approved before the interrupt.
+            staged = call["id"] in state.get("staged_args", {})
+            args = dict(state.get("staged_args", {}).get(call["id"]) or raw)
             note, refused = None, False
             if name == REPORT_TOOL:  # the model's self-report: may add flags, never clears a rule hit
                 reports = args.get("embedded_instructions_found") or []
@@ -1172,21 +1267,27 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                 content = None
                 if name in DECISION_TOOLS:
                     trusted = trusted_decisions(state, args.get("claim_id"))
-                    model_hd = args.get("human_decisions") or {}
+                    model_hd = raw.get("human_decisions") or {}
                     if model_hd and model_hd != trusted:
                         refused = True
                         content = json.dumps({"error": "human_decisions_not_from_reviewer",
                                               "message": NOT_FROM_REVIEWER.format(d=json.dumps(trusted))})
                     else:
-                        args.pop("human_decisions", None)
-                        if trusted:
-                            args["human_decisions"] = trusted
-                    ev = list(args.get("evidence_ids") or [])
-                    drop = [e for e in ev if e in ignored]
-                    if drop:
-                        args["evidence_ids"] = [e for e in ev if e not in ignored]
-                        note = ("removed " + ", ".join(f"{e} ({ignored[e]})" for e in drop)
-                                + ": check_claim already ignored them in this run. Don't pass them again.")
+                        if not staged:
+                            # Read-only checks/drafts get the same trusted fill as before. A staged gated
+                            # call already carries the full approved args; it must not change here.
+                            args.pop("human_decisions", None)
+                            if trusted:
+                                args["human_decisions"] = trusted
+                            ev = list(args.get("evidence_ids") or [])
+                            drop = [e for e in ev if e in ignored]
+                            if drop:
+                                args["evidence_ids"] = [e for e in ev if e not in ignored]
+                        else:
+                            drop = [e for e in (raw.get("evidence_ids") or []) if e in ignored]
+                        if drop:
+                            note = ("removed " + ", ".join(f"{e} ({ignored[e]})" for e in drop)
+                                    + ": check_claim already ignored them in this run. Don't pass them again.")
                 if content is None and name == "draft_decision" and args.get("claim_id") == run_claim and check:
                     hold, flag = await presearch_draft(args)
                     if hold:
@@ -1333,18 +1434,24 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         answers = []
         for a in pend:
             if count >= max_gated:
-                answers.append((a, None, f"limit of {max_gated} approval requests per run reached"))
+                answers.append({"args": dict(a), "id": None,
+                                "reason": f"limit of {max_gated} approval requests per run reached"})
                 continue
             count += 1
+            # Fill the full args (reviewer decisions + the evidence the latest check used) BEFORE the
+            # reviewer is asked, and bind the approval to the engine snapshot shown.
+            full = approval_args(state, EVIDENCE_TOOL, a)
+            engine = await engine_for(EVIDENCE_TOOL, full)
             tcid = f"graph-evidence-{a['item_id']}-{a['gap_code']}-{len(props) + len(answers)}"
-            stage(config, tcid, EVIDENCE_TOOL, a, by="graph")
-            answer = interrupt({"tool": EVIDENCE_TOOL, "args": a, "tool_call_id": tcid, "by": "graph",
+            stage(config, tcid, EVIDENCE_TOOL, full, by="graph", engine=engine)
+            answer = interrupt({"tool": EVIDENCE_TOOL, "args": full, "tool_call_id": tcid, "by": "graph",
+                                **({"engine": engine} if engine is not None else {}),
                                 "prompt": f"Ask the employee for {a['item_id']} ({a['gap_code']}) with the fixed template?"})
             ok = isinstance(answer, dict) and answer.get("approved") is True and answer.get("tool_call_id") == tcid
-            ok = decide(config, tcid, EVIDENCE_TOOL, a, ok, answer)
+            ok = decide(config, tcid, EVIDENCE_TOOL, full, ok, answer, engine=engine)
             reason = None if ok else ((answer.get("reason") if isinstance(answer, dict) else "") or
                                       "no reason given (or the approval could not be logged)")
-            answers.append({"args": a, "id": tcid, "reason": reason})
+            answers.append({"args": full, "id": tcid, "reason": reason})
         return {"pending_evidence": [], "gated_count": count, "exec_queue": answers}
 
     async def evidence_exec(state: State, config):
@@ -1365,14 +1472,9 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                 props.append({"tool": EVIDENCE_TOOL, "args": a, "id": tcid, "approved": False, "from": "graph"})
                 notes.append(f"Not sent: evidence request for {k}; the reviewer declined it ({reason}).")
                 continue
-            full = {**a, "human_decisions": trusted_decisions(state, run_claim) or None}
-            pos = check_position(state["messages"], run_claim) if run_claim else None
-            ev = list(state.get("effective_args", {}).get(pos[1], {}).get("evidence_ids") or []) if pos else []
-            if ev:
-                full["evidence_ids"] = ev
             try:
                 snap = await snapshot_for(state, snap, EVIDENCE_TOOL)
-                text, why = await execute(config, tcid, EVIDENCE_TOOL, {x: v for x, v in full.items() if v is not None})
+                text, why = await execute(config, tcid, EVIDENCE_TOOL, a, state)
                 res = {"error": f"not executed: {why}"} if why is not None else _jsonish(text)
                 failed = res is None or "error" in res
             except Exception as exc:
@@ -1554,11 +1656,13 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                 continue
             count += 1
             tcid = f"graph-{name}-{len(props) + len(decided)}"
-            stage(config, tcid, name, call_args, by="graph")
+            engine = await engine_for(name, call_args)
+            stage(config, tcid, name, call_args, by="graph", engine=engine)
             answer = interrupt({"tool": name, "args": call_args, "tool_call_id": tcid, "by": "graph",
+                                **({"engine": engine} if engine is not None else {}),
                                 "from": ins["quote"], "prompt": f'Proposed by the graph because you asked: "{ins["quote"]}"'})
             ok = isinstance(answer, dict) and answer.get("approved") is True and answer.get("tool_call_id") == tcid
-            ok = decide(config, tcid, name, call_args, ok, answer)
+            ok = decide(config, tcid, name, call_args, ok, answer, engine=engine)
             reason = None if ok else ((answer.get("reason") if isinstance(answer, dict) else "") or "no reason given")
             decided.append({"quote": ins["quote"], "tool": name, "args": call_args, "id": tcid, "ok": ok,
                             "reason": reason})

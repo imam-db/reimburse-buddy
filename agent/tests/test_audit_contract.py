@@ -3,6 +3,7 @@ validation, hygiene). The Postgres variant runs only with `-m postgres` and DATA
 
 import os
 import uuid
+from datetime import timedelta
 
 import pytest
 
@@ -83,10 +84,12 @@ def test_hygiene_masks_pii_and_secrets():
     assert len(p["output"]) <= A.MAX_TEXT + 100 and p["output_sha256"] == A.sha256("x" * 2000)
 
 
-def test_args_hash_is_stable_and_ignores_graph_injected_fields():
+def test_args_hash_is_stable_covers_evidence_and_ignores_action_id():
     a = {"claim_id": "CLM-1", "item_id": "IT-1"}
     assert A.args_hash("t", a) == A.args_hash("t", dict(reversed(a.items())))
-    assert A.args_hash("t", a) == A.args_hash("t", {**a, "evidence_ids": ["MSG-1"], "action_id": "z"})
+    assert A.args_hash("t", a) == A.args_hash("t", {**a, "action_id": "z"})
+    assert A.args_hash("t", a) != A.args_hash("t", {**a, "evidence_ids": ["MSG-1"]})
+    assert A.args_hash("t", a) != A.args_hash("t", {**a, "human_decisions": {"IT-1": "approve_full"}})
     assert A.args_hash("t", a) != A.args_hash("t", {**a, "item_id": "IT-2"})
 
 
@@ -95,10 +98,10 @@ def test_sweep_marks_unanswered_staged_actions_expired(backend):
     log.append(A.make_event(r, "staged_action", "s1", action_id="s1", args_hash="h1", payload={"tool": "x"}))
     log.append(A.make_event(r, "staged_action", "s2", action_id="s2", args_hash="h2", payload={"tool": "x"}))
     log.append(A.make_event(r, "approval", "s2", actor="human:x", action_id="s2", args_hash="h2"))
-    assert A.sweep_expired(log) >= 1
+    assert A.sweep_expired(log, older_than=timedelta(0)) >= 1
     exp = [e for e in log.list(r) if e["event_type"] == "expired"]
     assert [(e["action_id"], e["actor"]) for e in exp] == [("s1", "system")]
-    A.sweep_expired(log)
+    A.sweep_expired(log, older_than=timedelta(0))
     assert len([e for e in log.list(r) if e["event_type"] == "expired"]) == 1  # idempotent
 
 
