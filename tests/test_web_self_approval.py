@@ -29,6 +29,7 @@ from reimburse_agent.office.store import PlanStore
 PW = "correct-horse-battery-staple"
 REQ = "Tolong kirim notulen ke Pak Budi ya, terus jadwalin follow-up Jumat siang."
 OWN_CLAIM = "CLM-2026-9901"  # a copy of CLM-2026-0103 (Medan hotel over cap) owned by EMP-100
+SHOWCASE_CLAIM = "CLM-2026-0120"  # data/claims.json, batch 2026-W44, owned by EMP-101
 
 
 def _own_claim() -> dict:
@@ -394,6 +395,36 @@ def test_claim_page_hides_the_approval_controls_for_the_owner(client):
     page = c.get(f"/admin/claims/{OWN_CLAIM}").text
     assert "id='self-approval'" not in page
     assert f'action="/admin/claims/{OWN_CLAIM}/status"' in page
+
+
+def test_second_batch_holds_one_claim_owned_by_a_reviewer(client):
+    """The demo batch keeps its numbers; the self-approval showcase lives in its own batch."""
+    c = client
+    login(c, "EMP-100")
+    w43 = web.triage_claims(web.store, web.BATCH)
+    assert (w43["claims"], len(w43["auto_cleared"]), len(w43["exceptions"])) == (10, 7, 3)
+    w44 = web.triage_claims(web.store, web.OWN_BATCH)
+    assert w44["claims"] == 1 and [e["claim_id"] for e in w44["exceptions"]] == [SHOWCASE_CLAIM]
+    page = c.get(f"/admin?batch={web.OWN_BATCH}").text
+    assert web.OWN_BATCH in page and SHOWCASE_CLAIM in page
+
+
+def test_showcase_claim_blocks_its_owner_and_lets_another_reviewer_in(client):
+    c = client
+    login(c, "EMP-101")  # the owner
+    page = c.get(f"/admin/claims/{SHOWCASE_CLAIM}").text
+    assert "id='self-approval'" in page
+    assert f"action='/admin/claims/{SHOWCASE_CLAIM}/decide'" not in page
+
+    r = c.post(f"/admin/claims/{SHOWCASE_CLAIM}/decide",
+               data={"item_id": "IT-2", "choice": "approve_capped"}, follow_redirects=False)
+    assert r.status_code == 303 and "msg=" in r.headers["location"]
+    assert web.REVIEW.get(SHOWCASE_CLAIM, {}).get("decisions", {}) == {}
+
+    login(c, "EMP-102")
+    page = c.get(f"/admin/claims/{SHOWCASE_CLAIM}").text
+    assert "id='self-approval'" not in page
+    assert f"action='/admin/claims/{SHOWCASE_CLAIM}/decide'" in page
 
 
 def test_without_a_login_the_actor_is_unchanged(client, monkeypatch):
