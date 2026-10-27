@@ -1,38 +1,53 @@
 # reimburse-buddy
 
-> The hackathon submission is the WorkBuddy skill + MCP server. `web/` is a separate simulation UI (no LLM) and is not part of the judged demo.
+An office agent for finance teams, built for the **Tencent Cloud Hackathon 2026 (Office Agent track)**.
+It audits business-travel expense claims and carries out office requests (send minutes, schedule a
+follow-up) without ever acting on its own: a deterministic rule engine decides every amount, the
+language model only investigates and drafts, and every write waits for a human approval that is
+recorded in an append-only audit log.
 
-An office agent that audits business-travel expense claims, built for the
-**Tencent Cloud Hackathon 2026 (Office Agent track)** on **Tencent WorkBuddy**.
+This repository holds two versions that share one rule engine:
 
-The agent reads a claim, plans its review, spots gaps, goes looking for evidence
-(shared reimburse@ mailbox, calendar, approval memos), revises its plan on screen, asks a human only when
-it has to, and drafts a decision. Every Rupiah figure comes from a deterministic Python
-rule engine, never from the language model.
+- **Version B (Challenge B submission):** the web app in `web/` plus the LangGraph agent in `agent/`.
+  Finance reviews claims, starts agent investigations, turns requests into plans and approves each
+  action on a confirmation page. Employees submit claims and can ask about their own claims.
+- **Version A:** the WorkBuddy skill (`skills/claim-auditor/SKILL.md`) and the MCP server in
+  `src/reimburse_buddy/`, described under [Plug into WorkBuddy](#plug-into-workbuddy-version-a).
 
-> All data in this repository is synthetic. Company, people, hotels and emails are fictional.
+> All data in this repository is synthetic. Company, people, hotels and emails are fictional. No real
+> email or message is ever sent.
 
-## Architecture
+## Architecture (version B)
 
-```mermaid
-flowchart LR
-    U[Reviewer] <-->|chat, questions| WB
-    subgraph WB[Tencent WorkBuddy]
-        S[Skill: claim-auditor<br/>plan, revise, ask human]
-    end
-    WB <-->|MCP over stdio| M
-    subgraph M[reimburse-buddy MCP server - Python]
-        T[Mock office tools<br/>get_claim, list_claims, get_policy<br/>search_reimburse_mailbox, get_calendar, find_approval_memo]
-        R[Rule engine - Decimal<br/>check_claim, draft_decision]
-    end
-    T --> D[(data/*.json<br/>synthetic)]
-    R --> D
-```
+<picture>
+  <source srcset="docs/architecture.svg" type="image/svg+xml">
+  <img src="docs/architecture.png" alt="Reimburse Buddy version B architecture">
+</picture>
 
-- **WorkBuddy** does the reasoning: planning, tool choice, plan revision and the human-in-the-loop.
-- **Python** does what must be exact: data access and policy arithmetic.
+Source: [docs/architecture_diagram.py](docs/architecture_diagram.py) (regenerates the SVG; the PNG is
+rendered from it).
 
-## How the AI agent works (version B)
+- **Web app** (`web/reimburse_web/`, FastAPI, server-rendered HTML, Indonesian labels in `labels.py`):
+  employee portal, finance triage and claim pages, request intake, plan confirmation, employee Q&A.
+- **Claim agent** (`agent/reimburse_agent/graph.py`, LangGraph, DeepSeek through any OpenAI-compatible
+  API): runs as a subprocess of the web app (`agent/investigate_worker.py`), calls the MCP tools and
+  the rule engine, and drafts the decision note.
+- **Plan graph** (`agent/reimburse_agent/plan_graph.py`, no LLM): turns a request into staged actions,
+  asks which person is meant when a name is ambiguous, takes recipients only from the directory
+  (EMP- IDs) and times only from the operating-rules tool. See [docs/request-intake.md](docs/request-intake.md).
+- **Approval gate and executor are separate graph nodes**, because LangGraph re-runs an interrupted node
+  from the top. The gate logs the reviewer's answer; the executor acts only when the audit log holds an
+  approval for the same `action_id` and `args_hash`, re-runs `check_claim` for claim writes, and
+  otherwise refuses.
+- **Audit log** (`agent/reimburse_agent/audit.py`, migrations in `agent/migrations/`): append-only,
+  unique `event_key` per event, Postgres in production (see [Deployment notes](#deployment-notes-audit-log)).
+- **Prompt-injection detection** (`agent/reimburse_agent/injection.py`): rule-based HIGH/LOW detector,
+  withheld spans blocked at staging, an echo check, a `needs_review` flag and an allowlist for where
+  action arguments may come from.
+- **Employee Q&A** (flag `EMPLOYEE_QA`): read-only, identity from the signed session. See
+  [docs/employee-qa.md](docs/employee-qa.md).
+
+## How the claim agent works
 
 <picture>
   <source srcset="docs/agent-how-it-works.svg" type="image/svg+xml">
@@ -43,7 +58,7 @@ Source: [docs/agent-how-it-works.excalidraw](docs/agent-how-it-works.excalidraw)
 
 - The LangGraph agent (`agent/reimburse_agent/graph.py`) reads the claim and the policy, then calls `check_claim`. Every amount and gap comes from that deterministic rule engine, never from the LLM.
 - For each open gap it searches the mailbox with `search_for_gap`: 2 searches before asking the employee and 1 after. If a document is still missing, it asks the employee with the fixed-template `request_missing_evidence` and checks the claim again.
-- Read-only tools run freely. Every other write or message stops at an approval gate, apart from the capped evidence request.
+- Read-only tools run freely. Every write or message stops at the approval gate, evidence requests included. A run may ask for at most 10 approvals; after that, gated calls are declined without asking.
 - Decisions that need judgment (`approve_full`, `approve_capped`, `reject`) come only from the finance reviewer, through the web question form or a reply. The graph refuses decisions the model tries to set itself.
 - Once the check is clean, or every gap has been searched and asked about, the graph drafts the decision note. Finance takes the final action.
 - Version B also offers `find_messages(employee_id, query, date_from, date_to)` (agent only, not a WorkBuddy tool). It collects the employee's messages through the same mailbox search, ranks them with BM25 plus a small local multilingual embedding model (fused with reciprocal rank fusion), and returns the top 5. Each call counts as one search against the gap's budget. If the model cannot be loaded, ranking falls back to BM25 and the result says so.
@@ -61,7 +76,7 @@ Retrieval was the bottleneck. With semantic retrieval, the no-LLM baseline passe
 
 - The whole-mailbox control passes everything because every synthetic receipt and schedule change carries structured fields (`claim_id`, `item_id`, `meeting_update`) and the rule engine keeps only what matches. On these fixtures the loss comes from the top-5 cut, not from understanding. Real mail has no such tags.
 - Large sets (`agent/eval/large_fixtures.py`): 46-68 messages per employee over Aug-Oct 2026, hand-written paraphrases combined by a seeded RNG; set A and set B share no paraphrase. Needed message recall@5 / MRR (baseline query): set A lexical 0.2/0.2, ranked 0.2/0.12; set B lexical 0.4/0.12, ranked 0.2/0.15 (`agent/eval/retrieval_metrics.py`). Every large mailbox is flagged `possibly_incomplete` (the 36 probes reach 33-47 of 46-68 messages).
-- Reasoning track (`agent/eval/reasoning_fixtures.py`, labels in `fixtures/reasoning/labels.json`, to be reviewed by Imam): the baseline falsely approves R1 (meeting moved, then moved back) and R1x (moved, then cancelled in free text). R1 exposes an engine issue: `meeting_update`s are applied in evidence-list order, not message date order.
+- Reasoning track (`agent/eval/reasoning_fixtures.py`, labels in `fixtures/reasoning/labels.json`, to be reviewed by Imam): the baseline falsely approves R1 (meeting moved, then moved back) and R1x (moved, then cancelled in free text). R1 exposed an engine issue: `meeting_update`s were applied in evidence-list order, not message date order. This is fixed (PR #30: updates are applied by message date, and a late checkout justified by the calendar alone is flagged); the table above predates the fix and has not been re-run.
 - Results: `agent/eval/results/{hard,large_a,large_b,reasoning}-baseline*.json` and `retrieval-*.json`; each records a SHA-256 of the fixtures.
 
 ### Prepared, not yet run: model screening and an optional judge
@@ -111,11 +126,14 @@ Retrieval was the bottleneck. With semantic retrieval, the no-LLM baseline passe
 | `request_approval(manager_id, claim_id, item_id, reason)` | (Mock write) Ask the claimant's manager; returns a pending request |
 | `update_claim_status(claim_id, status, note)` | (Mock write) `on_hold`, `approved`, `partially_approved`, `rejected` |
 | `get_outbox()` | Everything the agent sent or changed this session |
-| `reset_demo()` | Restore all in-memory state before a new take (replies, outbox, approvals, statuses) |
+| `reset_demo()` | (Mock write) Restore all in-memory state before a new take (replies, outbox, approvals, statuses) |
+| `request_missing_evidence(claim_id, item_id, gap_code)` | (Version B) Ask the claim's owner for a missing document with a fixed template; refuses a repeat while the last request is unanswered |
 
-The four `(Mock write)` tools are registered only when `REIMBURSE_ENABLE_WRITE_TOOLS=1`. The
-WorkBuddy config (`.workbuddy/mcp.json`) does not set it, so in WorkBuddy the agent can only read and
-draft; version B's agent sets it and gates every write behind a human approval.
+The ten tools without a mark are always registered. The five `(Mock write)` tools are registered only
+when `REIMBURSE_ENABLE_WRITE_TOOLS=1`, and `request_missing_evidence` only when
+`REIMBURSE_ENABLE_EVIDENCE_TOOL=1`. The WorkBuddy config (`.workbuddy/mcp.json`) sets neither, so in
+WorkBuddy the agent can only read and draft; version B's agent sets both (16 tools) and gates every
+write, evidence requests included, behind a human approval.
 
 Write tools are mocks: state lives in memory for one server process. `send_message` is a
 closed loop: scripted replies in `data/replies.json` are the employee's answer and land in the reimburse@ mailbox right away,
@@ -176,14 +194,51 @@ cd reimburse-buddy
 uv sync
 uv run pytest            # rule tests + a real MCP stdio round-trip
 uv run --no-dev reimburse-buddy-mcp   # starts the server on stdio (WorkBuddy normally does this)
+(cd agent && uv sync && uv run pytest -q)   # agent, plan graph, audit log, injection, Q&A
 ```
 
-## Plug into WorkBuddy
+## Run the version B web app
+
+```bash
+uv sync && (cd agent && uv sync)
+export DEEPSEEK_API_KEY=...   # only for "Selidiki dengan agent"; never commit it
+EMPLOYEE_QA=1 uv run uvicorn --app-dir web reimburse_web.app:app --port 8000
+# open http://127.0.0.1:8000/
+```
+
+Without a model key everything except the agent investigation works: triage, claim pages, request
+intake and plan confirmation, and employee Q&A (offline router) need no LLM.
+
+### Environment variables
+
+Secrets come from the environment (or a git-ignored `.env.local`) and are never committed.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `APP_ENV` | unset | `prod` / `production` requires a Postgres audit log and refuses JSONL or memory |
+| `REIMBURSE_AUDIT_DATABASE_URL` | unset | Postgres DSN for the audit log (secret; app role, Neon direct endpoint) |
+| `REIMBURSE_AUDIT_LOG` | unset | JSONL audit log path outside production; unset means in memory |
+| `DEEPSEEK_API_KEY` or `REIMBURSE_AGENT_API_KEY` | unset | Model key for the claim agent (secret) |
+| `REIMBURSE_AGENT_MODEL` / `REIMBURSE_AGENT_BASE_URL` | `deepseek-flash` / `https://api.deepseek.com` | Any OpenAI-compatible endpoint |
+| `REIMBURSE_AGENT_MAX_TOKENS` | 250000 | Model tokens per claim run |
+| `REIMBURSE_AGENT_RUN_DEADLINE` | 600 | Seconds of agent work per run (paused while an approval is pending) |
+| `REIMBURSE_AGENT_APPROVAL_DEADLINE` | 900 | Seconds a pending approval waits before it is declined |
+| `REIMBURSE_INVESTIGATE_MAX_PER_MIN` | 3 | Agent runs started per minute per web process (one live run at a time) |
+| `REIMBURSE_APPROVAL_DEADLINE_MIN` | 30 | Minutes before an unanswered staged action of a dead run is expired |
+| `EMPLOYEE_QA` | off | Employee Q&A box and `POST /employee/qa` (see [docs/employee-qa.md](docs/employee-qa.md)) |
+| `REIMBURSE_DEMO_SESSION_KEY` | random per process | HMAC key for the demo session cookie; set it in any shared deploy |
+| `REIMBURSE_PLAN_STORE` | `agent/.plans` | Where plans, requests and per-run mock office state are stored |
+| `REIMBURSE_OFFICE_CONTACTS` / `REIMBURSE_OFFICE_RULES` | bundled synthetic files | Contact directory and operating rules for request intake |
+| `REIMBURSE_EXTRACTOR` | `ocr` | Upload extraction: `ocr`, `dual`, `rapidocr` or `vision` (see [File extraction](#file-extraction)) |
+| `REIMBURSE_WEB_UPLOADS` | `web/uploads` | Where uploaded files are kept |
+| `REIMBURSE_BUDDY_DATA` | `data/` | Synthetic dataset used by the rule engine and the MCP server |
+
+## Plug into WorkBuddy (version A)
 
 1. Copy `.workbuddy/mcp.json` into your project's `.workbuddy/` folder (or merge it into
    `~/.workbuddy/mcp.json`) and replace `/ABSOLUTE/PATH/TO/reimburse-buddy` with your clone path.
    On Windows use a path like `C:\\Users\\you\\reimburse-buddy`.
-2. Restart WorkBuddy and confirm the `reimburse-buddy` server shows its 14 tools.
+2. Restart WorkBuddy and confirm the `reimburse-buddy` server shows its 10 tools.
 3. Add the skill in `skills/claim-auditor/SKILL.md` to WorkBuddy's skills. It covers the gap-code-to-tool
    mapping, the fallback search strategy, how to explain `ignored_evidence`, batching questions to the
    reviewer, and post-decision actions.
@@ -235,6 +290,15 @@ HTTP route for this: the web simulation has no admin authentication, so it is CL
 ## Project layout
 
 ```
+web/reimburse_web/      version B web app (FastAPI): app.py, intake.py, plans.py, qa.py, upload_flow.py,
+                        agent_bridge.py (starts the agent worker), labels.py (Indonesian UI labels)
+agent/
+  reimburse_agent/      graph.py (claim agent), plan_graph.py, office/ (plan, directory, rules, mock tools),
+                        audit.py, injection.py, qa/, retrieval.py, audit_selftest.py
+  investigate_worker.py agent subprocess used by the web app
+  migrations/           Postgres audit log schema (001-004)
+  eval/                 synthetic eval suites and results
+docs/                   architecture and flow diagrams, request intake, employee Q&A, UI notes
 src/reimburse_buddy/
   server.py      MCP server (FastMCP, stdio)
   rules.py       deterministic rule engine
@@ -264,13 +328,14 @@ documents to, plus connectors for calendar, HR and ERP. The mock MCP tools here 
 
 MIT
 
-## Beyond the hackathon
+## Web app details (`web/`)
 
-### Web simulation UI (`web/`)
+### Pages
 
-Not part of the judged demo. `web/` holds a small two-sided FastAPI app that imports the same core (`data_store`, `rules`, `decision`,
-`triage`). It needs no LLM: the reviewer investigates and the rule engine computes every amount. A LangGraph agent (the planned
-version B) will later plug in at `investigate()` and call the tools over MCP.
+`web/` is the version B app: a two-sided FastAPI app that imports the same core (`data_store`, `rules`,
+`decision`, `triage`). The rule engine computes every amount. The reviewer can investigate by hand or start
+the claim agent ("Selidiki dengan agent"), which runs `agent/investigate_worker.py` as a subprocess and
+calls the tools over MCP; only that button needs a model key.
 
 - Employee portal (`/employee`), drop-first: enter the trip, drop all receipts and boarding passes at once
   (`/employee/new`), then check one draft card per item. Each card field shows where it came from: extracted
