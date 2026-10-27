@@ -143,8 +143,11 @@ class Run:
                 return evs[i]
         return None
 
-    def reply(self, question_id: str, text: str, decisions: dict[str, str]) -> bool:
-        """Answer the agent's open question; decisions become the graph's reviewer_decisions."""
+    def reply(self, question_id: str, text: str, decisions: dict[str, str], reviewer: str = "") -> bool:
+        """Answer the agent's open question; decisions become the graph's reviewer_decisions.
+
+        `reviewer` travels with the answer so the worker can pass it on to the graph, which logs the
+        decision as human:<id> instead of the anonymous "reviewer"."""
         with self.lock:
             q = None
             for ev in reversed(self.events):
@@ -158,7 +161,7 @@ class Run:
             self.answered.add(question_id)
             try:
                 self.proc.stdin.write(json.dumps({"question_id": question_id, "reply": text,
-                                                  "decisions": decisions}) + "\n")
+                                                  "decisions": decisions, "reviewer": reviewer}) + "\n")
                 self.proc.stdin.flush()
             except (BrokenPipeError, ValueError):
                 return False
@@ -168,11 +171,12 @@ class Run:
     def done(self) -> bool:
         return any(e["type"] in ("final", "error") for e in self.snapshot())
 
-    def resume(self, approval_id: str, approved: bool, reason: str = "") -> bool:
+    def resume(self, approval_id: str, approved: bool, reason: str = "", reviewer: str = "") -> bool:
         """Answer the pending interrupt identified by its worker-generated approval_id. False when
         that interrupt is not the one waiting (stale page, second tab, double click) or was already
         answered; nothing is sent then. The trace shows the decision only after the worker's
-        answer_applied acknowledgement."""
+        answer_applied acknowledgement. `reviewer` is the signed-in EMP-ID, so the audit entry names the
+        person who approved rather than the anonymous "reviewer"."""
         with self.lock:  # check and write under one lock
             req = self._pending(self.events)
             if req is None or not approval_id or req.get("approval_id") != approval_id or approval_id in self.answered:
@@ -180,7 +184,7 @@ class Run:
             self.answered.add(approval_id)
             try:
                 self.proc.stdin.write(json.dumps({"approval_id": approval_id, "approved": approved,
-                                                  "reason": reason}) + "\n")
+                                                  "reason": reason, "reviewer": reviewer}) + "\n")
                 self.proc.stdin.flush()
             except (BrokenPipeError, ValueError):
                 return False

@@ -9,13 +9,16 @@ Rejections, notes and `on_hold` stay available: they cannot approve anything.
 """
 
 import copy
+import json
 import re
+import threading
 
 import pytest
 from fastapi.testclient import TestClient
 
 from reimburse_web import app as web
 from reimburse_web import auth, intake, plans
+from reimburse_web.agent_bridge import Run
 
 from reimburse_agent import audit as A
 from reimburse_agent.office.store import PlanStore
@@ -242,19 +245,52 @@ class _StubRun:
         self.resumed = []
         self.replied = []
 
-    def resume(self, approval_id, approved, reason=""):
-        self.resumed.append((approval_id, approved, reason))
+    def resume(self, approval_id, approved, reason="", reviewer=""):
+        self.resumed.append((approval_id, approved, reason, reviewer))
         return True
 
-    def reply(self, question_id, text, decisions):
-        self.replied.append((question_id, text, decisions))
+    def reply(self, question_id, text, decisions, reviewer=""):
+        self.replied.append((question_id, text, decisions, reviewer))
         return True
 
     def kill(self):
         return None
 
-    def kill(self):
+
+class _Pipe:
+    """Captures what the web writes to the worker's stdin."""
+
+    def __init__(self):
+        self.lines = []
+
+    def write(self, text):
+        self.lines.append(text)
+
+    def flush(self):
         return None
+
+
+def _bare_run(events) -> Run:
+    """A Run with only the state resume()/reply() touch: no subprocess, no reader thread."""
+    run = Run.__new__(Run)
+    run.events = events
+    run.lock = threading.Lock()
+    run.answered = set()
+    run.proc = type("P", (), {"stdin": _Pipe()})()
+    return run
+
+
+def test_run_sends_the_reviewer_to_the_worker():
+    """The worker cannot know who is signed in: the ID has to travel on the stdin answer."""
+    run = _bare_run([{"type": "interrupt", "tool": "update_claim_status", "args": {},
+                      "approval_id": "a1"}])
+    assert run.resume("a1", True, "", reviewer="EMP-100")
+    assert json.loads(run.proc.stdin.lines[0])["reviewer"] == "EMP-100"
+
+    run = _bare_run([{"type": "question", "question_id": "q1", "text": "Which Budi?", "items": []}])
+    assert run.reply("q1", "EMP-202", {"IT-1": "reject"}, reviewer="EMP-102")
+    line = json.loads(run.proc.stdin.lines[0])
+    assert line["reviewer"] == "EMP-102" and line["decisions"] == {"IT-1": "reject"}
 
 
 def test_claim_owner_cannot_approve_a_pending_agent_write(client):
@@ -267,10 +303,10 @@ def test_claim_owner_cannot_approve_a_pending_agent_write(client):
     assert r.status_code == 303 and run.resumed == []  # the worker never saw the approval
     assert r.headers["location"].startswith(f"/admin/claims/{OWN_CLAIM}?msg=")
 
-    # Declining is fine.
+    # Declining is fine, and it names the reviewer who declined.
     r = c.post("/admin/investigations/rid-self/resume",
                data={"approval_id": "a1", "approved": "false"}, follow_redirects=False)
-    assert r.status_code == 303 and run.resumed == [("a1", False, "")]
+    assert r.status_code == 303 and run.resumed == [("a1", False, "", "EMP-100")]
 
 
 def test_claim_owner_cannot_approve_items_from_an_agent_reply(client):
@@ -285,7 +321,7 @@ def test_claim_owner_cannot_approve_items_from_an_agent_reply(client):
 
     r = c.post("/admin/investigations/rid-reply/reply",
                data={"question_id": "q1", "reply": "tolak", "dec_IT-1": "reject"}, follow_redirects=False)
-    assert r.status_code == 303 and run.replied == [("q1", "tolak", {"IT-1": "reject"})]
+    assert r.status_code == 303 and run.replied == [("q1", "tolak", {"IT-1": "reject"}, "EMP-100")]
 
 
 def test_claim_page_hides_the_approval_controls_for_the_owner(client):

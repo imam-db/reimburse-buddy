@@ -933,8 +933,9 @@ def investigation_page(rid: str, request: Request):
             dec = ", ".join(f"{k}: {v}" for k, v in (x.get("decisions") or {}).items()) or "none"
             rows += f"<tr><td></td><td colspan=3 class=note>Reviewer replied (decisions: {e(dec)})</td></tr>"
         elif x["type"] == "answer_applied":  # shown only once the worker acknowledged it
+            who = (f" oleh {e(person(store, x['reviewer']))}" if x.get("reviewer") else "")
             rows += (f"<tr><td></td><td colspan=3 class=note>Reviewer {'approved' if x['approved'] else 'declined'} "
-                     f"<code>{e(x['tool'])}</code></td></tr>")
+                     f"<code>{e(x['tool'])}</code>{who}</td></tr>")
     pend = run.pending
     pending_html = ""
     approve_form = ""
@@ -1012,7 +1013,8 @@ def investigation_resume(rid: str, request: Request, approval_id: str = Form("")
         refused = self_approval_refusal(request, run.claim_id, f"investigation:{rid}:resume")
         if refused:
             return back_to_claim(run.claim_id, refused)
-    run.resume(approval_id, approved == "true", reason)  # stale/duplicate answers are ignored
+    run.resume(approval_id, approved == "true", reason,
+               reviewer=auth.reviewer_of(request))  # stale/duplicate answers are ignored
     return RedirectResponse(f"/admin/investigations/{rid}", status_code=303)
 
 
@@ -1025,7 +1027,8 @@ async def investigation_reply(rid: str, request: Request):
         refused = self_approval_refusal(request, run.claim_id, f"investigation:{rid}:reply")
         if refused:
             return back_to_claim(run.claim_id, refused)
-    run.reply(str(form.get("question_id", "")), str(form.get("reply", "")), decisions)  # stale answers ignored
+    run.reply(str(form.get("question_id", "")), str(form.get("reply", "")), decisions,
+              reviewer=auth.reviewer_of(request))  # stale answers ignored
     return RedirectResponse(f"/admin/investigations/{rid}", status_code=303)
 
 
