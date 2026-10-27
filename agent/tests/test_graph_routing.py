@@ -9,6 +9,7 @@ from pathlib import Path
 
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import Command
 
 from reimburse_agent.graph import ALREADY_SEARCHED, build_graph, load_system_prompt
 from reimburse_agent.mcp_client import mcp_tools
@@ -16,17 +17,21 @@ from reimburse_agent.mcp_client import mcp_tools
 from test_graph_interrupt import Scripted, call
 
 HARD = Path(__file__).parents[1] / "eval" / "fixtures" / "hard"
-ENV = {"REIMBURSE_ENABLE_EVIDENCE_TOOL": "1"}
+ENV = {"REIMBURSE_ENABLE_EVIDENCE_TOOL": "1", "REIMBURSE_ENABLE_WRITE_TOOLS": "1"}
 
 
 async def _run(script, run_claim, env=None):
     async with mcp_tools(extra_env={**ENV, **(env or {})}) as (_s, tools):
         g = build_graph(Scripted(messages=iter(script)), tools, checkpointer=InMemorySaver(), run_claim=run_claim)
         conf = {"configurable": {"thread_id": str(uuid.uuid4())}}
-        await g.ainvoke({"messages": [("user", "go")], "declined": {}}, conf)
-        st = await g.aget_state(conf)
-        assert not st.interrupts
-        return st.values["messages"]
+        payload = {"messages": [("user", "go")], "declined": {}}
+        while True:
+            await g.ainvoke(payload, conf)
+            st = await g.aget_state(conf)
+            if not st.interrupts:
+                return st.values["messages"]
+            req = st.interrupts[0].value
+            payload = Command(resume={"approved": True, "tool_call_id": req["tool_call_id"]})
 
 
 def tools_called(msgs):

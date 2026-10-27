@@ -16,7 +16,8 @@ from reimburse_agent.mcp_client import mcp_tools
 from test_graph_interrupt import Scripted, call
 
 HARD = Path(__file__).parents[1] / "eval" / "fixtures" / "hard"
-ENV = {"REIMBURSE_ENABLE_EVIDENCE_TOOL": "1", "REIMBURSE_BUDDY_DATA": str(HARD)}
+ENV = {"REIMBURSE_ENABLE_EVIDENCE_TOOL": "1", "REIMBURSE_ENABLE_WRITE_TOOLS": "1",
+       "REIMBURSE_BUDDY_DATA": str(HARD)}
 ITEMS_0201 = [{"item_id": "IT-1", "category": "flight", "status": "ok"},
               {"item_id": "IT-2", "category": "flight", "status": "ok"},
               {"item_id": "IT-3", "category": "hotel", "status": "needs_evidence"},
@@ -138,7 +139,7 @@ async def test_case6_stuck_search_makes_graph_request_then_exhausted_draft():
                      AIMessage(content="never reached")], cid)
     texts = [m.content for m in tool_msgs(v, "search_for_gap")]
     assert ["search limit" in t for t in texts] == [False, False, True, False, True, True]
-    assert "the graph has now asked the employee" in texts[2]
+    assert "Sent (reviewer approved)" in texts[2]
     assert v["writes"] == [{"tool": "request_missing_evidence", "by": "graph",
                             "args": {"claim_id": cid, "item_id": "IT-2", "gap_code": "boarding_pass_missing"}}]
     closing = v["messages"][-1]

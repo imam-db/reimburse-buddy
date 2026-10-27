@@ -236,11 +236,9 @@ async def run_one(model_name, case, api_key, budget, token_cap=TOKEN_CAP, model=
         else [(case.claim_id, w) for w in vals.get("writes", [])]
     for i, (rc, w) in enumerate((rc, w) for rc, w in owned if w.get("by") == "graph"):
         rec["calls"].append({"id": f"graph-write-{i}", "name": w["tool"], "args": w["args"], "schema_ok": True,
-                             "turn": -1, "auto": True, "declined": False, "error": False, "ok": True, "run_claim": rc})
+                             "turn": -1, "auto": True, "by": w.get("by"), "declined": False, "error": False,
+                             "ok": True, "run_claim": rc})
     rec["reviewer_decisions"] = vals.get("reviewer_decisions", {})
-    # [claim, item, gap] evidence requests the graph's gate let through as free (free_evidence_request);
-    # the scorer exempts exactly these, in single-claim runs and in batch sub-runs alike.
-    rec["free_evidence"] = [list(x) for x in vals.get("free_evidence", [])]
     rec["unparsed_reviewer"] = vals.get("unparsed_reviewer", [])
     rec["model_decisions_refused"] = sum("human_decisions_not_from_reviewer" in t for t in tool_texts)
     rec["server_changed"] = server["changed_status"]

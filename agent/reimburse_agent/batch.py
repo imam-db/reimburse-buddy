@@ -3,7 +3,7 @@
 The parent does triage and the reviewer-gated bulk approval itself (the reviewer's request is the
 instruction; the arguments come from triage, so they are fully determined). Each exception claim then
 gets its own graph run with run_claim set and an empty message history, on the same MCP session, so the
-per-claim protections apply (graph-owned reviewer decisions, free evidence requests, search budget,
+per-claim protections apply (graph-owned reviewer decisions, gated evidence requests, search budget,
 auto-draft). Each sub-run hands back a summary built by code from its state, never written by the model.
 The parent keeps the triage result verbatim plus those summaries; nothing it needs lives in old chat."""
 
@@ -63,7 +63,6 @@ class BatchState(TypedDict, total=False):
     batch_id: str
     triage_text: str  # triage_claims output, verbatim
     policy_text: str  # get_policy output (compacted), fetched once and served to every sub-run
-    free_evidence: list[list[str]]  # [claim, item, gap] free evidence requests the sub-runs sent
     tokens_used: int  # model tokens all sub-runs used so far
     cleared: list[str]
     queue: list[str]  # exception claims not yet investigated
@@ -142,7 +141,7 @@ def build_batch_graph(model, tools, batch_id: str, system_prompt: str | None = N
         return {"batch_id": batch_id, "triage_text": text, "cleared": list(data.get("auto_cleared") or []),
                 "queue": [r["claim_id"] for r in data.get("exceptions") or [] if r.get("claim_id")],
                 "policy_text": _compact(await call("get_policy", {})) if "get_policy" in by_name else "",
-                "summaries": [], "writes": [], "gated_count": 0, "graph_proposals": [], "free_evidence": []}
+                "summaries": [], "writes": [], "gated_count": 0, "graph_proposals": []}
 
     async def approve(state: BatchState):
         first = next((m for m in state["messages"] if isinstance(m, HumanMessage)), None)
@@ -181,11 +180,9 @@ def build_batch_graph(model, tools, batch_id: str, system_prompt: str | None = N
         before = before or {}
         s = claim_summary(cid, v)
         new_writes = s["writes"][len(before.get("writes", [])):]
-        new_free = v.get("free_evidence", [])[len(before.get("free_evidence", [])):]
         summaries = [x for x in state.get("summaries", []) if x["claim_id"] != cid] + [s]
         return {"summaries": summaries, "writes": [*state.get("writes", []), *new_writes],
                 "gated_count": state.get("gated_count", 0) + v.get("gated_count", 0) - before.get("gated_count", 0),
-                "free_evidence": [*state.get("free_evidence", []), *new_free],
                 "tokens_used": state.get("tokens_used", 0) + v.get("tokens_used", 0) - before.get("tokens_used", 0),
                 "effective_args": v.get("effective_args", {}),
                 "threads": {cid: {"thread_id": f"claim:{cid}", "state": v}}}

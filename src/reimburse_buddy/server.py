@@ -85,7 +85,6 @@ def triage_claims(batch: str = "") -> dict:
     return _triage(store, batch)
 
 
-@mcp.tool()
 def approve_cleared_batch(batch_id: str, claim_ids: list[str], reviewer_confirmed: bool = False) -> dict:
     """(Mock write) Mark auto-cleared claims as approved in one step. Only works when the reviewer
     explicitly confirmed (reviewer_confirmed=true) and claim_ids exactly equal the claims that
@@ -102,7 +101,6 @@ def draft_decision(claim_id: str, evidence_ids: list[str] | None = None,
     return _draft(store, _check(store, claim_id, evidence_ids, human_decisions), note, language)
 
 
-@mcp.tool()
 def send_message(to: str, body: str, subject: str = "", claim_id: str = "") -> dict:
     """(Mock) Email an employee, e.g. to ask for a missing receipt. Goes to the outbox.
     The employee's scripted reply arrives in the reimburse@ mailbox; check with search_reimburse_mailbox."""
@@ -117,18 +115,11 @@ def request_missing_evidence(claim_id: str, item_id: str, gap_code: str, evidenc
     return _request_evidence(store, claim_id, item_id, gap_code, evidence_ids, human_decisions)
 
 
-# Version B only: WorkBuddy's server (version A) keeps exactly its 15 tools.
-if os.environ.get("REIMBURSE_ENABLE_EVIDENCE_TOOL") == "1":
-    mcp.tool()(request_missing_evidence)
-
-
-@mcp.tool()
 def request_approval(manager_id: str, claim_id: str, item_id: str, reason: str = "") -> dict:
     """(Mock) Ask the claimant's manager to approve one item. Returns a pending request."""
     return store.request_approval(manager_id, claim_id, item_id, reason)
 
 
-@mcp.tool()
 def update_claim_status(claim_id: str, status: str, note: str = "") -> dict:
     """(Mock) Set claim status: submitted, on_hold, approved, partially_approved or rejected."""
     return store.update_claim_status(claim_id, status, note)
@@ -141,11 +132,19 @@ def get_outbox() -> dict:
             "status_changes": store.status_log}
 
 
-@mcp.tool()
 def reset_demo() -> dict:
     """Restore all demo state: removes delivered replies, clears outbox, approval requests and status changes."""
     store.reset()
     return {"status": "reset", "claims": len(store.claims), "mailbox_messages": len(store.inbox)}
+
+
+# Version B only: WorkBuddy's server (version A) exposes no write tools.
+if os.environ.get("REIMBURSE_ENABLE_EVIDENCE_TOOL") == "1":
+    mcp.tool()(request_missing_evidence)
+if os.environ.get("REIMBURSE_ENABLE_WRITE_TOOLS") == "1":
+    for _write_tool in (send_message, request_approval, update_claim_status, approve_cleared_batch,
+                        reset_demo):
+        mcp.tool()(_write_tool)
 
 
 def main() -> None:
