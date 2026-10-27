@@ -54,5 +54,13 @@
     "grade": "manager",
     "manager_id": null,
     "email": "hendra.saputra@nusantara-niaga.example"
+  },
+  {
+    "id": "EMP-102",
+    "name": "Rani Kusuma",
+    "department": "Finance",
+    "grade": "manager",
+    "manager_id": null,
+    "email": "rani.kusuma@nusantara-niaga.example"
   }
 ]
