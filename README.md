@@ -250,13 +250,34 @@ an action that will be refused. The plan gate in `plan_graph.py` is unchanged: t
 refusal, so an external driver calling the graph directly (for example `agent/plan_demo.py`) is not
 covered.
 
+### Daily LLM budget
+
+One cap for the whole deployment, not one per claim, on a ledger of its own (`web/reimburse_web/spend.py`;
+`agent/migrations/005_llm_spend.sql`). The day boundary is Asia/Jakarta (UTC+07:00 all year, no DST).
+
+- Before a worker starts, the run **reserves** its worst case: `REIMBURSE_AGENT_MAX_TOKENS` tokens all
+  billed at the output price. If `committed + worst case > LLM_DAILY_BUDGET_USD`, the run is refused with
+  "Batas biaya harian demo tercapai. Coba lagi besok." and a `limit` audit event
+  (`payload.kind = daily_llm_budget`). Check and insert happen under one lock (a file lock for the JSONL
+  ledger, `pg_advisory_xact_lock` for Postgres), so two concurrent starts cannot both take the last slot.
+- When the worker reports tokens (`final`, or `error`/`token_limit`), the run **settles** the real cost
+  from the input hit/miss and output split. A run that ends without a token report (cancel, deadline,
+  crash) keeps its whole reservation: the ledger fails safe instead of assuming the money was not spent.
+- Committed for a day = every settle, plus the reservation of each run that never settled.
+- The remaining amount is shown in the nav ("Sisa anggaran LLM hari ini: $x.xx") and the ledger is
+  append-only: the app role has INSERT + SELECT on `llm_spend`, never UPDATE or DELETE.
+- In production a missing budget or price stops startup with `spend.SpendConfigError` (and refuses LLM
+  runs as a second line of defence). Outside production an unconfigured ledger simply means no cap.
+- Not metered yet: the optional `LLMQAModel` (Q&A with a real key) and the Jev judge. Both are off by
+  default and the demo runs the offline Q&A router and no judge, so the demo cannot spend there.
+
 ### Environment variables
 
 Secrets come from the environment (or a git-ignored `.env.local`) and are never committed.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `APP_ENV` | unset | `prod` / `production` requires a Postgres audit log, a demo password and a session key; refuses JSONL or memory |
+| `APP_ENV` | unset | `prod` / `production` requires a Postgres audit log, a demo password, a session key and the LLM budget with its prices; refuses JSONL or memory |
 | `DEMO_PASSWORD` | unset | Shared demo password, 12+ characters (secret). Unset outside production means the login gate is off; unset in production aborts startup |
 | `REIMBURSE_DEMO_SESSION_KEY` | random per process | HMAC key for the demo session cookies (`rb_auth`, `rb_demo_session`); required in production, set it in any shared deploy (secret) |
 | `REIMBURSE_AUDIT_DATABASE_URL` | unset | Postgres DSN for the audit log (secret; app role, Neon direct endpoint) |
@@ -267,6 +288,9 @@ Secrets come from the environment (or a git-ignored `.env.local`) and are never 
 | `REIMBURSE_AGENT_RUN_DEADLINE` | 600 | Seconds of agent work per run (paused while an approval is pending) |
 | `REIMBURSE_AGENT_APPROVAL_DEADLINE` | 900 | Seconds a pending approval waits before it is declined |
 | `REIMBURSE_INVESTIGATE_MAX_PER_MIN` | 3 | Agent runs started per minute per web process (one live run at a time) |
+| `LLM_DAILY_BUDGET_USD` | unset | Global LLM budget per Asia/Jakarta day, in USD. Unset outside production means no cap; unset in production aborts startup |
+| `LLM_PRICE_INPUT_MISS_PER_MTOK` / `LLM_PRICE_INPUT_HIT_PER_MTOK` / `LLM_PRICE_OUTPUT_PER_MTOK` | unset | Token prices in USD per million tokens, read from the provider's pricing page at deploy time (never hard-coded) |
+| `REIMBURSE_LLM_SPEND_LEDGER` | `<plan store>/llm_spend.jsonl` | Dev/test spend ledger; production uses the Postgres table from migration 005 |
 | `REIMBURSE_APPROVAL_DEADLINE_MIN` | 30 | Minutes before an unanswered staged action of a dead run is expired |
 | `EMPLOYEE_QA` | off | Employee Q&A box and `POST /employee/qa` (see [docs/employee-qa.md](docs/employee-qa.md)) |
 | `REIMBURSE_PLAN_STORE` | `agent/.plans` | Where plans, requests and per-run mock office state are stored |
@@ -298,6 +322,10 @@ export APP_ENV=prod
 export REIMBURSE_AUDIT_DATABASE_URL='postgresql://user:pass@db.example:5432/reimburse'
 export DEMO_PASSWORD='...'                 # 12+ characters (secret)
 export REIMBURSE_DEMO_SESSION_KEY='...'    # stable HMAC key (secret)
+export LLM_DAILY_BUDGET_USD=2.00           # cap for the whole deployment, per Asia/Jakarta day
+export LLM_PRICE_INPUT_MISS_PER_MTOK=...   # from the provider's pricing page on the day you deploy
+export LLM_PRICE_INPUT_HIT_PER_MTOK=...
+export LLM_PRICE_OUTPUT_PER_MTOK=...
 ```
 
 - `REIMBURSE_AUDIT_DATABASE_URL` is required and must start with `postgres://` or `postgresql://`;
@@ -307,8 +335,12 @@ export REIMBURSE_DEMO_SESSION_KEY='...'    # stable HMAC key (secret)
   `REIMBURSE_AUDIT_LOG` (JSONL) or the in-memory log.
 - The web app checks this in its FastAPI startup hook, so it fails before serving the first request.
   `agent/investigate_worker.py` checks it before running, and `audit.default_log()` enforces it too.
-- Production startup also refuses a missing `DEMO_PASSWORD` (or one shorter than 12 characters) and a
-  missing `REIMBURSE_DEMO_SESSION_KEY`, so a deploy cannot come up with every route open.
+- Production startup also refuses a missing `DEMO_PASSWORD` (or one shorter than 12 characters), a
+  missing `REIMBURSE_DEMO_SESSION_KEY` and a missing `LLM_DAILY_BUDGET_USD` or token price
+  (`auth.AuthConfigError` / `spend.SpendConfigError`), so a deploy cannot come up with every route open
+  or able to spend without a cap.
+- Apply migrations `001`-`005` before the first request: `005_llm_spend.sql` adds the spend ledger the
+  daily cap reads and writes.
 - Outside production (`APP_ENV` unset or any other value), behaviour is unchanged: JSONL via
   `REIMBURSE_AUDIT_LOG`, otherwise a fresh in-memory log.
 
@@ -337,13 +369,13 @@ HTTP route for this: the web simulation has no admin authentication, so it is CL
 
 ```
 web/reimburse_web/      version B web app (FastAPI): app.py, auth.py (demo password), intake.py, plans.py,
-                        qa.py, upload_flow.py, agent_bridge.py (starts the agent worker), labels.py
-                        (Indonesian UI labels)
+                        qa.py, upload_flow.py, agent_bridge.py (starts the agent worker), spend.py (daily
+                        LLM budget), labels.py (Indonesian UI labels)
 agent/
   reimburse_agent/      graph.py (claim agent), plan_graph.py, office/ (plan, directory, rules, mock tools),
                         audit.py, injection.py, qa/, retrieval.py, audit_selftest.py
   investigate_worker.py agent subprocess used by the web app
-  migrations/           Postgres audit log schema (001-004)
+  migrations/           Postgres schemas: audit log (001-004) and the LLM spend ledger (005)
   eval/                 synthetic eval suites and results
 docs/                   architecture and flow diagrams, request intake, employee Q&A, UI notes
 src/reimburse_buddy/
@@ -477,7 +509,9 @@ Known limits before any public deploy: shared in-memory state (claims, drafts, r
 runs live in one process, so a restart loses them and a second instance sees a different demo); one shared
 demo password rather than accounts, so the app cannot tell two reviewers apart beyond the ID chosen at login
 and there is no way to revoke one person's access; local uploads (basic 5 MB / type limits only); and a
-self-declared field is only flagged, not verified. Dual mode detects OCR misreads, not edited
+self-declared field is only flagged, not verified. The daily LLM cap covers the investigation worker only:
+the optional Q&A model and the Jev judge are not metered (both are off by default and the demo runs
+neither). Dual mode detects OCR misreads, not edited
 receipts; PDFs, single-engine reads and near-duplicate files are not cross-checked yet (planned after the hackathon).
 
 Known limitation: the cross-checks compare the item with what OCR read from the same file, so a convincingly

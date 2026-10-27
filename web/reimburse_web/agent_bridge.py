@@ -15,6 +15,7 @@ stderr goes to a per-run log; the page shows its last lines with secrets redacte
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import signal
@@ -24,7 +25,10 @@ import time
 import uuid
 from collections import deque
 from pathlib import Path
+from typing import Callable
 import tempfile
+
+from . import spend
 
 AGENT_DIR = Path(os.environ.get("REIMBURSE_AGENT_DIR", Path(__file__).resolve().parents[2] / "agent"))
 NO_KEY_MESSAGE = ("No model key configured. Set DEEPSEEK_API_KEY (or REIMBURSE_AGENT_API_KEY) in the "
@@ -51,13 +55,16 @@ def redact(text: str) -> str:
 
 
 class Run:
-    def __init__(self, claim_id: str, cmd: list[str]):
-        self.id = uuid.uuid4().hex[:10]
+    def __init__(self, claim_id: str, cmd: list[str], run_id: str | None = None,
+                 on_tokens: Callable[[dict], None] | None = None):
+        self.id = run_id or uuid.uuid4().hex[:10]
         self.claim_id = claim_id
         self._started_at = time.time()
         self.events: list[dict] = []
         self.lock = threading.Lock()
         self.answered: set[str] = set()  # approval_ids already answered (duplicates ignored)
+        self._on_tokens = on_tokens  # settles the reserved LLM budget, once
+        self._settled = False
         LOG_DIR.mkdir(parents=True, exist_ok=True)
         self.log_path = LOG_DIR / f"{self.id}.stderr.log"
         self._log = open(self.log_path, "w", encoding="utf-8")
@@ -65,6 +72,18 @@ class Run:
                                      stderr=self._log, text=True, bufsize=1, start_new_session=True)
         self.reader = threading.Thread(target=self._read, daemon=True)
         self.reader.start()
+
+    def _settle(self, tokens) -> None:
+        """Charge the run exactly once, from the worker's own token report.
+
+        No report (cancel, deadline, crash) leaves the reservation in place: the ledger fails safe."""
+        if self._on_tokens is None or self._settled or not isinstance(tokens, dict):
+            return
+        self._settled = True
+        try:
+            self._on_tokens(tokens)
+        except Exception:  # noqa: BLE001 - a ledger problem must not kill the run's output
+            logging.getLogger(__name__).exception("spend: settle failed for run %s", self.id)
 
     def _read(self):
         for line in self.proc.stdout:
@@ -77,6 +96,8 @@ class Run:
                 continue
             with self.lock:
                 self.events.append(ev)
+            if ev.get("type") == "final" or (ev.get("type") == "error" and ev.get("code") == "token_limit"):
+                self._settle(ev.get("tokens"))
         self.proc.wait()
         self._log.close()
         with self.lock:
@@ -184,8 +205,11 @@ class Run:
     def kill(self) -> None:
         if self.proc.poll() is None:
             try:
-                os.killpg(self.proc.pid, signal.SIGKILL)
-            except (ProcessLookupError, PermissionError):
+                if hasattr(os, "killpg"):  # POSIX: kill uv, python and the MCP server together
+                    os.killpg(self.proc.pid, signal.SIGKILL)
+                else:  # Windows has no process groups here; kill the child itself
+                    self.proc.kill()
+            except (ProcessLookupError, PermissionError, AttributeError):
                 self.proc.kill()
 
     def stderr_tail(self, n: int = 20) -> str:
@@ -224,8 +248,12 @@ class Investigator:
             raise RateLimited("Another investigation is still running. Finish or decline it first.")
         if len(self.started) >= self.max_per_min:
             raise RateLimited(f"Rate limit: at most {self.max_per_min} investigations per minute.")
+        # Charge the daily LLM budget before spawning: the worst case of this run is reserved, and the
+        # run is refused outright when it would cross the cap (spend.BudgetRefused).
+        run_id = uuid.uuid4().hex[:10]
+        spend.reserve(run_id)
         self.started.append(now)
-        run = Run(claim_id, self.command(claim_id))
+        run = Run(claim_id, self.command(claim_id), run_id=run_id, on_tokens=lambda t: spend.settle(run_id, t))
         self.runs[run.id] = run
         return run
 
