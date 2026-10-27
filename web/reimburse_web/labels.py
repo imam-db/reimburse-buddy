@@ -114,6 +114,11 @@ LABELS = {
     "self_approval_submitted_note": ("Anda yang mengajukan permintaan ini, jadi tombol Setujui dimatikan."),
     "submitted_by_note": "Permintaan ini dicatat atas nama pengaju (reviewer yang masuk):",
     "submitted_by": "Diajukan oleh",
+    # the approval gate on the investigation page (app.py)
+    "investigation_gate_note": ("Panggilan ini hanya dijalankan jika Anda menekan Setujui. Hanya pencarian "
+                                "baca-saja yang berjalan tanpa bertanya; setiap penulisan atau pesan, "
+                                "termasuk permintaan bukti ke pemilik klaim, menunggu persetujuan Anda di "
+                                "sini. Persetujuan yang tidak dijawab otomatis ditolak."),
     # daily LLM budget (web/reimburse_web/spend.py)
     "budget_exhausted": "Batas biaya harian demo tercapai. Coba lagi besok.",
     "budget_remaining": "Sisa anggaran LLM hari ini",

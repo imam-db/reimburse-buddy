@@ -121,6 +121,9 @@ def test_pending_form_carries_approval_id_rule_engine_and_honest_text(client, mo
     assert "id=rule-engine" in html and "Rp4.840.000" in html
     assert "id=approved-engine" in html and "Dasar persetujuan" in html  # the basis the approval binds to
     assert "Nothing is written until you click Approve" not in html
+    # An evidence request is gated like every other write: the page must not say otherwise.
+    assert "termasuk permintaan bukti ke pemilik klaim" in html
+    assert "run without asking" not in html and "plain evidence request" not in html
     client.post(f"/admin/investigations/{rid}/cancel")
 
 
