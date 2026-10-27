@@ -114,16 +114,26 @@ async def _evidence_run(calls, answer=None, run_claim=HERO):
 CHECK = ("check_claim", {"claim_id": HERO})
 
 
-async def test_evidence_request_free_for_run_claim_after_check():
+async def test_evidence_request_for_run_claim_is_gated():
     seen, st = await _evidence_run([CHECK, ("request_missing_evidence", ev("IT-5", "receipt_missing")),
                                     ("get_outbox", {})])
-    assert seen == []
+    assert [v["tool"] for v in seen] == ["request_missing_evidence"]
+    out = next(m.content for m in st.values["messages"] if getattr(m, "name", "") == "get_outbox")
+    assert "IT-5" not in out  # declined: nothing was sent
+
+
+async def test_evidence_request_runs_only_after_approval():
+    seen, st = await _evidence_run(
+        [CHECK, ("request_missing_evidence", ev("IT-5", "receipt_missing")), ("get_outbox", {})],
+        answer=lambda v: {"approved": True, "tool_call_id": v["tool_call_id"]})
+    assert [v["tool"] for v in seen] == ["request_missing_evidence"]
     out = next(m.content for m in st.values["messages"] if getattr(m, "name", "") == "get_outbox")
     assert "EMP-001" in out and "IT-5" in out
 
 
 @pytest.mark.parametrize("calls,why", [
     ([("request_missing_evidence", ev("IT-5", "receipt_missing"))], "no check_claim yet"),
+    ([CHECK, ("request_missing_evidence", ev("IT-5", "receipt_missing"))], "run claim document gap"),
     ([CHECK, ("request_missing_evidence", ev("IT-6", "receipt_missing", "CLM-2026-0104"))], "other claim"),
     ([CHECK, ("request_missing_evidence", ev("IT-3", "hotel_over_cap"))], "decision-adjacent gap"),
     ([CHECK, ("request_missing_evidence", ev("IT-4", "late_checkout_unjustified"))], "decision-adjacent gap"),
@@ -137,19 +147,6 @@ async def test_evidence_request_gated(calls, why):
 async def test_evidence_request_gated_without_run_claim():
     seen, _ = await _evidence_run([CHECK, ("request_missing_evidence", ev("IT-5", "receipt_missing"))], run_claim=None)
     assert len(seen) == 1
-
-
-async def test_evidence_request_repeat_and_cap_are_gated():
-    from reimburse_agent.graph import free_evidence_request
-    from langchain_core.messages import ToolMessage
-    msgs = [ToolMessage(content=json.dumps({"claim_id": HERO, "items": [
-        {"item_id": f"IT-{i}", "status": "needs_evidence", "gaps": ["receipt_missing"]} for i in range(1, 6)]}), tool_call_id="x", name="check_claim")]
-    used = []
-    for i in range(1, 4):
-        assert free_evidence_request(ev(f"IT-{i}", "receipt_missing"), HERO, msgs, used)
-        used.append([HERO, f"IT-{i}", "receipt_missing"])
-    assert not free_evidence_request(ev("IT-4", "receipt_missing"), HERO, msgs, used)  # cap of 3
-    assert not free_evidence_request(ev("IT-1", "receipt_missing"), HERO, msgs, used[:1])  # repeat
 
 
 def test_prompt_addendum_is_version_b_only():
@@ -262,9 +259,3 @@ async def test_gated_call_cap_per_run():
     assert "limit of 2 approval requests" in [m.content for m in st.values["messages"] if m.type == "tool"][-1]
 
 
-def test_reviewer_resolved_gap_is_not_free():
-    from reimburse_agent.graph import free_evidence_request
-    from langchain_core.messages import ToolMessage
-    msgs = [ToolMessage(content=json.dumps({"claim_id": HERO, "items": [
-        {"item_id": "IT-5", "status": "partial", "gaps": ["receipt_missing"]}]}), tool_call_id="x", name="check_claim")]
-    assert not free_evidence_request(ev("IT-5", "receipt_missing"), HERO, msgs, [])

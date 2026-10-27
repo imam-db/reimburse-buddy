@@ -27,7 +27,7 @@ from .judge import get_judge, review_flags
 from .retrieval import (clean_query, contradiction_hits, find_messages as ranked_find, message_pool,
                         pool_version)
 
-SKILL_PATH = Path(__file__).resolve().parents[2] / "skills" / "claim-auditor" / "SKILL.md"
+SKILL_PATH = Path(__file__).resolve().parent / "prompts" / "system_prompt.md"
 
 # Allowlist: only these read-only tools run without the reviewer. Every other tool, including any
 # write tool added to the server later, stops for approval (deny by default).
@@ -36,13 +36,13 @@ READ_ONLY_TOOLS = frozenset({
     "find_approval_memo", "check_claim", "triage_claims", "draft_decision", "get_outbox", "search_for_gap",
     "find_messages",
 })
-# request_missing_evidence (fixed template, owner-only; src/reimburse_buddy/evidence_request.py) runs
-# without the reviewer only when free_evidence_request() says so; otherwise it is gated like any write.
+# request_missing_evidence (fixed template, owner-only; src/reimburse_buddy/evidence_request.py) is a write
+# like any other: every call, model-made or graph-made, goes through the reviewer first.
 EVIDENCE_TOOL = "request_missing_evidence"
-FREE_EVIDENCE_GAPS = frozenset({"receipt_missing", "boarding_pass_missing", "hotel_nights_mismatch"})
-MAX_FREE_EVIDENCE = 3  # per run
+EVIDENCE_PROPOSAL_MARK = "[awaiting reviewer approval]"
+DOCUMENT_GAPS = frozenset({"receipt_missing", "boarding_pass_missing", "hotel_nights_mismatch"})
 
-# Version B only, appended to SKILL.md (which stays exactly what WorkBuddy loads).
+# Version B only, appended to the B-owned prompt file (skills/claim-auditor/SKILL.md is WorkBuddy's).
 PROMPT_ADDENDUM = """
 
 ---
@@ -87,8 +87,8 @@ def _as_json(text):
 
 
 def load_system_prompt(path: Path = SKILL_PATH, addendum: bool = True) -> str:
-    """SKILL.md as-is (YAML frontmatter included, the same text WorkBuddy loads), plus the version B
-    addendum unless addendum=False."""
+    """The version B prompt as-is (YAML frontmatter included), plus the version B addendum unless
+    addendum=False. WorkBuddy's draft-only SKILL.md is a separate file."""
     text = path.read_text(encoding="utf-8")
     return text + PROMPT_ADDENDUM if addendum else text
 
@@ -104,22 +104,6 @@ def latest_check(messages, claim_id: str) -> dict | None:
             if isinstance(data, dict) and data.get("claim_id") == claim_id:
                 return data
     return None
-
-
-def free_evidence_request(args: dict, run_claim: str | None, messages, used: list) -> bool:
-    """Ungated only for the run's own claim, a pure document gap that the latest check_claim still
-    reports for that item, at most MAX_FREE_EVIDENCE per run, and not a repeat in this run."""
-    cid, item, gap = args.get("claim_id"), args.get("item_id"), args.get("gap_code")
-    if not run_claim or cid != run_claim or gap not in FREE_EVIDENCE_GAPS:
-        return False
-    if len(used) >= MAX_FREE_EVIDENCE or [cid, item, gap] in used:
-        return False
-    check = latest_check(messages, run_claim)
-    if not check:
-        return False
-    row = next((i for i in check.get("items", []) if i.get("item_id") == item), {})
-    # only an item still waiting for evidence; a reviewer-resolved gap stays in gaps[] but isn't open
-    return row.get("status") == "needs_evidence" and gap in row.get("gaps", [])
 
 
 def needs_confirmation(name: str, args: dict[str, Any] | None = None) -> bool:
@@ -144,7 +128,6 @@ class State(TypedDict, total=False):
     # tool_call_id -> reason, for calls the reviewer declined
     declined: dict[str, str]
     gated_count: int  # interrupts shown so far in this run
-    free_evidence: list[list[str]]  # [claim, item, gap] requests sent without approval this run
     declined_sigs: list[str]  # (name, args) of calls the reviewer declined
     search_cache: dict[str, str]  # normalised mailbox query -> result, until an employee message goes out
     # "item:gap" -> {"searches": n, "search"|"request"|"reviewer": message index of the latest such attempt}
@@ -161,6 +144,7 @@ class State(TypedDict, total=False):
     blocked_streak: int  # consecutive refused searches
     decisions_source: str  # "form": this turn's reviewer_decisions came structured (web form), no parse/confirm
     instructions: list[dict]  # explicit reviewer instructions not yet carried out (see parse_instructions)
+    pending_evidence: list[dict]  # graph-queued evidence requests waiting for evidence_gate (not sent)
     graph_proposals: list[dict]  # gated actions the graph proposed itself: {"tool", "args", "id", "approved", "from"}
     unattributed_searches: int  # raw mailbox searches that named no single open gap
     reply_evidence: list[str]  # IDs the graph's own reply search found and check_claim accepted
@@ -209,7 +193,7 @@ GAP_SEARCH_TOOL = "search_for_gap"  # version B only; wraps SEARCH_TOOL and attr
 EMPLOYEE_MESSAGE_TOOLS = frozenset({EVIDENCE_TOOL, "send_message"})
 DECISION_TOOLS = frozenset({"check_claim", "draft_decision", EVIDENCE_TOOL})
 EVIDENCE_ARG_TOOLS = DECISION_TOOLS
-SEARCHES_PER_GAP = 2  # per open gap before asking the employee; 1 more after the ask (SKILL.md: 3 in all)
+SEARCHES_PER_GAP = 2  # per open gap before asking the employee; 1 more after the ask (prompt: 3 in all)
 SEARCHES_AFTER_ASK = 1
 MAX_BLOCKED = 2  # consecutive refused searches before the graph finishes the run itself
 STABLE_IGNORE = frozenset({"belongs_to_other_employee", "memo_unsigned", "no_matching_item"})
@@ -514,8 +498,8 @@ def message_tokens(m) -> int:
 
 
 def token_split(system_text: str, tools, served: dict | None) -> dict:
-    """Rough (chars/4) size of what every model call carries: SKILL.md, the version B addendum, the bound
-    tool schemas, and any served text. Logged once per build_graph."""
+    """Rough (chars/4) size of what every model call carries: the prompt file, the version B addendum,
+    the bound tool schemas, and any served text. Logged once per build_graph."""
     schemas = []
     for t in tools:
         sch = t.args_schema if isinstance(t.args_schema, dict) else t.args_schema.model_json_schema()
@@ -720,14 +704,9 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         declined: dict[str, str] = {}
         count = state.get("gated_count", 0)
         sigs = list(state.get("declined_sigs", []))
-        free = [list(x) for x in state.get("free_evidence", [])]
         for call in last.tool_calls:
             if call["name"] not in by_name:
                 continue  # unknown or hidden tool: run_tools returns an error, no prompt for the reviewer
-            if call["name"] == EVIDENCE_TOOL and free_evidence_request(call["args"], run_claim, state["messages"], free):
-                a = call["args"]
-                free.append([a["claim_id"], a["item_id"], a["gap_code"]])
-                continue
             if not needs_confirmation(call["name"], call["args"]):
                 continue
             sig = call_signature(call)
@@ -746,7 +725,7 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                 reason = (answer.get("reason") if isinstance(answer, dict) else "") or "no reason given"
                 declined[call["id"]] = reason
                 sigs.append(sig)
-        return {"declined": declined, "gated_count": count, "declined_sigs": sigs, "free_evidence": free}
+        return {"declined": declined, "gated_count": count, "declined_sigs": sigs}
 
     def trusted_decisions(state: State, claim_id) -> dict:
         return dict(state.get("reviewer_decisions", {})) if run_claim and claim_id == run_claim else {}
@@ -775,7 +754,6 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         writes = list(state.get("writes", []))
         ignored = dict(state.get("ignored_ids", {}))
         effective = dict(state.get("effective_args", {}))
-        free = [list(x) for x in state.get("free_evidence", [])]
         check = latest_check(state["messages"], run_claim) if run_claim else None
         gaps_now = open_gaps(check)
         snap = state.get("mailbox_before")
@@ -825,37 +803,32 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             a = attempts.get(k, {})
             return a.get("searches", 0) >= gap_limit(a)
 
+        queued: list[dict] = []  # graph-proposed evidence requests; evidence_gate asks the reviewer first
+
         async def on_limit(gap: str, lim: int) -> str:
             """A refused search. When the run is stuck (MAX_BLOCKED refusals in a row, or every open gap has
-            used its budget), the graph itself sends the fixed-template request for each free document gap
-            not yet requested, so the employee is asked exactly once per gap."""
+            used its budget), the graph queues the fixed-template request for each document gap not yet
+            requested. Nothing is sent here: the evidence_gate node interrupts for every queued request
+            and only then runs the approved ones (interrupt before any execution, so a resume never
+            replays a write)."""
             after = " (including the one after asking the employee)" if lim > SEARCHES_PER_GAP else ""
             stuck = streak >= MAX_BLOCKED or all(budget_used(k) for k in gaps_now)
-            sent = []
+            proposed = []
             if stuck and EVIDENCE_TOOL in by_name:
+                sigs = state.get("declined_sigs", [])
                 for k in gaps_now:
                     item, code = k.split(":", 1)
-                    if code not in FREE_EVIDENCE_GAPS or attempts.get(k, {}).get("request") is not None:
+                    if code not in DOCUMENT_GAPS or attempts.get(k, {}).get("request") is not None:
                         continue
                     a = {"claim_id": run_claim, "item_id": item, "gap_code": code}
-                    if not free_evidence_request(a, run_claim, state["messages"], free):
+                    if a in queued or call_signature({"name": EVIDENCE_TOOL, "args": a}) in sigs:
                         continue
-                    full = {**a, "evidence_ids": evidence_now() or None,
-                            "human_decisions": trusted_decisions(state, run_claim) or None}
-                    try:
-                        nonlocal snap
-                        snap = await snapshot_for(state, snap, EVIDENCE_TOOL)
-                        res = _jsonish(await invoke(EVIDENCE_TOOL, {k2: v for k2, v in full.items() if v is not None}))
-                    except Exception:
-                        res = None
-                    if res is not None and "error" not in res:
-                        free.append([run_claim, item, code])
-                        record_write(EVIDENCE_TOOL, a, by="graph")
-                        sent.append(k)
-            if sent:
+                    queued.append(a)
+                    proposed.append(k)
+            if proposed:
                 return SEARCH_LIMIT.format(gap=gap, n=lim, after=after, next=(
-                    f"the graph has now asked the employee for {', '.join(sent)} (fixed template). "
-                    "You may search once more per requested gap, then run check_claim."))
+                    f"{EVIDENCE_PROPOSAL_MARK} the graph proposed asking the employee for {', '.join(proposed)} "
+                    "(fixed template). Nothing has been sent yet: the reviewer must approve it first."))
             return SEARCH_LIMIT.format(gap=gap, n=lim, after=after, next=(
                 "run check_claim and draft the decision, or ask the reviewer."))
 
@@ -988,14 +961,14 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             out.append(ToolMessage(content=content, tool_call_id=call["id"], name=name))
         return {"messages": out, "declined": {}, "search_cache": cache, "gap_attempts": attempts,
                 "blocked_streak": streak, "unattributed_searches": unattr, "writes": writes, "ignored_ids": ignored, "effective_args": effective,
-                "free_evidence": free, "reply_evidence": reply_found, "mailbox_before": snap,
+                "reply_evidence": reply_found, "mailbox_before": snap, "pending_evidence": queued,
                 "held_versions": held, "unused_evidence": unused, "guard_scans": scans}
 
     def exhausted(state: State, gaps: list[str], n: int) -> bool:
         att = state.get("gap_attempts", {})
         for k in gaps:
             a = att.get(k, {})
-            asked = a.get("request") if k.split(":", 1)[1] in FREE_EVIDENCE_GAPS else a.get("reviewer")
+            asked = a.get("request") if k.split(":", 1)[1] in DOCUMENT_GAPS else a.get("reviewer")
             if a.get("search") is None or a["search"] >= n or asked is None or asked >= n:
                 return False
         return True
@@ -1007,7 +980,7 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         out = []
         for k in gaps:
             a = att.get(k, {})
-            if k.split(":", 1)[1] not in FREE_EVIDENCE_GAPS or a.get("request") is None:
+            if k.split(":", 1)[1] not in DOCUMENT_GAPS or a.get("request") is None:
                 continue
             if (a.get("search") is None or a["search"] < a["request"]) and a.get("searches", 0) < gap_limit(a):
                 out.append(k)
@@ -1080,10 +1053,80 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             return END
         return after_tools(state)  # scan clean: route as if it had not run (guard_checked now holds this check)
 
+    async def evidence_gate(state: State):
+        """Graph-initiated evidence requests. Every queued request is shown to the reviewer with
+        interrupt() first; executions happen only after all answers are in, so resuming (which re-runs
+        this node from the top) never sends anything twice. A decline or a malformed answer sends nothing."""
+        pend = list(state.get("pending_evidence", []))
+        count = state.get("gated_count", 0)
+        sigs = list(state.get("declined_sigs", []))
+        props = list(state.get("graph_proposals", []))
+        answers = []
+        for a in pend:
+            if count >= max_gated:
+                answers.append((a, None, f"limit of {max_gated} approval requests per run reached"))
+                continue
+            count += 1
+            tcid = f"graph-evidence-{a['item_id']}-{a['gap_code']}-{len(props) + len(answers)}"
+            answer = interrupt({"tool": EVIDENCE_TOOL, "args": a, "tool_call_id": tcid, "by": "graph",
+                                "prompt": f"Ask the employee for {a['item_id']} ({a['gap_code']}) with the fixed template?"})
+            ok = isinstance(answer, dict) and answer.get("approved") is True and answer.get("tool_call_id") == tcid
+            reason = None if ok else ((answer.get("reason") if isinstance(answer, dict) else "") or "no reason given")
+            answers.append((a, tcid, reason))
+        writes = list(state.get("writes", []))
+        attempts = {k: dict(v) for k, v in state.get("gap_attempts", {}).items()}
+        snap = state.get("mailbox_before")
+        here = len(state["messages"])
+        notes, sent_any = [], False
+        for a, tcid, reason in answers:
+            k = f"{a['item_id']}:{a['gap_code']}"
+            if reason is not None:
+                sigs.append(call_signature({"name": EVIDENCE_TOOL, "args": a}))
+                props.append({"tool": EVIDENCE_TOOL, "args": a, "id": tcid, "approved": False, "from": "graph"})
+                notes.append(f"Not sent: evidence request for {k}; the reviewer declined it ({reason}).")
+                continue
+            full = {**a, "human_decisions": trusted_decisions(state, run_claim) or None}
+            pos = check_position(state["messages"], run_claim) if run_claim else None
+            ev = list(state.get("effective_args", {}).get(pos[1], {}).get("evidence_ids") or []) if pos else []
+            if ev:
+                full["evidence_ids"] = ev
+            try:
+                snap = await snapshot_for(state, snap, EVIDENCE_TOOL)
+                res = _jsonish(await invoke(EVIDENCE_TOOL, {x: v for x, v in full.items() if v is not None}))
+                failed = res is None or "error" in res
+            except Exception as exc:
+                res, failed = {"error": str(exc)}, True
+            props.append({"tool": EVIDENCE_TOOL, "args": a, "id": tcid, "approved": True, "from": "graph",
+                          "error": bool(failed)})
+            if failed:
+                notes.append(f"Evidence request for {k} failed: {(res or {}).get('error')}")
+                continue
+            writes.append({"tool": EVIDENCE_TOOL, "args": a, "by": "graph"})
+            attempts.setdefault(k, {})["request"] = here
+            sent_any = True
+            notes.append(f"Sent (reviewer approved): fixed-template evidence request for {k}. "
+                         "You may search once more per requested gap, then run check_claim.")
+        out = {"pending_evidence": [], "gated_count": count, "declined_sigs": sigs, "graph_proposals": props,
+               "writes": writes, "gap_attempts": attempts, "mailbox_before": snap}
+        if sent_any:
+            out["search_cache"] = {}  # a reply may land in the mailbox now
+        # Put the outcome on the tool result that announced the proposal (same message id: replaced).
+        msgs = state["messages"]
+        for m in reversed(msgs):
+            if getattr(m, "type", "") != "tool":
+                break
+            if EVIDENCE_PROPOSAL_MARK in str(m.content):
+                out["messages"] = [ToolMessage(content=f"{m.content}\nReviewer outcome: {' '.join(notes)}",
+                                               tool_call_id=m.tool_call_id, name=m.name, id=m.id)]
+                break
+        return out
+
     def after_tools(state: State):
         """To a draft once the latest check is clean, once every open gap was searched for and asked about
         (employee for document gaps, reviewer for the rest) before a check that still shows it, or once
         the agent keeps hitting refused searches with nothing left for the graph to request."""
+        if state.get("pending_evidence"):
+            return "evidence_gate"
         if not run_claim or "draft_decision" not in by_name:
             return "agent"
         pos = check_position(state["messages"], run_claim)
@@ -1103,7 +1146,7 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             return "reply_search" if SEARCH_TOOL in by_name and awaiting_reply(state, gaps) else "auto_draft"
         if state.get("blocked_streak", 0) >= MAX_BLOCKED:
             att = state.get("gap_attempts", {})
-            left = [k for k in gaps if k.split(":", 1)[1] in FREE_EVIDENCE_GAPS and att.get(k, {}).get("request") is None]
+            left = [k for k in gaps if k.split(":", 1)[1] in DOCUMENT_GAPS and att.get(k, {}).get("request") is None]
             if not left:
                 return "auto_draft"
         return "agent"
@@ -1135,7 +1178,7 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         except Exception as exc:
             draft = json.dumps({"error": str(exc)})
         gaps = open_gaps(fresh) if fresh else open_gaps(_data)
-        need_reviewer = [k for k in gaps if k.split(":", 1)[1] not in FREE_EVIDENCE_GAPS]
+        need_reviewer = [k for k in gaps if k.split(":", 1)[1] not in DOCUMENT_GAPS]
         head = (f"needs human: model budget used; open gaps: {', '.join(gaps) or 'none'}. The graph drafted from "
                 "the engine's check (no model call)." if budget_hit else
                 "check_claim shows no open gaps, so the decision note was drafted." if not gaps else
@@ -1217,6 +1260,7 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         snap = state.get("mailbox_before")
         props = list(state.get("graph_proposals", []))
         count = state.get("gated_count", 0)
+        decided = []  # phase 1: (instruction, tool, args, tcid, approved, answer); nothing runs here
         for ins in pend:
             name, call_args = await build_action(ins, fresh, args)
             if name is None:
@@ -1228,10 +1272,14 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                 notes.append(f"Not proposed: {name} (limit of {max_gated} approval requests reached).")
                 continue
             count += 1
-            tcid = f"graph-{name}-{len(props)}"
+            tcid = f"graph-{name}-{len(props) + len(decided)}"
             answer = interrupt({"tool": name, "args": call_args, "tool_call_id": tcid, "by": "graph",
                                 "from": ins["quote"], "prompt": f'Proposed by the graph because you asked: "{ins["quote"]}"'})
             ok = isinstance(answer, dict) and answer.get("approved") is True and answer.get("tool_call_id") == tcid
+            decided.append((ins, name, call_args, tcid, ok, answer))
+        # Phase 2: execute only after every interrupt in this node has its answer. A resume re-runs this
+        # node from the top; nothing above has side effects, so no approved write can run twice.
+        for ins, name, call_args, tcid, ok, answer in decided:
             rec = {"tool": name, "args": call_args, "id": tcid, "approved": ok, "from": ins["quote"]}
             if ok:
                 try:
@@ -1312,7 +1360,9 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
     g.add_edge("intake", "agent")
     g.add_conditional_edges("agent", route, ["gate", "graph_actions", "auto_draft", "late_reply", END])
     g.add_edge("gate", "tools")
-    g.add_conditional_edges("tools", after_tools, ["auto_draft", "reply_search", "corroborate", "agent"])
+    g.add_node("evidence_gate", evidence_gate)
+    g.add_conditional_edges("tools", after_tools, ["evidence_gate", "auto_draft", "reply_search", "corroborate", "agent"])
+    g.add_conditional_edges("evidence_gate", after_tools, ["auto_draft", "reply_search", "corroborate", "agent"])
     g.add_conditional_edges("auto_draft", lambda s: "graph_actions" if s.get("instructions") else END,
                             ["graph_actions", END])
     g.add_edge("graph_actions", END)

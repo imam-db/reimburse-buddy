@@ -28,7 +28,8 @@ def server_connection(repo_root: Path = REPO_ROOT, extra_env: dict | None = None
         # Pass PATH etc. through, but no model keys: the server does not need them.
         "env": {k: v for k, v in os.environ.items() if not k.startswith("REIMBURSE_AGENT_")
                 and not k.endswith("_API_KEY") and k != "VIRTUAL_ENV"}
-        | {"REIMBURSE_ENABLE_EVIDENCE_TOOL": "1"}  # version B only; WorkBuddy never sets it
+        # version B only; WorkBuddy (version A) never sets either flag
+        | {"REIMBURSE_ENABLE_EVIDENCE_TOOL": "1", "REIMBURSE_ENABLE_WRITE_TOOLS": "1"}
         | (extra_env or {}),
     }
 
