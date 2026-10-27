@@ -65,18 +65,22 @@ Source: [docs/agent-how-it-works.excalidraw](docs/agent-how-it-works.excalidraw)
 
 ### What the evaluation shows so far (synthetic data, small n, no LLM runs in this round)
 
-Retrieval was the bottleneck. With semantic retrieval, the no-LLM baseline passes 4/4 of the heuristic-hostile cases 11-14 (19/19 hard cases, 0 unsafe, 0 false approvals) and 2/5 on the held-out large set B (3/5 on tuning set A). What the LLM adds is so far untested and is measured on the reasoning track.
+Retrieval was the bottleneck. With the whole mailbox in hand the no-LLM baseline passes all 19 hard cases (0 unsafe, 0 false approvals) and 4/5 on each large set; with BM25 ranking only it passes 17/19 (cases 11 and 12 need the paraphrase) and 1/5 and 2/5. What the LLM adds is so far untested and is measured on the reasoning track.
 
 | suite (baseline, 1 run, $0) | ranked (BM25+embedding) | BM25 only | whole mailbox, unranked (control) |
 |---|---|---|---|
-| hard, 19 cases | 19/19 | 17/19 (11, 12 fail) | 19/19 |
-| large set A (tuning), 5 | 3/5 | 2/5 | 5/5 |
-| large set B (held out), 5 | 2/5 | 3/5 | 5/5 |
-| reasoning track, 11 | 9/11 (2 false approvals) | - | 9/11 |
+| hard, 19 cases | 19/19 † | 17/19 (11, 12 fail) | 19/19 |
+| large set A (tuning), 5 | 3/5 † | 1/5 | 4/5 |
+| large set B (held out), 5 | 2/5 † | 2/5 | 4/5 |
+| reasoning track, 11 | 9/11 (2 false approvals) † | 8/11 | 8/11 (1 false approval) |
+
+Run 2026-10-27 at `cc430d2` (BM25 and whole columns; `agent/eval/results/*-20261027T23*.json`). The BM25-only and whole columns are 2 and 1 cases lower than the 25 Oct run on the large sets and the reasoning track; the drop is not from this branch — the same command at `27b2934` gives the same 4/5 on large set A. It comes from the graph changes merged between the two runs (gated evidence requests, the approval executor split), which is why the baseline is re-run whenever a gate changes.
+
+† The ranked column has not been re-run: the machine this was measured on cannot install the `embed` extra (no disk) and cannot download the ONNX weights (`cdn-lfs.huggingface.co` unreachable). Those three numbers are the 25 Oct run and predate the case-2/case-10a scoring fixes in this branch, so treat them as the old baseline, not as a result of the current code.
 
 - The whole-mailbox control passes everything because every synthetic receipt and schedule change carries structured fields (`claim_id`, `item_id`, `meeting_update`) and the rule engine keeps only what matches. On these fixtures the loss comes from the top-5 cut, not from understanding. Real mail has no such tags.
 - Large sets (`agent/eval/large_fixtures.py`): 46-68 messages per employee over Aug-Oct 2026, hand-written paraphrases combined by a seeded RNG; set A and set B share no paraphrase. Needed message recall@5 / MRR (baseline query): set A lexical 0.2/0.2, ranked 0.2/0.12; set B lexical 0.4/0.12, ranked 0.2/0.15 (`agent/eval/retrieval_metrics.py`). Every large mailbox is flagged `possibly_incomplete` (the 36 probes reach 33-47 of 46-68 messages).
-- Reasoning track (`agent/eval/reasoning_fixtures.py`, labels in `fixtures/reasoning/labels.json`, to be reviewed by Imam): the baseline falsely approves R1 (meeting moved, then moved back) and R1x (moved, then cancelled in free text). R1 exposed an engine issue: `meeting_update`s were applied in evidence-list order, not message date order. This is fixed (PR #30: updates are applied by message date, and a late checkout justified by the calendar alone is flagged); the table above predates the fix and has not been re-run.
+- Reasoning track (`agent/eval/reasoning_fixtures.py`, labels in `fixtures/reasoning/labels.json`, to be reviewed by Imam): re-run after the PR #30 fix (meeting updates are applied by message date). The baseline no longer falsely approves R1 in either mode, but it still approves R1x (moved, then cancelled in free text) when it reads the whole mailbox: the cancellation is prose only, so the tag-based engine still sees a live move. R3 and R3c fail in both modes, R1c only under BM25 (its paraphrase is not lexically retrievable).
 - Results: `agent/eval/results/{hard,large_a,large_b,reasoning}-baseline*.json` and `retrieval-*.json`; each records a SHA-256 of the fixtures.
 
 ### Prepared, not yet run: model screening and an optional judge
