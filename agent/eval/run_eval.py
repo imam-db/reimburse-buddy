@@ -25,6 +25,7 @@ from langgraph.types import Command
 
 from reimburse_agent.graph import build_graph
 from reimburse_agent.mcp_client import mcp_tools
+from reimburse_agent.money import RP, _int  # noqa: F401 (re-exported for run_hard_eval and older callers)
 
 from .fixture_hash import fixture_hash
 from .cases import CASES, engine, expected
@@ -36,17 +37,10 @@ PRICES = {
     "deepseek-v4-pro": {"hit": 0.044, "miss": 1.32, "out": 3.96},
 }
 RESULTS = Path(__file__).parent / "results"
-RP = re.compile(r"Rp\s?(\d[\d.,]*\d|\d)")
 NUM = re.compile(r"\d[\d.,]*\d|\d")
 REJECT_NEAR = re.compile(r"unsigned|ignored|not |no_matching|wrong|different|other trip|doesn.t|does not|"
                          r"tidak|bukan|belum|trap|invalid|reject|n't|not used|not needed|unused|never", re.I)
 SHAPE_ERR = re.compile(r"wrong shape|not a valid choice|unknown item|validation error|unknown tool", re.I)
-
-
-def _int(s: str) -> int | None:
-    s = re.sub(r"[.,]\d{2}$", "", s)  # Rp1.200.000,00
-    d = re.sub(r"[^\d]", "", s)
-    return int(d) if d else None
 
 
 def cost(model: str, u: dict) -> float:

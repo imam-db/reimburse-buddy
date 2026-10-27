@@ -24,6 +24,9 @@ from reimburse_buddy.models import rupiah
 from reimburse_buddy.rules import check_claim
 
 from . import app as core
+from . import plans  # noqa: F401  # puts agent/ on sys.path
+from reimburse_agent.qa.tools import UNDER_REVIEW, is_sensitive_item  # noqa: E402  # same masking as Q&A
+from reimburse_buddy.models import to_jsonable  # noqa: E402
 from .extract import DOC_TYPES, FIELDS, LOW_CONFIDENCE, Draft, get_extractor
 
 router = APIRouter()
@@ -429,18 +432,23 @@ async def update_draft(did: str, request: Request):
 
 
 AWAITING = "Menunggu verifikasi finance / Awaiting finance review"
-REVIEWING = "finance is reviewing this item"
+REVIEWING = f"{UNDER_REVIEW['note_id'].rstrip('.')} / {UNDER_REVIEW['note_en'].rstrip('.')}"
 GAP_TEXT = {**{code: REVIEWING for code in B_ONLY}, "receipt_missing": "receipt missing", "boarding_pass_missing": "boarding pass missing",
-            "hotel_over_cap": "over the hotel cap: finance will review", "duplicate_suspected": "possible duplicate",
+            "hotel_over_cap": "over the hotel cap: finance will review", "duplicate_suspected": REVIEWING,
             "hotel_nights_mismatch": "nights do not match the trip", "late_checkout_unjustified": "needs justification"}
 
 
 @router.get("/employee/claims/{cid}", response_class=HTMLResponse)
-def employee_claim(cid: str, msg: str = ""):
+def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: ignore[assignment]  # direct calls pass no request
+    from . import qa as qa_web  # Employee Q&A hook; a no-op unless EMPLOYEE_QA is on
     try:
         claim = core.store.get_claim(cid)
     except KeyError:
         raise HTTPException(404, f"Unknown claim {cid}")
+    parts = qa_web.claim_page_parts(request, cid, claim["employee_id"])
+    if isinstance(parts, HTMLResponse):
+        return parts
+    qa_top, qa_box = parts
     chk = core.run_check(cid)
     files_by_item: dict[str, list] = {}
     for m in core.store.inbox:
@@ -454,6 +462,8 @@ def employee_claim(cid: str, msg: str = ""):
         have = files_by_item.get(it["id"], []) + [x for x in used.get(it["id"], []) if x.startswith("MSG")
                                                   and not any(x in f for f in files_by_item.get(it["id"], []))]
         missing = list(dict.fromkeys(GAP_TEXT.get(str(g), str(g).replace("_", " ")) for g in res.gaps))
+        if is_sensitive_item(to_jsonable(res)):  # fraud/suspicion signals: never detailed to the employee
+            missing = [REVIEWING]
         if it["id"] in pending:
             missing = [AWAITING]
         status = (", ".join(missing) if missing else ("rejected" if res.status.value == "rejected" else "evidence complete"))
@@ -469,7 +479,7 @@ def employee_claim(cid: str, msg: str = ""):
 {e(claim['trip']['end_date'])} &middot; status {core.status_tag(claim['status'])}</p>
 <table><tr><th>Item</th><th>Date</th><th class=num>Claimed</th><th>Files</th><th>Evidence</th><th></th></tr>{rows}</table>
 <p class="note">Finance reviews every claim. Amounts shown are what you claimed; finance decides what is approved.</p>"""
-    return core.page(f"Claim {cid}", body)
+    return core.page(f"Claim {cid}", qa_top + body + qa_box)
 
 
 @router.post("/employee/claims/{cid}/items/{iid}/files")

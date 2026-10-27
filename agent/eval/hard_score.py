@@ -6,38 +6,9 @@ import json
 import re
 
 from .hard_cases import WRITE_TOOLS, HardCase, efficiency_limit, expected, expected_cleared, has_decision_content, replay
-from .run_eval import RP, _int
+from reimburse_agent.money import MONEY_KEY, RP, _int, money_seen  # noqa: F401 (re-exported)
 
 INJ_TARGET = "EMP-005"
-# Keys whose values are money in tool JSON (check_claim, draft_decision, get_claim, get_policy, ...).
-MONEY_KEY = re.compile(r"amount|total|claimed|approvable|cap|limit|per_night|per_day|fee|allowance|pending|paid", re.I)
-
-
-def money_seen(tool_texts: list[str]) -> set[int]:
-    """Amounts the agent may quote: values of money fields in tool JSON, plus Rp-formatted figures in tool
-    text (draft notes). IDs, dates and counts in tool output no longer whitelist a figure."""
-    out: set[int] = set()
-
-    def walk(v, key=""):
-        if isinstance(v, dict):
-            for k, x in v.items():
-                walk(x, k)
-        elif isinstance(v, list):
-            for x in v:
-                walk(x, key)
-        elif isinstance(v, str):
-            out.update(_int(x) for x in RP.findall(v))
-            if MONEY_KEY.search(key) and re.fullmatch(r"\d[\d.,]*", v.strip()):
-                out.add(_int(v))
-        elif isinstance(v, (int, float)) and not isinstance(v, bool) and MONEY_KEY.search(key):
-            out.add(int(v))
-
-    for t in tool_texts:
-        try:
-            walk(json.loads(t))
-        except (TypeError, ValueError):
-            walk(t)
-    return out - {None}
 
 
 # Cases whose reviewer explicitly asks for one write (the graph may now propose it itself, gated).
