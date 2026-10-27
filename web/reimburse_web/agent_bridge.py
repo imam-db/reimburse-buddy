@@ -7,19 +7,24 @@ the only contract is the JSON-lines protocol documented in investigate_worker.py
 
 Guards (per web process): at most REIMBURSE_INVESTIGATE_MAX_PER_MIN runs started per minute
 (default 3), one live run at a time, and REIMBURSE_AGENT_MAX_TOKENS tokens per run (default 250k,
-enforced in the worker).
+enforced in the worker). The worker also enforces a run deadline and auto-declines an approval
+nobody answers. Each run is its own process group so Cancel/stop kills uv, python and the MCP server.
+stderr goes to a per-run log; the page shows its last lines with secrets redacted.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
+import signal
 import subprocess
 import threading
 import time
 import uuid
 from collections import deque
 from pathlib import Path
+import tempfile
 
 AGENT_DIR = Path(os.environ.get("REIMBURSE_AGENT_DIR", Path(__file__).resolve().parents[2] / "agent"))
 NO_KEY_MESSAGE = ("No model key configured. Set DEEPSEEK_API_KEY (or REIMBURSE_AGENT_API_KEY) in the "
@@ -34,15 +39,29 @@ class RateLimited(RuntimeError):
     pass
 
 
+LOG_DIR = Path(os.environ.get("REIMBURSE_AGENT_LOG_DIR", Path(tempfile.gettempdir()) / "reimburse-agent-runs"))
+_SECRET = re.compile(r"(sk-[A-Za-z0-9_-]{8,}|(?i:(api[_-]?key|authorization|bearer|token)[\"'=: ]+(bearer\s+)?)\S+)")
+
+
+def redact(text: str) -> str:
+    for k, v in os.environ.items():
+        if v and len(v) >= 8 and (k.endswith("_API_KEY") or k.endswith("_TOKEN") or "SECRET" in k):
+            text = text.replace(v, "***")
+    return _SECRET.sub("***", text)
+
+
 class Run:
     def __init__(self, claim_id: str, cmd: list[str]):
         self.id = uuid.uuid4().hex[:10]
         self.claim_id = claim_id
         self.events: list[dict] = []
         self.lock = threading.Lock()
-        # stderr is dropped (uv progress noise); errors arrive as "error" events.
+        self.answered: set[str] = set()  # approval_ids already answered (duplicates ignored)
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        self.log_path = LOG_DIR / f"{self.id}.stderr.log"
+        self._log = open(self.log_path, "w", encoding="utf-8")
         self.proc = subprocess.Popen(cmd, cwd=AGENT_DIR, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                     stderr=subprocess.DEVNULL, text=True, bufsize=1)
+                                     stderr=self._log, text=True, bufsize=1, start_new_session=True)
         self.reader = threading.Thread(target=self._read, daemon=True)
         self.reader.start()
 
@@ -58,6 +77,7 @@ class Run:
             with self.lock:
                 self.events.append(ev)
         self.proc.wait()
+        self._log.close()
         with self.lock:
             if not any(e["type"] in ("final", "error") for e in self.events):
                 self.events.append({"type": "error", "code": "exited",
@@ -67,27 +87,75 @@ class Run:
         with self.lock:
             return list(self.events)
 
+    CLOSES = ("answer_applied", "auto_declined", "final", "error")
+
+    @staticmethod
+    def _pending(events: list[dict]) -> dict | None:
+        """The latest interrupt not yet closed by answer_applied/auto_declined/final/error.
+        answer_rejected and step events don't hide it."""
+        for i in range(len(events) - 1, -1, -1):
+            ev = events[i]
+            if ev["type"] in Run.CLOSES:
+                return None
+            if ev["type"] == "interrupt":
+                return ev
+        return None
+
     @property
     def pending(self) -> dict | None:
-        ev = self.snapshot()
-        if ev and ev[-1]["type"] == "interrupt":
-            return ev[-1]
-        return None
+        return self._pending(self.snapshot())
 
     @property
     def done(self) -> bool:
         return any(e["type"] in ("final", "error") for e in self.snapshot())
 
-    def resume(self, approved: bool, reason: str = "") -> bool:
-        """Answer the pending interrupt. Returns False if nothing is waiting."""
-        req = self.pending
-        if req is None:
-            return False
-        with self.lock:
-            self.events.append({"type": "decision", "tool": req["tool"], "approved": approved, "reason": reason})
-        self.proc.stdin.write(json.dumps({"approved": approved, "reason": reason}) + "\n")
-        self.proc.stdin.flush()
+    def resume(self, approval_id: str, approved: bool, reason: str = "") -> bool:
+        """Answer the pending interrupt identified by its worker-generated approval_id. False when
+        that interrupt is not the one waiting (stale page, second tab, double click) or was already
+        answered; nothing is sent then. The trace shows the decision only after the worker's
+        answer_applied acknowledgement."""
+        with self.lock:  # check and write under one lock
+            req = self._pending(self.events)
+            if req is None or not approval_id or req.get("approval_id") != approval_id or approval_id in self.answered:
+                return False
+            self.answered.add(approval_id)
+            try:
+                self.proc.stdin.write(json.dumps({"approval_id": approval_id, "approved": approved,
+                                                  "reason": reason}) + "\n")
+                self.proc.stdin.flush()
+            except (BrokenPipeError, ValueError):
+                return False
         return True
+
+    def cancel(self) -> None:
+        """Stop the run: polite cancel line, then kill the whole process group."""
+        with self.lock:
+            try:
+                self.proc.stdin.write(json.dumps({"cancel": True}) + "\n")
+                self.proc.stdin.flush()
+            except (BrokenPipeError, ValueError, OSError):
+                pass
+        try:
+            self.proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            self.kill()
+        with self.lock:
+            if not any(e["type"] in ("final", "error") for e in self.events):
+                self.events.append({"type": "error", "code": "cancelled", "message": "Cancelled by the reviewer."})
+
+    def kill(self) -> None:
+        if self.proc.poll() is None:
+            try:
+                os.killpg(self.proc.pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                self.proc.kill()
+
+    def stderr_tail(self, n: int = 20) -> str:
+        try:
+            lines = self.log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            return ""
+        return redact("\n".join(lines[-n:]))
 
     def wait(self, timeout: float = 60, until=None) -> None:
         end = time.time() + timeout
@@ -106,7 +174,7 @@ class Investigator:
         self.runs: dict[str, Run] = {}
 
     def command(self, claim_id: str) -> list[str]:
-        cmd = ["uv", "--directory", str(AGENT_DIR), "run", "--no-dev", "python", "investigate_worker.py",
+        cmd = ["uv", "--directory", str(AGENT_DIR), "run", "--frozen", "--no-dev", "python", "investigate_worker.py",
                "--claim", claim_id]
         return cmd + (["--fake-script", self.fake_script] if self.fake_script else [])
 
@@ -125,7 +193,6 @@ class Investigator:
 
     def stop_all(self) -> None:
         for r in self.runs.values():
-            if r.proc.poll() is None:
-                r.proc.kill()
+            r.kill()
         self.runs.clear()
         self.started.clear()

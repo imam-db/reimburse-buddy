@@ -52,5 +52,6 @@ def load_config(env: dict[str, str] | None = None) -> ModelConfig:
 def build_chat_model(cfg: ModelConfig):
     from langchain_openai import ChatOpenAI
 
+    # Bounded: one slow provider call can't hang a run (review finding 5).
     return ChatOpenAI(model=cfg.model, api_key=cfg.api_key, base_url=cfg.base_url,
-                      temperature=cfg.temperature)
+                      temperature=cfg.temperature, timeout=60, max_retries=1)
