@@ -120,6 +120,35 @@ def _requester_name(emp_id) -> str:
     return contact.name if contact else str(emp_id)
 
 
+def submitted_by(run_id: str, plan: dict | None = None) -> str:
+    """The reviewer who filled the intake form, or "" for a plan started outside the web app.
+
+    The plan is the first place to look; a run still waiting on a who-question has no plan yet, so
+    request.json is the fallback (intake.start_run writes both)."""
+    if plan and plan.get("submitted_by"):
+        return str(plan["submitted_by"])
+    try:
+        saved = store().load_request(run_id) or {}
+    except (ValueError, OSError):
+        return ""
+    return str(saved.get("submitted_by") or "")
+
+
+def approval_block(run_id: str, plan: dict, reviewer: str) -> str | None:
+    """Why this reviewer may not approve this plan, or None when they may.
+
+    Two cases, both fail closed: the reviewer is the plan's requester, or the reviewer is the person who
+    submitted the request (the intake lets them name anyone as the requester, so without the second check
+    a reviewer could file a request "for" a colleague and then approve it)."""
+    if not reviewer or reviewer == auth.FALLBACK_REVIEWER:
+        return None  # the gate is off: no identity, no rule (unchanged dev behaviour)
+    if plan.get("requester") == reviewer:
+        return "requester"
+    if submitted_by(run_id, plan) == reviewer:
+        return "submitted_by"
+    return None
+
+
 @router.get("/admin/plans", response_class=HTMLResponse)
 def plans_index():
     from . import app as web  # late import: app.py includes this router
@@ -155,11 +184,17 @@ def plan_page(run_id: str, request: Request, msg: str = ""):
         raise HTTPException(404, "no such plan")
     from . import app as web  # late import: app.py includes this router
 
-    # A requester cannot approve their own plan: the approve control is disabled here and /decide
-    # refuses it server-side (fail closed, nothing is stored).
-    allow_approve = plan.get("requester") != auth.reviewer_of(request)
+    # A requester cannot approve their own plan, and neither can the reviewer who submitted the request
+    # on their behalf: the approve control is disabled here and /decide refuses it server-side (fail
+    # closed, nothing is stored).
+    reviewer = auth.reviewer_of(request)
+    block = approval_block(run_id, plan, reviewer)
+    if plan.get("submitted_by") is None:
+        plan["submitted_by"] = submitted_by(run_id)  # for the "Diajukan oleh" line only
     markup = page.render(plan, log(), directory(), R.default_rules(),
-                         action_url=f"/admin/plans/{run_id}/decide", msg=msg, allow_approve=allow_approve)
+                         action_url=f"/admin/plans/{run_id}/decide", msg=msg, allow_approve=block is None,
+                         blocked_note=(label("self_approval_submitted_note") if block == "submitted_by"
+                                       else None))
     markup = markup.replace("</head>", f"<style>{web.NAV_CSS}</style></head>", 1)
     return HTMLResponse(markup.replace("<body>", f"<body>{web.nav_html()}", 1))
 
@@ -178,10 +213,12 @@ async def decide(run_id: str, request: Request):
     notes = {k.split(":", 1)[1]: str(v).strip()[:500] for k, v in form.items()
              if k.startswith("note:") and k.split(":", 1)[1] in ids and str(v).strip()}
     reviewer = auth.reviewer_of(request)
-    if plan.get("requester") == reviewer and any(v == "approve" for v in decisions.values()):
+    block = approval_block(run_id, plan, reviewer)
+    if block and any(v == "approve" for v in decisions.values()):
         # Rejections and notes stay allowed: they cannot approve anything. Nothing is stored.
         auth.audit_self_approval(run_id, reviewer, f"self_approval:plan:{run_id}:v{plan['version']}",
-                                 plan_id=plan["plan_id"], requester=plan.get("requester"))
+                                 plan_id=plan["plan_id"], requester=plan.get("requester"),
+                                 submitted_by=submitted_by(run_id, plan), blocked=block)
         return RedirectResponse(f"/admin/plans/{run_id}?msg={quote(label('self_approval_blocked'), safe='')}",
                                 status_code=303)
     decision = {"plan_id": plan["plan_id"], "decisions": decisions, "notes": notes, "actor": f"human:{reviewer}"}

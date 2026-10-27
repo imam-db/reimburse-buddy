@@ -30,8 +30,10 @@ MIN_PASSWORD_CHARS = 12
 MAX_FAILS_PER_MINUTE = 5
 PRODUCTION_ENVS = frozenset({"prod", "production"})
 # Synthetic reviewers the login form offers. Intake defaults the requester to EMP-101, so the demo
-# reviewer is EMP-100: the same person may not request and approve (see self_approval.py).
-REVIEWERS = ("EMP-100", "EMP-101")
+# reviewer is EMP-100: the same person may not request and approve (see self_approval.py). EMP-102
+# (Finance) is the third reviewer, so the demo can show "refused as EMP-100, approved as EMP-102"
+# without changing who the request is for.
+REVIEWERS = ("EMP-100", "EMP-101", "EMP-102")
 DEFAULT_REVIEWER = "EMP-100"
 # Who a decision is attributed to when the gate is off (dev, tests): the value used before identities.
 FALLBACK_REVIEWER = "reviewer"

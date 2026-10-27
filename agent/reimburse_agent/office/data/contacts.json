@@ -8,6 +8,7 @@
     {"id": "EMP-005", "name": "Putri Maharani", "role": "Operations staff", "email": "putri.maharani@nusantara-niaga.example", "office": "Jayapura", "tz": "WIT"},
     {"id": "EMP-100", "name": "Dewi Anggraini", "role": "Sales manager", "email": "dewi.anggraini@nusantara-niaga.example", "office": "Jakarta", "tz": "WIB"},
     {"id": "EMP-101", "name": "Hendra Saputra", "role": "Operations manager", "email": "hendra.saputra@nusantara-niaga.example", "office": "Jakarta", "tz": "WIB"},
+    {"id": "EMP-102", "name": "Rani Kusuma", "role": "Finance manager", "email": "rani.kusuma@nusantara-niaga.example", "office": "Jakarta", "tz": "WIB"},
     {"id": "EMP-201", "name": "Budi Santoso", "role": "Finance staff", "email": "budi.santoso@nusantara-niaga.example", "office": "Jakarta", "tz": "WIB"},
     {"id": "EMP-202", "name": "Budi Hartono", "role": "Field operations lead", "email": "budi.hartono@nusantara-niaga.example", "office": "Jayapura", "tz": "WIT"},
     {"id": "EMP-203", "name": "Andi Pratiwi", "role": "Finance staff", "email": "andi.pratiwi@nusantara-niaga.example", "office": "Makassar", "tz": "WITA"}

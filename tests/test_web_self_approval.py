@@ -1,9 +1,12 @@
 """A reviewer may not approve their own request or claim.
 
-The identity comes from the demo login (auth.reviewer_of): the form picks EMP-100 or EMP-101, and the
-same person who requested a plan, or who owns a claim, is refused on every approval path. The refusals
-are fail closed (nothing is stored, nothing executes) and land in the audit log as `access_denied` with
-actor `human:<reviewer>`.
+The identity comes from the demo login (auth.reviewer_of): the form picks EMP-100, EMP-101 or EMP-102,
+and the same person who requested a plan, or who owns a claim, is refused on every approval path. The
+refusals are fail closed (nothing is stored, nothing executes) and land in the audit log as
+`access_denied` with actor `human:<reviewer>`.
+
+The intake also records who submitted the request (`submitted_by`): a reviewer may name anyone as the
+requester, so the submitter may not approve it either, even when the requester is somebody else.
 
 Rejections, notes and `on_hold` stay available: they cannot approve anything.
 """
@@ -129,8 +132,9 @@ def test_requester_can_still_reject_their_own_plan(client):
 
 def test_another_reviewer_can_approve_and_the_actor_is_recorded(client):
     c = client
-    login(c, "EMP-100")  # EMP-101 requested the plan
-    run_id = start_plan(c, requester="EMP-101")
+    login(c, "EMP-101")
+    run_id = start_plan(c, requester="EMP-101")  # requested and submitted by EMP-101
+    login(c, "EMP-100")  # neither the requester nor the submitter
 
     r = c.post(f"/admin/plans/{run_id}/decide", data=approve_form(c, run_id), follow_redirects=False)
     assert r.status_code == 303 and "Keputusan" in r.headers["location"]
@@ -145,7 +149,52 @@ def test_another_reviewer_can_approve_and_the_actor_is_recorded(client):
     assert not [e for e in events(run_id) if e["event_type"] == "access_denied"]
 
 
-def test_plan_page_disables_approve_for_the_requester(client):
+def test_submitter_cannot_approve_a_request_filed_for_someone_else(client):
+    """The demo flow: EMP-100 submits Example Test 1 with EMP-101 as the requester. EMP-100 may not
+    approve it (they filed it), EMP-101 may not either (they are the requester), EMP-102 can."""
+    c = client
+    login(c, "EMP-100")
+    run_id = start_plan(c, requester="EMP-101")
+    plan = plans.store().load_plan(run_id)
+    assert plan["submitted_by"] == "EMP-100"
+    assert plans.store().load_request(run_id)["submitted_by"] == "EMP-100"
+
+    r = c.post(f"/admin/plans/{run_id}/decide", data=approve_form(c, run_id), follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].startswith(f"/admin/plans/{run_id}?msg=")
+    assert plans.store().load_decisions(run_id, plan["version"]) is None  # nothing stored
+    denied = [e for e in events(run_id) if e["event_type"] == "access_denied"]
+    assert [(e["actor"], e["payload"]["blocked"]) for e in denied] == [("human:EMP-100", "submitted_by")]
+    assert denied[0]["payload"]["reason"] == "self_approval"
+    assert denied[0]["payload"]["submitted_by"] == "EMP-100"
+    assert denied[0]["payload"]["requester"] == "EMP-101"
+
+    # The requester named on the form is refused as well, even though they did not submit it.
+    login(c, "EMP-101")
+    r = c.post(f"/admin/plans/{run_id}/decide", data=approve_form(c, run_id), follow_redirects=False)
+    assert r.headers["location"].startswith(f"/admin/plans/{run_id}?msg=")
+    assert plans.store().load_decisions(run_id, plan["version"]) is None
+
+    # The third reviewer (Finance) can approve it.
+    login(c, "EMP-102")
+    r = c.post(f"/admin/plans/{run_id}/decide", data=approve_form(c, run_id), follow_redirects=False)
+    assert r.status_code == 303 and "Keputusan" in r.headers["location"]
+    saved = plans.store().load_decisions(run_id, plan["version"])
+    assert saved["actor"] == "human:EMP-102"
+    executions = [e for e in events(run_id) if e["event_type"] == "execution"]
+    assert len(executions) == len(plan["actions"]) == 2
+    assert all(e["actor"] == "human:EMP-102" for e in events(run_id) if e["event_type"] == "approval")
+
+
+def test_plan_page_shows_who_submitted_it(client):
+    c = client
+    login(c, "EMP-100")
+    run_id = start_plan(c, requester="EMP-101")
+    page = c.get(f"/admin/plans/{run_id}").text
+    assert "id=submitted-by" in page and "Diajukan oleh" in page and "Dewi Anggraini" in page
+    assert "EMP-101" not in page.split("id=submitted-by")[1].split("</span>")[0]  # requester stays separate
+
+
+def test_plan_page_disables_approve_for_the_requester_and_the_submitter(client):
     c = client
     login(c, "EMP-101")
     run_id = start_plan(c, requester="EMP-101")
@@ -153,8 +202,16 @@ def test_plan_page_disables_approve_for_the_requester(client):
     assert "id='self-approval'" in page
     assert re.search(r"value=approve disabled", page)
     assert "Tolak / Reject" in page
-    # A different reviewer sees the normal control.
+
+    # The submitter is blocked too, with its own wording.
     login(c, "EMP-100")
+    run_id = start_plan(c, requester="EMP-101")
+    page = c.get(f"/admin/plans/{run_id}").text
+    assert "id='self-approval'" in page and "Anda yang mengajukan permintaan ini" in page
+    assert re.search(r"value=approve disabled", page)
+
+    # A reviewer who is neither sees the normal control.
+    login(c, "EMP-102")
     page = c.get(f"/admin/plans/{run_id}").text
     assert "id='self-approval'" not in page
     assert re.search(r"name='decision:[^']+' value=approve>", page)
@@ -340,11 +397,14 @@ def test_claim_page_hides_the_approval_controls_for_the_owner(client):
 
 
 def test_without_a_login_the_actor_is_unchanged(client, monkeypatch):
-    """The gate is off in dev: decisions stay attributed to human:reviewer, as before this change."""
+    """The gate is off in dev: decisions stay attributed to human:reviewer, and no submitter is recorded,
+    exactly as before this change."""
     monkeypatch.delenv("DEMO_PASSWORD", raising=False)
     c = TestClient(web.app)
     run_id = start_plan(c, requester="EMP-101")
     plan = plans.store().load_plan(run_id)
+    assert "submitted_by" not in plan
+    assert "submitted_by" not in plans.store().load_request(run_id)
     data = {"plan_id": plan["plan_id"]}
     for action in plan["actions"]:
         data[f"decision:{action['action_id']}"] = "approve"

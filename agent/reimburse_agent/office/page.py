@@ -93,10 +93,11 @@ def _person(directory: Directory, emp: str) -> str:
 
 
 def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, action_url: str | None = None,
-           msg: str = "", allow_approve: bool = True) -> str:
-    """The confirmation page. `allow_approve=False` disables the Approve control (the requester may not
-    approve their own plan): the radio is rendered disabled so the form cannot submit "approve", and a
-    note explains why. Reject stays available. Presentation only: the gate in plan_graph still decides."""
+           msg: str = "", allow_approve: bool = True, blocked_note: str | None = None) -> str:
+    """The confirmation page. `allow_approve=False` disables the Approve control (the requester, or the
+    reviewer who submitted the request, may not approve it): the radio is rendered disabled so the form
+    cannot submit "approve", and a note explains why (`blocked_note` overrides the default wording).
+    Reject stays available. Presentation only: the gate in plan_graph still decides."""
     log_notices_shown(plan, log)
     events = log.list(plan["run_id"])
     run = e(plan["run_id"])
@@ -109,14 +110,17 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
            f"<style>{CSS}</style></head><body>",
            f"<h1>Konfirmasi rencana / Plan confirmation</h1>",
            f"<p class=muted>Run {run} &middot; {e(plan['plan_id'])} &middot; peminta / requester: "
-           f"{_person(directory, plan['requester'])}</p>",
+           f"{_person(directory, plan['requester'])}"
+           + (f" &middot; <span id=submitted-by>Diajukan oleh / submitted by: "
+              f"{_person(directory, plan['submitted_by'])}</span>" if plan.get("submitted_by") else "")
+           + "</p>",
            "<p><b>Belum ada yang dikirim sampai Anda menyetujui.</b> "
            "Nothing is sent or scheduled until you approve. Mock tools only.</p>"]
     if not allow_approve:
-        out.append("<div class='notice' id='self-approval'><b>Anda peminta rencana ini</b><p>Anda tidak dapat "
-                   "menyetujui permintaan Anda sendiri, jadi tombol Setujui dimatikan. Anda tetap bisa menolak "
-                   "atau meminta rekan lain menyetujuinya. / You requested this plan, so you cannot approve it "
-                   "yourself; rejecting stays available.</p></div>")
+        note = blocked_note or "Anda peminta rencana ini, jadi tombol Setujui dimatikan."
+        out.append(f"<div class='notice' id='self-approval'><b>Anda tidak dapat menyetujui rencana ini</b>"
+                   f"<p>{e(note)} Anda tetap bisa menolak atau meminta rekan lain menyetujuinya. / You "
+                   "cannot approve this plan yourself; rejecting stays available.</p></div>")
     if expired:
         reason = _expired_reason(events, expired)
         reason_id = EXPIRED_REASON_ID.get(reason, EXPIRED_FALLBACK_ID)
