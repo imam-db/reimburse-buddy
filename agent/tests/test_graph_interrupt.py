@@ -118,7 +118,7 @@ async def test_evidence_request_free_for_run_claim_after_check():
     seen, st = await _evidence_run([CHECK, ("request_missing_evidence", ev("IT-5", "receipt_missing")),
                                     ("get_outbox", {})])
     assert seen == []
-    out = st.values["messages"][-2].content
+    out = next(m.content for m in st.values["messages"] if getattr(m, "name", "") == "get_outbox")
     assert "EMP-001" in out and "IT-5" in out
 
 

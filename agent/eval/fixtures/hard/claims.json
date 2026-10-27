@@ -876,6 +876,39 @@
     ]
   },
   {
+    "id": "CLM-2026-0205",
+    "employee_id": "EMP-004",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-EVAL",
+    "purpose": "Client follow-up in Surabaya (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Surabaya",
+      "start_date": "2026-10-16",
+      "end_date": "2026-10-16"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "taxi",
+        "date": "2026-10-16",
+        "description": "Taxi airport to client",
+        "amount": "120000",
+        "receipt": false
+      },
+      {
+        "id": "IT-2",
+        "category": "per_diem",
+        "date": "2026-10-16",
+        "description": "Per diem 1 day",
+        "amount": "450000",
+        "days": 1,
+        "receipt": false
+      }
+    ]
+  },
+  {
     "id": "CLM-2026-0203",
     "employee_id": "EMP-005",
     "status": "submitted",
@@ -1032,6 +1065,224 @@
         "amount": "120000",
         "receipt": true,
         "receipt_no": "TX-0204-10"
+      }
+    ]
+  },
+  {
+    "id": "CLM-2026-0301",
+    "employee_id": "EMP-003",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-EVAL",
+    "purpose": "Client meeting in Surabaya (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Surabaya",
+      "start_date": "2026-10-15",
+      "end_date": "2026-10-16"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-15",
+        "description": "outbound flight QZ 7310",
+        "amount": "1200000",
+        "flight_no": "QZ 7310",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-0301-IT-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-16",
+        "description": "return flight QZ 7317",
+        "amount": "1200000",
+        "flight_no": "QZ 7317",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-0301-IT-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "hotel",
+        "date": "2026-10-15",
+        "description": "Hotel Arunika Surabaya, 1 night",
+        "amount": "700000",
+        "nights": 1,
+        "receipt": true,
+        "receipt_no": "HTL-CLM-2026-0301"
+      },
+      {
+        "id": "IT-4",
+        "category": "late_checkout",
+        "date": "2026-10-16",
+        "description": "Late check-out until 16:00",
+        "amount": "300000",
+        "checkout_time": "16:00",
+        "location": "Surabaya",
+        "receipt": true,
+        "receipt_no": "LC-IT-4-2026-10-16"
+      }
+    ]
+  },
+  {
+    "id": "CLM-2026-0302",
+    "employee_id": "EMP-005",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-EVAL",
+    "purpose": "Supplier visit in Surabaya (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Surabaya",
+      "start_date": "2026-10-13",
+      "end_date": "2026-10-14"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-13",
+        "description": "outbound flight GA 320",
+        "amount": "1300000",
+        "flight_no": "GA 320",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-0302-IT-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-14",
+        "description": "return flight GA 327",
+        "amount": "1300000",
+        "flight_no": "GA 327",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-0302-IT-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "taxi",
+        "date": "2026-10-13",
+        "description": "Taxi airport to hotel",
+        "amount": "135000",
+        "receipt": false
+      }
+    ]
+  },
+  {
+    "id": "CLM-2026-0303",
+    "employee_id": "EMP-004",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-EVAL",
+    "purpose": "Distributor visit in Makassar (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Makassar",
+      "start_date": "2026-10-09",
+      "end_date": "2026-10-10"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-09",
+        "description": "outbound flight ID 6170",
+        "amount": "1400000",
+        "flight_no": "ID 6170",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-0303-IT-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-10",
+        "description": "return flight ID 6177",
+        "amount": "1400000",
+        "flight_no": "ID 6177",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-0303-IT-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "taxi",
+        "date": "2026-10-10",
+        "description": "Taxi hotel to airport",
+        "amount": "98000",
+        "receipt": false
+      }
+    ]
+  },
+  {
+    "id": "CLM-2026-0304",
+    "employee_id": "EMP-003",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-EVAL",
+    "purpose": "Partner review in Makassar (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Makassar",
+      "start_date": "2026-10-08",
+      "end_date": "2026-10-09"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-08",
+        "description": "outbound flight GA 640",
+        "amount": "1500000",
+        "flight_no": "GA 640",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-0304-IT-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-09",
+        "description": "return flight GA 647",
+        "amount": "1500000",
+        "flight_no": "GA 647",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-0304-IT-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "hotel",
+        "date": "2026-10-08",
+        "description": "Hotel Bahari Makassar, 1 night",
+        "amount": "650000",
+        "nights": 1,
+        "receipt": true,
+        "receipt_no": "HTL-CLM-2026-0304"
+      },
+      {
+        "id": "IT-4",
+        "category": "late_checkout",
+        "date": "2026-10-09",
+        "description": "Late check-out until 15:00",
+        "amount": "250000",
+        "checkout_time": "15:00",
+        "location": "Makassar",
+        "receipt": true,
+        "receipt_no": "LC-IT-4-2026-10-09"
       }
     ]
   }

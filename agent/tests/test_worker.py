@@ -15,7 +15,7 @@ def run_worker(args, stdin=""):
     return p.returncode, [json.loads(l) for l in p.stdout.splitlines() if l.startswith("{")]
 
 
-def drive(args, on_interrupt, timeout=120):
+def drive(args, on_interrupt, timeout=120, on_question=None):
     """Run the worker; on each interrupt event, write the lines on_interrupt(ev) returns (None = stay silent)."""
     p = subprocess.Popen([sys.executable, "investigate_worker.py", *args], cwd=AGENT, stdin=subprocess.PIPE,
                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1)
@@ -28,6 +28,10 @@ def drive(args, on_interrupt, timeout=120):
             evs.append(ev)
             if ev["type"] == "interrupt":
                 for out in on_interrupt(ev) or []:
+                    p.stdin.write(json.dumps(out) + "\n")
+                    p.stdin.flush()
+            if ev["type"] == "question" and on_question:
+                for out in on_question(ev) or []:
                     p.stdin.write(json.dumps(out) + "\n")
                     p.stdin.flush()
             if ev["type"] in ("final", "error"):
@@ -117,3 +121,29 @@ def test_run_deadline(tmp_path):
 def test_token_limit_guard(tmp_path):
     code, evs = run_worker(["--claim", "C", "--fake-script", script(tmp_path, {"content": "x"}), "--max-tokens", "-1"])
     assert code == 3 and evs[-1]["code"] == "token_limit"
+
+
+def test_question_reply_carries_reviewer_decisions_into_the_graph(tmp_path):
+    ask = {"content": "Should I cap the hotel IT-3?"}
+    same = {"tool_calls": [{"name": "check_claim", "id": "k1", "args": {
+        "claim_id": HERO, "human_decisions": {"IT-3": "approve_capped"}}}]}
+    other = {"tool_calls": [{"name": "check_claim", "id": "k2", "args": {
+        "claim_id": HERO, "human_decisions": {"IT-3": "approve_full"}}}]}
+    first = {"tool_calls": [{"name": "check_claim", "id": "k0", "args": {"claim_id": HERO}}]}
+    reply = lambda ev: [{"question_id": ev["question_id"], "reply": "",
+                         "decisions": {"IT-3": "approve_capped", "bad key": "x", "IT-4": "approve_everything"}}]
+    code, evs = drive(["--claim", HERO, "--fake-script", script(tmp_path, first, ask, same, other, {"content": "done"})],
+                      lambda ev: None, on_question=reply)
+    assert code == 0
+    q = next(e for e in evs if e["type"] == "question")
+    assert "IT-3" in {i["item_id"] for i in q["items"]}
+    applied = next(e for e in evs if e["type"] == "reply_applied")
+    assert applied["decisions"] == {"IT-3": "approve_capped"}  # malformed pairs dropped
+    steps = [e for e in evs if e["type"] == "step"]
+    assert "human_decisions_not_from_reviewer" not in steps[1]["result_summary"]  # matches the reviewer
+    assert "human_decisions_not_from_reviewer" in steps[2]["result_summary"]  # model's own value refused
+
+
+def test_no_question_without_question_mark(tmp_path):
+    code, evs = run_worker(["--claim", HERO, "--fake-script", script(tmp_path, {"content": "All done."})])
+    assert code == 0 and not any(e["type"] == "question" for e in evs)

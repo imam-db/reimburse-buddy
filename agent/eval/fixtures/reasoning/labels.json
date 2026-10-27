@@ -1,0 +1,138 @@
+{
+  "R1": {
+    "claim_id": "CLM-2026-8001",
+    "good_evidence": [
+      "EVT-8001",
+      "MSG-5009",
+      "MSG-5010"
+    ],
+    "human_decisions": {
+      "IT-4": "reject"
+    },
+    "label": "reject IT-4",
+    "rationale": "The later message moves the meeting back to 10:00-12:00, so a 16:00 checkout is not justified; using only the first move would approve it.",
+    "control_of": null,
+    "needs_imam_review": true
+  },
+  "R1c": {
+    "claim_id": "CLM-2026-8002",
+    "good_evidence": [
+      "EVT-8002",
+      "MSG-5019"
+    ],
+    "human_decisions": {},
+    "label": "approve all",
+    "rationale": "One move to 15:00-16:30 justifies the 16:00 checkout.",
+    "control_of": "R1",
+    "needs_imam_review": true
+  },
+  "R1x": {
+    "claim_id": "CLM-2026-8003",
+    "good_evidence": [
+      "EVT-8003",
+      "MSG-5028",
+      "MSG-5029"
+    ],
+    "human_decisions": {
+      "IT-4": "reject"
+    },
+    "label": "reject IT-4",
+    "rationale": "The meeting was cancelled the day before, so nothing justifies staying until 16:00; the cancellation is free text only.",
+    "control_of": null,
+    "needs_imam_review": true
+  },
+  "R2": {
+    "claim_id": "CLM-2026-8004",
+    "good_evidence": [
+      "MSG-5038"
+    ],
+    "human_decisions": {
+      "IT-3": "use:MSG-5038"
+    },
+    "label": "pay IT-3 from MSG-5038 (85,000)",
+    "rationale": "Both receipts are dated the same day; only MSG-5038's route (hotel to the client office) matches the item, MSG-5039 is a personal ride.",
+    "control_of": null,
+    "needs_imam_review": true
+  },
+  "R2c": {
+    "claim_id": "CLM-2026-8005",
+    "good_evidence": [
+      "MSG-5048"
+    ],
+    "human_decisions": {},
+    "label": "approve all",
+    "rationale": "One receipt, matching route and amount.",
+    "control_of": "R2",
+    "needs_imam_review": true
+  },
+  "R3": {
+    "claim_id": "CLM-2026-8006",
+    "good_evidence": [
+      "MSG-5057"
+    ],
+    "human_decisions": {},
+    "label": "IT-3 ok; IT-4 still needs its receipt (not approvable yet)",
+    "rationale": "The reply carries only the taxi receipt and says the hotel one will follow; the hotel item stays open.",
+    "control_of": null,
+    "needs_imam_review": true
+  },
+  "R3c": {
+    "claim_id": "CLM-2026-8007",
+    "good_evidence": [
+      "MSG-5066"
+    ],
+    "human_decisions": {},
+    "label": "approve all",
+    "rationale": "Both receipts arrived in one reply.",
+    "control_of": "R3",
+    "needs_imam_review": true
+  },
+  "R4": {
+    "claim_id": "CLM-2026-8008",
+    "good_evidence": [
+      "MSG-5075"
+    ],
+    "human_decisions": {
+      "IT-4": "reject"
+    },
+    "label": "reject IT-4",
+    "rationale": "Oversleeping is a personal reason; policy pays late checkout only for business.",
+    "control_of": null,
+    "needs_imam_review": true
+  },
+  "R4c": {
+    "claim_id": "CLM-2026-8009",
+    "good_evidence": [
+      "MSG-5084"
+    ],
+    "human_decisions": {
+      "IT-4": "approve_full"
+    },
+    "label": "approve IT-4 after review",
+    "rationale": "Waiting for a client signature is a business reason, but no calendar event backs it, so a reviewer decides (label: approve).",
+    "control_of": "R4",
+    "needs_imam_review": true
+  },
+  "R5": {
+    "claim_id": "CLM-2026-8010",
+    "good_evidence": [
+      "MSG-5093"
+    ],
+    "human_decisions": {},
+    "label": "approve all",
+    "rationale": "2026-10-13 is a Tuesday and the client ride is IT-3; the message names neither the date nor the item.",
+    "control_of": null,
+    "needs_imam_review": true
+  },
+  "R5c": {
+    "claim_id": "CLM-2026-8011",
+    "good_evidence": [
+      "MSG-5102"
+    ],
+    "human_decisions": {},
+    "label": "approve all",
+    "rationale": "The message names the claim, item and route.",
+    "control_of": "R5",
+    "needs_imam_review": true
+  }
+}

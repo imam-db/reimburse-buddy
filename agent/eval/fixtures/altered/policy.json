@@ -57,5 +57,6 @@
   "triage": {
     "manual_review_minutes_per_claim": "15",
     "note": "Assumed average time a finance officer spends checking one claim by hand (synthetic estimate)."
-  }
+  },
+  "receipt_amount_required": true
 }

@@ -18,6 +18,8 @@ from pathlib import Path
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from reimburse_buddy.amounts import normalize_attachment
+from reimburse_buddy.gaps import B_ONLY
 from reimburse_buddy.models import rupiah
 from reimburse_buddy.rules import check_claim
 
@@ -330,7 +332,11 @@ def _forward(emp: str, cid: str, item: dict, f: dict, trip: dict, dup: bool = Fa
         att = {"name": f["name"], "type": "boarding_pass", "flight": ex.get("flight_no") or "",
                "date": ex.get("date") or "", "passenger": ex.get("passenger") or ""}
     else:
-        att = {"name": f["name"], "type": "receipt", "claim_id": cid, "item_id": item["id"]}
+        # The amount comes from the file (OCR / extraction), never from the item, so the engine can compare them.
+        att = {"name": f["name"], "type": "receipt", "claim_id": cid, "item_id": item["id"], "amount_required": True}
+        if ex.get("amount") not in (None, ""):
+            att["amount"] = ex["amount"]
+        att = normalize_attachment(att)
     reasons = evidence_review_reasons(f, item, trip, me["name"], dup)
     att.update(stored_as=f["stored"], sha256=f.get("sha256", ""), linked_claim=cid, linked_item=item["id"],
                provenance=prov, self_declared=any(v == "self_declared" for v in prov.values()),
@@ -423,7 +429,8 @@ async def update_draft(did: str, request: Request):
 
 
 AWAITING = "Menunggu verifikasi finance / Awaiting finance review"
-GAP_TEXT = {"receipt_missing": "receipt missing", "boarding_pass_missing": "boarding pass missing",
+REVIEWING = "finance is reviewing this item"
+GAP_TEXT = {**{code: REVIEWING for code in B_ONLY}, "receipt_missing": "receipt missing", "boarding_pass_missing": "boarding pass missing",
             "hotel_over_cap": "over the hotel cap: finance will review", "duplicate_suspected": "possible duplicate",
             "hotel_nights_mismatch": "nights do not match the trip", "late_checkout_unjustified": "needs justification"}
 
@@ -446,7 +453,7 @@ def employee_claim(cid: str, msg: str = ""):
     for it, res in zip(claim["items"], chk.items):
         have = files_by_item.get(it["id"], []) + [x for x in used.get(it["id"], []) if x.startswith("MSG")
                                                   and not any(x in f for f in files_by_item.get(it["id"], []))]
-        missing = [GAP_TEXT.get(str(g), str(g).replace("_", " ")) for g in res.gaps]
+        missing = list(dict.fromkeys(GAP_TEXT.get(str(g), str(g).replace("_", " ")) for g in res.gaps))
         if it["id"] in pending:
             missing = [AWAITING]
         status = (", ".join(missing) if missing else ("rejected" if res.status.value == "rejected" else "evidence complete"))

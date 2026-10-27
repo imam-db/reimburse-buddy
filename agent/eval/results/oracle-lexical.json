@@ -1,0 +1,73 @@
+{
+  "fixtures_sha256": "986e2d2e2014e0cbc46272f07d287344bb6e494278635b25a8bbd92640c8c9d7",
+  "oracles": {
+    "11": {
+      "pass": true,
+      "why": "ok",
+      "severity": "ok",
+      "budget_ok": true,
+      "searches": 1,
+      "oracle_query (hindsight)": "jadwal meeting klien",
+      "plausible_queries_hit": {
+        "late checkout meeting moved": false,
+        "meeting rescheduled": false,
+        "meeting diundur": false,
+        "late checkout hotel Surabaya": false,
+        "jadwal meeting": true,
+        "meeting PT Arunika Niaga": true
+      },
+      "error": null
+    },
+    "12": {
+      "pass": true,
+      "why": "ok",
+      "severity": "ok",
+      "budget_ok": true,
+      "searches": 1,
+      "oracle_query (hindsight)": "bukti bayar taksi bandara",
+      "plausible_queries_hit": {
+        "taxi receipt": false,
+        "taxi airport hotel receipt": false,
+        "struk taksi": false,
+        "kuitansi taksi bandara": true,
+        "bukti bayar taksi": true,
+        "Taxi airport to hotel taxi taksi receipt struk kuitansi 2026-10-13": false
+      },
+      "error": null
+    },
+    "13": {
+      "pass": true,
+      "why": "ok",
+      "severity": "ok",
+      "budget_ok": true,
+      "searches": 2,
+      "oracle_query (hindsight)": "bon",
+      "plausible_queries_hit": {
+        "CLM-2026-0303 IT-3": false,
+        "taxi receipt": false,
+        "struk taksi": false,
+        "receipt": false,
+        "nota taksi": false,
+        "bon taksi": true
+      },
+      "error": null
+    },
+    "14": {
+      "pass": true,
+      "why": "ok",
+      "severity": "ok",
+      "budget_ok": true,
+      "searches": 1,
+      "oracle_query (hindsight)": "Partner review PT Bahari",
+      "plausible_queries_hit": {
+        "late checkout meeting moved": false,
+        "meeting rescheduled": false,
+        "late checkout hotel Makassar": false,
+        "meeting dimajukan": true,
+        "Partner review with PT Bahari Sejahtera": true,
+        "jadwal review": true
+      },
+      "error": null
+    }
+  }
+}
