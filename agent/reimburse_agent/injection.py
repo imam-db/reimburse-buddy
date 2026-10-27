@@ -188,12 +188,14 @@ def _label(source_id: str) -> tuple[str, str]:
         return f"Jadwal {source_id}", f"Calendar entry {source_id}"
     if source_id.startswith("MEMO-"):
         return f"Memo {source_id}", f"Memo {source_id}"
+    if source_id.startswith(("DOC-", "NOTE-")):
+        return f"Dokumen {source_id}", f"Document {source_id}"
     if source_id.startswith("CLM-"):
         return f"Klaim {source_id}", f"Claim {source_id}"
     return f"Konten {source_id}", f"Content {source_id}"
 
 
-def notice(hits: list[dict]) -> dict | None:
+def notice(hits: list[dict], subject: tuple[str, str] = ("klaim ini", "this claim")) -> dict | None:
     """Plain-language notice for the reviewer (Indonesian, then English) for the HIGH hits of one source.
     None when nothing is HIGH (LOW hits are logged as info only)."""
     high = [h for h in hits if h["severity"] == HIGH]
@@ -207,9 +209,9 @@ def notice(hits: list[dict]) -> dict | None:
     lid, len_ = _label(sid)
     rules = sorted({h["rule_id"] for h in high})
     id_text = (f"{lid} berisi teks yang mencoba memberi perintah ke asisten ('{quote}'). "
-               "Perintah itu diabaikan. Tinjau klaim ini secara manual.")
+               f"Perintah itu diabaikan. Tinjau {subject[0]} secara manual.")
     en_text = (f"{len_} contains text that tries to give the assistant instructions ('{quote}'). "
-               "It was ignored. Review this claim manually.")
+               f"It was ignored. Review {subject[1]} manually.")
     return {"source_id": sid, "rules": rules, "id": id_text, "en": en_text, "text": f"{id_text}\n{en_text}"}
 
 
@@ -262,34 +264,37 @@ def echo_check(text: str, flagged: list[str], n: int = 4, directory_domains=froz
 
 
 # --- argument-source allowlist ------------------------------------------------------------------------
-RECIPIENT_ARGS = {"send_message": ("to",), "request_approval": ("manager_id",)}
-FREE_TEXT_ARGS = ("body", "subject", "note", "reason")
-TIME_ARGS = ("send_at", "scheduled_at", "time", "at", "when")
+RECIPIENT_ARGS = {"send_message": ("to",), "request_approval": ("manager_id",),
+                  # office tools (plan graph): a recipient may be one directory ID or a list of them
+                  "send_email": ("to",), "create_calendar_event": ("attendees",), "create_task": ("assignee",)}
+FREE_TEXT_ARGS = ("body", "subject", "note", "reason", "title")
+TIME_ARGS = ("send_at", "scheduled_at", "time", "at", "when", "start")
 DIRECTORY_ID = re.compile(r"^EMP-\d{3,}$")
 
 
 def arg_source_violations(tool: str, args: dict, engine_amounts: set[str] | None = None,
                           directory_ids: set[str] | None = None, operating_times: set[str] | None = None) -> list[str]:
     """Where each argument may come from. Recipient: a directory ID (EMP-...), never an email or a name;
-    when directory_ids is known it must be one of them. Amount: equal to an engine value. Time: from the
-    operating-rules tool's output (TODO: no such tool yet, so any time argument is refused). Free text is
+    when directory_ids is known it must be one of them. Amount: equal to an engine value. Time: one of the
+    start times the operating-rules tool returned for this run (`operating_times`, ISO UTC strings from
+    office.rules.next_allowed_slots); with no such output every time argument is refused. Free text is
     the only model-authored argument (checked by echo_check, not here)."""
     bad = []
     for k in RECIPIENT_ARGS.get(tool, ()):
         v = args.get(k)
         if v is None:
             continue
-        if not isinstance(v, str) or not DIRECTORY_ID.match(v):
-            bad.append(f"{k}={v!r} is not a contact-directory ID (EMP-...); free-text emails and names are not allowed")
-        elif directory_ids is not None and v not in directory_ids:
-            bad.append(f"{k}={v} was not resolved by a directory tool in this run")
+        for one in (v if isinstance(v, list) and v else [v]):
+            if not isinstance(one, str) or not DIRECTORY_ID.match(one):
+                bad.append(f"{k}={one!r} is not a contact-directory ID (EMP-...); free-text emails and names are not allowed")
+            elif directory_ids is not None and one not in directory_ids:
+                bad.append(f"{k}={one} was not resolved by a directory tool in this run")
     for k, v in args.items():
         if "amount" in k.lower() and v not in (None, ""):
             if engine_amounts is None or _amt(v) not in {_amt(a) for a in engine_amounts}:
                 bad.append(f"{k}={v!r} does not equal an amount from the engine (check_claim)")
         if k in TIME_ARGS and v not in (None, ""):
             if not operating_times or str(v) not in operating_times:
-                # TODO(operating-rules): accept only times from the office-hours / prayer-window / holiday tool.
                 bad.append(f"{k}={v!r} does not come from the operating-rules tool")
     return bad
 
