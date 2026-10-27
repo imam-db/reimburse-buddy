@@ -93,7 +93,10 @@ def _person(directory: Directory, emp: str) -> str:
 
 
 def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, action_url: str | None = None,
-           msg: str = "") -> str:
+           msg: str = "", allow_approve: bool = True) -> str:
+    """The confirmation page. `allow_approve=False` disables the Approve control (the requester may not
+    approve their own plan): the radio is rendered disabled so the form cannot submit "approve", and a
+    note explains why. Reject stays available. Presentation only: the gate in plan_graph still decides."""
     log_notices_shown(plan, log)
     events = log.list(plan["run_id"])
     run = e(plan["run_id"])
@@ -109,6 +112,11 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
            f"{_person(directory, plan['requester'])}</p>",
            "<p><b>Belum ada yang dikirim sampai Anda menyetujui.</b> "
            "Nothing is sent or scheduled until you approve. Mock tools only.</p>"]
+    if not allow_approve:
+        out.append("<div class='notice' id='self-approval'><b>Anda peminta rencana ini</b><p>Anda tidak dapat "
+                   "menyetujui permintaan Anda sendiri, jadi tombol Setujui dimatikan. Anda tetap bisa menolak "
+                   "atau meminta rekan lain menyetujuinya. / You requested this plan, so you cannot approve it "
+                   "yourself; rejecting stays available.</p></div>")
     if expired:
         reason = _expired_reason(events, expired)
         reason_id = EXPIRED_REASON_ID.get(reason, EXPIRED_FALLBACK_ID)
@@ -205,8 +213,12 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
                          for x in assume_here)
         decide = ""
         if form and st is None:
-            decide = (f"<p class=\"decision\"><label><input type=radio name='decision:{e(aid)}' value=approve> "
-                      f"Setujui / Approve</label> "
+            approve_control = (
+                f"<label><input type=radio name='decision:{e(aid)}' value=approve> Setujui / Approve</label> "
+                if allow_approve else
+                f"<label><input type=radio name='decision:{e(aid)}' value=approve disabled> "
+                f"Setujui / Approve (dimatikan: Anda peminta)</label> ")
+            decide = (f"<p class=\"decision\">{approve_control}"
                       f"<label><input type=radio name='decision:{e(aid)}' value=reject checked> Tolak / Reject</label></p>"
                       f"<p><label>Catatan (opsional, agen akan mengusulkan rencana baru) / Note (optional, the agent "
                       f"proposes a new plan):<br><textarea name='note:{e(aid)}' rows=2 cols=70></textarea></label></p>")
