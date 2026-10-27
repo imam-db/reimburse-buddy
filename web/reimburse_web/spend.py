@@ -22,6 +22,10 @@ Prices come from the environment, never from code: they change, and a stale hard
 silently under- or over-charge the cap. In production a missing budget or price refuses LLM runs (and
 fails startup); outside production an unconfigured ledger is simply off, so the demo and the tests run
 without a budget.
+
+The Postgres ledger reconnects once if the database dropped the connection (Neon suspends when idle) and
+refuses the run with `LedgerUnavailable` if it is still unreachable: an LLM run is never started when its
+cost cannot be recorded.
 """
 
 from __future__ import annotations
@@ -46,6 +50,13 @@ STALE_LOCK_S = 10.0
 
 class BudgetRefused(RuntimeError):
     """The run would push today's spend over the budget (or the ledger is unusable)."""
+
+
+class LedgerUnavailable(RuntimeError):
+    """The spend ledger could not be reached, so no run may be charged or started.
+
+    A suspended database (Neon scales to zero) drops the idle connection; the ledger reconnects and retries
+    once, and only then gives up with this. The route turns it into a readable refusal, not a 500."""
 
 
 class SpendConfigError(RuntimeError):
@@ -267,15 +278,46 @@ class PostgresSpendLedger:
     """Same contract on Postgres (agent/migrations/005_llm_spend.sql), app role INSERT + SELECT only.
 
     Check and reserve run in one transaction under `pg_advisory_xact_lock`, so concurrent web instances
-    share one cap. Connects with prepare_threshold=None like audit.py (safe behind a pooler)."""
+    share one cap. Connects with prepare_threshold=None like audit.py (safe behind a pooler).
+
+    A managed database that suspends when idle (Neon scales to zero) drops the connection between runs,
+    and the first statement then fails with OperationalError. Each operation therefore reconnects and
+    retries once; if it still fails the run is refused with LedgerUnavailable instead of a 500."""
 
     ADVISORY_KEY = 0x1E4B_2026  # any constant works; it only has to be shared by every instance
 
     def __init__(self, dsn: str, budget_usd: Decimal):
         import psycopg  # optional dependency, imported only when used
 
+        self._psycopg = psycopg
+        self._dsn = dsn
         self.budget = budget_usd
-        self._conn = psycopg.connect(dsn, autocommit=True, prepare_threshold=None)
+        self._conn = self._connect()
+
+    def _connect(self):
+        return self._psycopg.connect(self._dsn, autocommit=True, prepare_threshold=None)
+
+    def _reconnect(self) -> None:
+        try:
+            self._conn.close()
+        except Exception:  # noqa: BLE001 - a dead connection cannot be closed politely
+            pass
+        self._conn = self._connect()
+
+    def _retry_once(self, action):
+        """Run `action`; on a dropped connection reconnect and try once more, then refuse the run."""
+        try:
+            return action()
+        except self._psycopg.OperationalError:
+            pass
+        try:
+            self._reconnect()
+            return action()
+        except self._psycopg.OperationalError as exc:
+            raise LedgerUnavailable(
+                "Ledger biaya LLM tidak bisa dihubungi, jadi tidak ada run yang dijalankan. "
+                "Coba lagi sebentar lagi. / The spend ledger is unreachable, so no run was started."
+            ) from exc
 
     _COMMITTED = """
         SELECT COALESCE(SUM(usd), 0) FROM llm_spend
@@ -286,27 +328,38 @@ class PostgresSpendLedger:
     """
 
     def committed(self, day: str) -> Decimal:
-        with self._conn.cursor() as cur:
-            cur.execute(self._COMMITTED, {"day": day})
-            return Decimal(str(cur.fetchone()[0]))
+        def run() -> Decimal:
+            with self._conn.cursor() as cur:
+                cur.execute(self._COMMITTED, {"day": day})
+                return Decimal(str(cur.fetchone()[0]))
+
+        return self._retry_once(run)
 
     def reserve(self, run_id: str, usd: Decimal, day: str) -> None:
-        with self._conn.transaction():
-            with self._conn.cursor() as cur:
-                cur.execute("SELECT pg_advisory_xact_lock(%s)", (self.ADVISORY_KEY,))
-                cur.execute(self._COMMITTED, {"day": day})
-                spent = Decimal(str(cur.fetchone()[0]))
-                if spent + usd > self.budget:
-                    raise BudgetRefused(f"spent {spent} + {usd} > budget {self.budget}")
-                cur.execute(
-                    "INSERT INTO llm_spend (day, run_id, kind, usd, tokens) VALUES (%s, %s, 'reserve', %s, '{}'::jsonb)",
-                    (day, run_id, str(_quantize(usd))))
+        def run() -> None:
+            with self._conn.transaction():
+                with self._conn.cursor() as cur:
+                    cur.execute("SELECT pg_advisory_xact_lock(%s)", (self.ADVISORY_KEY,))
+                    cur.execute(self._COMMITTED, {"day": day})
+                    spent = Decimal(str(cur.fetchone()[0]))
+                    if spent + usd > self.budget:
+                        raise BudgetRefused(f"spent {spent} + {usd} > budget {self.budget}")
+                    cur.execute(
+                        "INSERT INTO llm_spend (day, run_id, kind, usd, tokens) "
+                        "VALUES (%s, %s, 'reserve', %s, '{}'::jsonb)",
+                        (day, run_id, str(_quantize(usd))))
+
+        self._retry_once(run)
 
     def settle(self, run_id: str, usd: Decimal, day: str, tokens: dict) -> None:
-        with self._conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO llm_spend (day, run_id, kind, usd, tokens) VALUES (%s, %s, 'settle', %s, %s::jsonb)",
-                (day, run_id, str(_quantize(usd)), json.dumps(tokens or {})))
+        def run() -> None:
+            with self._conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO llm_spend (day, run_id, kind, usd, tokens) "
+                    "VALUES (%s, %s, 'settle', %s, %s::jsonb)",
+                    (day, run_id, str(_quantize(usd)), json.dumps(tokens or {})))
+
+        self._retry_once(run)
 
 
 _STATE: dict = {}
