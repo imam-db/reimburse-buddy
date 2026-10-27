@@ -58,7 +58,8 @@ async def main() -> None:
                 print("auto-declined")
             else:
                 ok = input("[y/N] ").strip().lower() == "y"
-                payload = Command(resume={"approved": ok, "reason": "" if ok else "reviewer said no"})
+                payload = Command(resume={"approved": ok, "tool_call_id": req["tool_call_id"],
+                                          "reason": "" if ok else "reviewer said no"})
         print("\nFINAL:\n" + str(state.values["messages"][-1].content))
         print(f"\ntokens: {tokens}")
 
