@@ -82,7 +82,8 @@ CASES = [
              ["MSG-9401", "MSG-9402"], reviewer="approve_owner_doc_request"),
     HardCase("10a", "altered IDs: hero", "CLM-2027-0510", ALTERED, _p("CLM-2027-0510"),
              ["MSG-8201", "EVT-3110", "MSG-8202", "MSG-8203"], ["MSG-8001", "MEMO-2027-638"],
-             {"IT-3": "approve_capped"}, reviewer_says="Reviewer: cap the hotel."),
+             {"IT-3": "approve_capped"}, reviewer="approve_owner_doc_request",
+             reviewer_says="Reviewer: cap the hotel."),
     HardCase("10b", "altered IDs: boarding pass + wrong-trip trap", "CLM-2027-0501", ALTERED, _p("CLM-2027-0501"),
              ["MSG-8001"], ["MSG-8201"]),
     # Claude review 6: keyword heuristics should fail here (synthetic, see hard_fixtures.HEURISTIC_HARD_INBOX).
