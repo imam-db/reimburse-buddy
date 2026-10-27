@@ -1,0 +1,62 @@
+{
+  "company": "PT Nusantara Niaga Digital (fictional)",
+  "version": "2026.2",
+  "currency": "IDR",
+  "allowed_categories": [
+    "flight",
+    "hotel",
+    "late_checkout",
+    "meal",
+    "per_diem",
+    "taxi"
+  ],
+  "city_tiers": {
+    "Jakarta": 1,
+    "Surabaya": 1,
+    "Denpasar": 1,
+    "Makassar": 2,
+    "Medan": 2,
+    "Yogyakarta": 2,
+    "Balikpapan": 2
+  },
+  "default_tier": 2,
+  "hotel_nightly_cap": {
+    "1": "1200000",
+    "2": "800000"
+  },
+  "per_diem_daily": {
+    "1": "450000",
+    "2": "350000"
+  },
+  "late_checkout": {
+    "standard_checkout_time": "12:00",
+    "max_fee_ratio_of_nightly_cap": "0.5",
+    "requires_business_justification": true,
+    "max_hours_after_meeting": "2"
+  },
+  "receipt_required_categories": [
+    "flight",
+    "hotel",
+    "late_checkout",
+    "taxi",
+    "meal"
+  ],
+  "boarding_pass_required_for": [
+    "flight"
+  ],
+  "rules": [
+    "Hotel cost per night must not exceed the cap for the city tier unless a signed approval memo covers the excess.",
+    "Per diem is paid per trip day (inclusive) at the destination tier rate; claimed per diem above that is not reimbursable.",
+    "Every item in a receipt-required category needs a receipt. Flights also need a boarding pass.",
+    "Every expense date must fall within the trip dates.",
+    "Two items with the same receipt number are duplicates. The same category, date and amount without distinct receipt numbers is a suspected duplicate that needs evidence.",
+    "A late check-out fee is reimbursable only when a business meeting in the hotel's city ends after the standard check-out time and the requested check-out is at most 2 hours after the meeting ends, up to 50% of the nightly cap.",
+    "Hotel nights must fall within the trip dates.",
+    "A boarding pass must match the flight number, date and passenger name."
+  ],
+  "triage": {
+    "manual_review_minutes_per_claim": "15",
+    "note": "Assumed average time a finance officer spends checking one claim by hand (synthetic estimate)."
+  },
+  "receipt_amount_required": true
+}

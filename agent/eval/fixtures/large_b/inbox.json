@@ -1,0 +1,3760 @@
+[
+  {
+    "id": "MSG-7100",
+    "owner_id": "EMP-001",
+    "from": "promo@taksi-1.example",
+    "date": "2026-08-01",
+    "subject": "Cashback ride ke bandara",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7101",
+    "owner_id": "EMP-004",
+    "from": "promo@taksi-9.example",
+    "date": "2026-08-01",
+    "subject": "Voucher taxi ke airport, cuma minggu ini",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7102",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-01",
+    "subject": "deadline",
+    "body": "Cut-off klaim bulan ini dimajukan dua hari.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7103",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-08-02",
+    "subject": "org chart",
+    "body": "Please share the updated org chart.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7104",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-08-02",
+    "subject": "nyusul",
+    "body": "Nota mobil dari kantor ke gudang pas Minggu kemarin ya, lupa forward.",
+    "attachments": [
+      {
+        "name": "IMG_4937.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0515",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0515",
+        "amount": 140000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7105",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-08-02",
+    "subject": "siap",
+    "body": "siap, laksanakan",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7106",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-08-02",
+    "subject": "AC",
+    "body": "AC ruang meeting kecil bocor.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7107",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-08-03",
+    "subject": "AC",
+    "body": "AC ruang meeting kecil bocor.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7108",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-08-03",
+    "subject": "AC",
+    "body": "AC ruang meeting kecil bocor.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7109",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-08-05",
+    "subject": "besok",
+    "body": "see you at tomorrow's 1:1",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7110",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-08-05",
+    "subject": "fwd",
+    "body": "Ongkos taxi kantor -> gudang hari Rabu, struknya di lampiran.",
+    "attachments": [
+      {
+        "name": "IMG_5695.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0515",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0515",
+        "amount": 58000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7111",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-08-05",
+    "subject": "jadwal",
+    "body": "Sesi coaching mundur seminggu.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7913",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7112",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-05",
+    "subject": "fwd",
+    "body": "Attached the fare slip for my ride kantor to gudang (Rabu).",
+    "attachments": [
+      {
+        "name": "IMG_7773.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0556",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0556",
+        "amount": 94000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7113",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-08-05",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7114",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-05",
+    "subject": "pencairan",
+    "body": "Reimburse bulan lalu sudah cair, terima kasih.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7115",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-06",
+    "subject": "jadwal",
+    "body": "Townhall got rescheduled to next Tuesday.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7909",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7116",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-08-06",
+    "subject": "pencairan",
+    "body": "Reimburse bulan lalu sudah cair, terima kasih.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7117",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-08-06",
+    "subject": "AC",
+    "body": "AC ruang meeting kecil bocor.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7118",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-08-08",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7119",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-08-08",
+    "subject": "pencairan",
+    "body": "Reimburse bulan lalu sudah cair, terima kasih.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7120",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-08-08",
+    "subject": "org chart",
+    "body": "Please share the updated org chart.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7121",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-08",
+    "subject": "jadwal",
+    "body": "Townhall got rescheduled to next Tuesday.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7922",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7122",
+    "owner_id": "EMP-003",
+    "from": "promo@taksi-7.example",
+    "date": "2026-08-09",
+    "subject": "Voucher taxi ke airport, cuma minggu ini",
+    "body": "Info promo pelanggan. Bukan tagihan.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7123",
+    "owner_id": "EMP-003",
+    "from": "promo@taksi-5.example",
+    "date": "2026-08-09",
+    "subject": "Cashback ride ke bandara",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7124",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-09",
+    "subject": "bukti",
+    "body": "Ongkos taxi kantor -> gudang hari Minggu, struknya di lampiran.",
+    "attachments": [
+      {
+        "name": "IMG_1309.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0513",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0513",
+        "amount": 127000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7125",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-09",
+    "subject": "printer",
+    "body": "Printer lantai 3 rusak lagi, sudah lapor GA.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7126",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-08-09",
+    "subject": "nyusul",
+    "body": "Nota mobil dari bandara ke hotel pas Minggu kemarin ya, lupa forward.",
+    "attachments": [
+      {
+        "name": "IMG_6602.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0529",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0529-2",
+        "amount": 65000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7127",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-08-09",
+    "subject": "nyusul",
+    "body": "Nota mobil dari bandara ke hotel pas Minggu kemarin ya, lupa forward.",
+    "attachments": [
+      {
+        "name": "IMG_1193.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0598",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0598-2",
+        "amount": 103000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7128",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-09",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7129",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-08-09",
+    "subject": "pencairan",
+    "body": "Reimburse bulan lalu sudah cair, terima kasih.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7130",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-10",
+    "subject": "siap",
+    "body": "siap, laksanakan",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7131",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-10",
+    "subject": "deck",
+    "body": "Mohon review deck untuk presentasi klien.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7132",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-08-10",
+    "subject": "siap",
+    "body": "siap, laksanakan",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7133",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-08-10",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7134",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-08-10",
+    "subject": "org chart",
+    "body": "Please share the updated org chart.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7135",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-10",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7136",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-10",
+    "subject": "org chart",
+    "body": "Please share the updated org chart.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7137",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-11",
+    "subject": "siap",
+    "body": "siap, laksanakan",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7138",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-08-11",
+    "subject": "deck",
+    "body": "Mohon review deck untuk presentasi klien.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7139",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-11",
+    "subject": "jadwal",
+    "body": "Townhall got rescheduled to next Tuesday.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7921",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7140",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-11",
+    "subject": "AC",
+    "body": "AC ruang meeting kecil bocor.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7141",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-11",
+    "subject": "deadline",
+    "body": "Pengumpulan forecast dimajukan ke Senin.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7142",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-08-12",
+    "subject": "jadwal",
+    "body": "Townhall got rescheduled to next Tuesday.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7920",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7143",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-08-12",
+    "subject": "pencairan",
+    "body": "Reimburse bulan lalu sudah cair, terima kasih.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7144",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-08-13",
+    "subject": "scan",
+    "body": "Attached the fare slip for my ride bandara to hotel (Kamis).",
+    "attachments": [
+      {
+        "name": "IMG_3693.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0509",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0509-2",
+        "amount": 77000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7145",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-08-13",
+    "subject": "PO",
+    "body": "PO sudah terbit, nomornya di sistem.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7146",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-13",
+    "subject": "besok",
+    "body": "see you at tomorrow's 1:1",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7147",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-14",
+    "subject": "fwd",
+    "body": "Nota mobil dari kantor ke gudang pas Jumat kemarin ya, lupa forward.",
+    "attachments": [
+      {
+        "name": "IMG_8328.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0510",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0510",
+        "amount": 87000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7148",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-08-14",
+    "subject": "org chart",
+    "body": "Please share the updated org chart.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7149",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-14",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7150",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-15",
+    "subject": "PO",
+    "body": "PO sudah terbit, nomornya di sistem.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7151",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-08-15",
+    "subject": "siap",
+    "body": "siap, laksanakan",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7152",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-15",
+    "subject": "siap",
+    "body": "siap, laksanakan",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7153",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-15",
+    "subject": "PO",
+    "body": "PO sudah terbit, nomornya di sistem.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7154",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-08-15",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7155",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-16",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7156",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-08-16",
+    "subject": "bukti",
+    "body": "Ongkos taxi kantor -> gudang hari Minggu, struknya di lampiran.",
+    "attachments": [
+      {
+        "name": "IMG_7990.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0510",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0510",
+        "amount": 144000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7157",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-08-16",
+    "subject": "besok",
+    "body": "besok bawa charger cadangan ya",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7158",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-16",
+    "subject": "besok",
+    "body": "besok ada yg ke kantor pusat?",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7159",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-17",
+    "subject": "fwd",
+    "body": "Nota mobil dari bandara ke hotel pas Senin kemarin ya, lupa forward.",
+    "attachments": [
+      {
+        "name": "IMG_3430.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0542",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0542-2",
+        "amount": 122000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7160",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-08-17",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7161",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-17",
+    "subject": "jadwal",
+    "body": "Sesi coaching mundur seminggu.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7923",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7162",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-08-17",
+    "subject": "nyusul",
+    "body": "Attached the fare slip for my ride bandara to hotel (Senin).",
+    "attachments": [
+      {
+        "name": "IMG_5673.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0529",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0529-2",
+        "amount": 124000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7163",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-08-17",
+    "subject": "org chart",
+    "body": "Please share the updated org chart.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7164",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-08-17",
+    "subject": "jadwal",
+    "body": "Townhall got rescheduled to next Tuesday.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7901",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7165",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-18",
+    "subject": "jadwal",
+    "body": "Townhall got rescheduled to next Tuesday.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7924",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7166",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-18",
+    "subject": "besok",
+    "body": "besok bawa charger cadangan ya",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7167",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-19",
+    "subject": "PO",
+    "body": "PO sudah terbit, nomornya di sistem.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7168",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-08-19",
+    "subject": "besok",
+    "body": "besok bawa charger cadangan ya",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7169",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-08-20",
+    "subject": "PO",
+    "body": "PO sudah terbit, nomornya di sistem.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7170",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-21",
+    "subject": "AC",
+    "body": "AC ruang meeting kecil bocor.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7171",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-21",
+    "subject": "nyusul",
+    "body": "Attached the fare slip for my ride kantor to gudang (Jumat).",
+    "attachments": [
+      {
+        "name": "IMG_5796.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0559",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0559",
+        "amount": 107000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7172",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-21",
+    "subject": "bukti",
+    "body": "Attached the fare slip for my ride bandara to hotel (Jumat).",
+    "attachments": [
+      {
+        "name": "IMG_7231.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0511",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0511-2",
+        "amount": 113000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7173",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-21",
+    "subject": "siap",
+    "body": "siap, laksanakan",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7174",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-08-22",
+    "subject": "jadwal",
+    "body": "Townhall got rescheduled to next Tuesday.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7916",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7175",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-08-22",
+    "subject": "deck",
+    "body": "Mohon review deck untuk presentasi klien.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7176",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-08-22",
+    "subject": "besok",
+    "body": "see you at tomorrow's 1:1",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7177",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-22",
+    "subject": "besok",
+    "body": "besok bawa charger cadangan ya",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7178",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-08-23",
+    "subject": "besok",
+    "body": "besok ada yg ke kantor pusat?",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7179",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-23",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7180",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-23",
+    "subject": "bukti",
+    "body": "Ongkos taxi bandara -> hotel hari Minggu, struknya di lampiran.",
+    "attachments": [
+      {
+        "name": "IMG_5193.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0577",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0577-2",
+        "amount": 113000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7181",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-23",
+    "subject": "scan",
+    "body": "Nota mobil dari bandara ke hotel pas Minggu kemarin ya, lupa forward.",
+    "attachments": [
+      {
+        "name": "IMG_6248.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0553",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0553-2",
+        "amount": 134000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7182",
+    "owner_id": "EMP-004",
+    "from": "promo@taksi-7.example",
+    "date": "2026-08-24",
+    "subject": "Cashback ride ke bandara",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7183",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-08-24",
+    "subject": "siap",
+    "body": "siap, laksanakan",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7184",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-08-24",
+    "subject": "deadline",
+    "body": "Cut-off klaim bulan ini dimajukan dua hari.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7185",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-08-24",
+    "subject": "scan",
+    "body": "Ongkos taxi bandara -> hotel hari Senin, struknya di lampiran.",
+    "attachments": [
+      {
+        "name": "IMG_7783.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0512",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0512-2",
+        "amount": 196000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7186",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-25",
+    "subject": "AC",
+    "body": "AC ruang meeting kecil bocor.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7187",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-26",
+    "subject": "PO",
+    "body": "PO sudah terbit, nomornya di sistem.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7188",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-27",
+    "subject": "PO",
+    "body": "PO sudah terbit, nomornya di sistem.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7189",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-08-27",
+    "subject": "deck",
+    "body": "Mohon review deck untuk presentasi klien.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7190",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-08-27",
+    "subject": "scan",
+    "body": "Attached the fare slip for my ride bandara to hotel (Kamis).",
+    "attachments": [
+      {
+        "name": "IMG_9810.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0557",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0557-2",
+        "amount": 191000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7191",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-08-27",
+    "subject": "AC",
+    "body": "AC ruang meeting kecil bocor.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7192",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-27",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7193",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-08-27",
+    "subject": "fwd",
+    "body": "Ongkos taxi kantor -> gudang hari Kamis, struknya di lampiran.",
+    "attachments": [
+      {
+        "name": "IMG_8350.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0533",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0533",
+        "amount": 127000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7194",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-08-27",
+    "subject": "scan",
+    "body": "Attached the fare slip for my ride bandara to hotel (Kamis).",
+    "attachments": [
+      {
+        "name": "IMG_6371.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0581",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0581-2",
+        "amount": 103000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7195",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-08-28",
+    "subject": "nyusul",
+    "body": "Ongkos taxi kantor -> gudang hari Jumat, struknya di lampiran.",
+    "attachments": [
+      {
+        "name": "IMG_5933.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0536",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0536",
+        "amount": 172000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7196",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-08-28",
+    "subject": "bukti",
+    "body": "Attached the fare slip for my ride bandara to hotel (Jumat).",
+    "attachments": [
+      {
+        "name": "IMG_9889.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0590",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0590-2",
+        "amount": 149000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7197",
+    "owner_id": "EMP-004",
+    "from": "promo@taksi-4.example",
+    "date": "2026-08-28",
+    "subject": "Cashback ride ke bandara",
+    "body": "Info promo pelanggan. Bukan tagihan.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7198",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-08-28",
+    "subject": "jadwal",
+    "body": "Rapat bulanan cabang dipindah ke ruang 3B, jam tetap.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7905",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7199",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-08-28",
+    "subject": "fwd",
+    "body": "Ongkos taxi bandara -> hotel hari Jumat, struknya di lampiran.",
+    "attachments": [
+      {
+        "name": "IMG_4788.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0544",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0544-2",
+        "amount": 113000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7200",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-29",
+    "subject": "AC",
+    "body": "AC ruang meeting kecil bocor.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7201",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-30",
+    "subject": "jadwal",
+    "body": "Sesi coaching mundur seminggu.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7908",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7202",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-30",
+    "subject": "jadwal",
+    "body": "Rapat bulanan cabang dipindah ke ruang 3B, jam tetap.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7925",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7203",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-08-30",
+    "subject": "printer",
+    "body": "Printer lantai 3 rusak lagi, sudah lapor GA.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7204",
+    "owner_id": "EMP-005",
+    "from": "promo@taksi-3.example",
+    "date": "2026-08-30",
+    "subject": "Cashback ride ke bandara",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7205",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-08-30",
+    "subject": "bukti",
+    "body": "Attached the fare slip for my ride kantor to gudang (Minggu).",
+    "attachments": [
+      {
+        "name": "IMG_5520.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0598",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0598",
+        "amount": 112000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7206",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-08-30",
+    "subject": "org chart",
+    "body": "Please share the updated org chart.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7207",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-08-30",
+    "subject": "AC",
+    "body": "AC ruang meeting kecil bocor.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7208",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-08-30",
+    "subject": "fwd",
+    "body": "Ongkos taxi bandara -> hotel hari Minggu, struknya di lampiran.",
+    "attachments": [
+      {
+        "name": "IMG_2890.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0552",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0552-2",
+        "amount": 120000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7209",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-08-31",
+    "subject": "jadwal",
+    "body": "Townhall got rescheduled to next Tuesday.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7919",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7210",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-08-31",
+    "subject": "besok",
+    "body": "besok bawa charger cadangan ya",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7211",
+    "owner_id": "EMP-003",
+    "from": "promo@taksi-9.example",
+    "date": "2026-08-31",
+    "subject": "Voucher taxi ke airport, cuma minggu ini",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7212",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-09-01",
+    "subject": "besok",
+    "body": "see you at tomorrow's 1:1",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7213",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-01",
+    "subject": "siap",
+    "body": "siap, laksanakan",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7214",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-09-01",
+    "subject": "jadwal",
+    "body": "Townhall got rescheduled to next Tuesday.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7928",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7215",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-09-01",
+    "subject": "deadline",
+    "body": "Cut-off klaim bulan ini dimajukan dua hari.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7216",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-02",
+    "subject": "besok",
+    "body": "besok ada yg ke kantor pusat?",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7217",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-03",
+    "subject": "besok",
+    "body": "besok bawa charger cadangan ya",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7218",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-09-03",
+    "subject": "deck",
+    "body": "Mohon review deck untuk presentasi klien.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7219",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-09-03",
+    "subject": "siap",
+    "body": "siap, laksanakan",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7220",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-09-03",
+    "subject": "PO",
+    "body": "PO sudah terbit, nomornya di sistem.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7221",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-09-03",
+    "subject": "jadwal",
+    "body": "Rapat bulanan cabang dipindah ke ruang 3B, jam tetap.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7903",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7222",
+    "owner_id": "EMP-005",
+    "from": "promo@taksi-4.example",
+    "date": "2026-09-03",
+    "subject": "Cashback ride ke bandara",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7223",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-09-04",
+    "subject": "fwd",
+    "body": "Nota mobil dari bandara ke hotel pas Jumat kemarin ya, lupa forward.",
+    "attachments": [
+      {
+        "name": "IMG_1449.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0512",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0512-2",
+        "amount": 88000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7224",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-09-04",
+    "subject": "org chart",
+    "body": "Please share the updated org chart.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7225",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-09-04",
+    "subject": "pencairan",
+    "body": "Reimburse bulan lalu sudah cair, terima kasih.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7226",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-04",
+    "subject": "fwd",
+    "body": "Nota mobil dari kantor ke gudang pas Jumat kemarin ya, lupa forward.",
+    "attachments": [
+      {
+        "name": "IMG_6648.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0514",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0514",
+        "amount": 175000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7227",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-09-05",
+    "subject": "nyusul",
+    "body": "Ongkos taxi bandara -> hotel hari Sabtu, struknya di lampiran.",
+    "attachments": [
+      {
+        "name": "IMG_9569.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0573",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0573-2",
+        "amount": 114000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7228",
+    "owner_id": "EMP-004",
+    "from": "promo@taksi-7.example",
+    "date": "2026-09-05",
+    "subject": "Voucher taxi ke airport, cuma minggu ini",
+    "body": "Info promo pelanggan. Bukan tagihan.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7229",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-05",
+    "subject": "org chart",
+    "body": "Please share the updated org chart.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7230",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-09-05",
+    "subject": "jadwal",
+    "body": "Sesi coaching mundur seminggu.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7927",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7231",
+    "owner_id": "EMP-004",
+    "from": "promo@taksi-5.example",
+    "date": "2026-09-06",
+    "subject": "Staycation promo: free late check-out",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7232",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-09-06",
+    "subject": "AC",
+    "body": "AC ruang meeting kecil bocor.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7233",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-09-06",
+    "subject": "nyusul",
+    "body": "Ongkos taxi bandara -> hotel hari Minggu, struknya di lampiran.",
+    "attachments": [
+      {
+        "name": "IMG_8961.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0503",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0503-2",
+        "amount": 63000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7234",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-09-06",
+    "subject": "nyusul",
+    "body": "Attached the fare slip for my ride bandara to hotel (Minggu).",
+    "attachments": [
+      {
+        "name": "IMG_1516.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0558",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0558-2",
+        "amount": 126000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7235",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-09-06",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7236",
+    "owner_id": "EMP-004",
+    "from": "promo@taksi-7.example",
+    "date": "2026-09-07",
+    "subject": "Voucher taxi ke airport, cuma minggu ini",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7237",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-09-07",
+    "subject": "jadwal",
+    "body": "Townhall got rescheduled to next Tuesday.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7926",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7238",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-08",
+    "subject": "nyusul",
+    "body": "Nota mobil dari bandara ke hotel pas Selasa kemarin ya, lupa forward.",
+    "attachments": [
+      {
+        "name": "IMG_7487.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0583",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0583-2",
+        "amount": 103000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7239",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-09-08",
+    "subject": "deck",
+    "body": "Mohon review deck untuk presentasi klien.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7240",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-09-09",
+    "subject": "deadline",
+    "body": "Pengumpulan forecast dimajukan ke Senin.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7241",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-09",
+    "subject": "scan",
+    "body": "Attached the fare slip for my ride kantor to gudang (Rabu).",
+    "attachments": [
+      {
+        "name": "IMG_3864.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0553",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0553",
+        "amount": 190000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7242",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-09-10",
+    "subject": "besok",
+    "body": "see you at tomorrow's 1:1",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7243",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-09-10",
+    "subject": "scan",
+    "body": "Nota mobil dari bandara ke hotel pas Kamis kemarin ya, lupa forward.",
+    "attachments": [
+      {
+        "name": "IMG_5503.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0578",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0578-2",
+        "amount": 150000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7244",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-09-11",
+    "subject": "deadline",
+    "body": "Pengumpulan forecast dimajukan ke Senin.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7245",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-09-11",
+    "subject": "besok",
+    "body": "see you at tomorrow's 1:1",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7246",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-11",
+    "subject": "PO",
+    "body": "PO sudah terbit, nomornya di sistem.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7247",
+    "owner_id": "EMP-005",
+    "from": "promo@taksi-3.example",
+    "date": "2026-09-11",
+    "subject": "Staycation promo: free late check-out",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7248",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-09-11",
+    "subject": "printer",
+    "body": "Printer lantai 3 rusak lagi, sudah lapor GA.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7249",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-09-11",
+    "subject": "AC",
+    "body": "AC ruang meeting kecil bocor.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7250",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-12",
+    "subject": "deck",
+    "body": "Mohon review deck untuk presentasi klien.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7251",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-09-12",
+    "subject": "bukti",
+    "body": "Attached the fare slip for my ride bandara to hotel (Sabtu).",
+    "attachments": [
+      {
+        "name": "IMG_9778.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0510",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0510-2",
+        "amount": 90000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7252",
+    "owner_id": "EMP-002",
+    "from": "promo@taksi-4.example",
+    "date": "2026-09-12",
+    "subject": "Struk elektronik otomatis terkirim ke email",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7253",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-09-13",
+    "subject": "deadline",
+    "body": "Pengumpulan forecast dimajukan ke Senin.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7254",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-09-13",
+    "subject": "deadline",
+    "body": "Pengumpulan forecast dimajukan ke Senin.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7255",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-09-14",
+    "subject": "org chart",
+    "body": "Please share the updated org chart.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7256",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-09-14",
+    "subject": "besok",
+    "body": "see you at tomorrow's 1:1",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7257",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-09-14",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7258",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-09-14",
+    "subject": "jadwal",
+    "body": "Sesi coaching mundur seminggu.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7917",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7259",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-09-14",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7260",
+    "owner_id": "EMP-005",
+    "from": "promo@taksi-3.example",
+    "date": "2026-09-15",
+    "subject": "Cashback ride ke bandara",
+    "body": "Info promo pelanggan. Bukan tagihan.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7261",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-15",
+    "subject": "org chart",
+    "body": "Please share the updated org chart.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7262",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-09-15",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7263",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-09-16",
+    "subject": "fwd",
+    "body": "Nota mobil dari bandara ke hotel pas Rabu kemarin ya, lupa forward.",
+    "attachments": [
+      {
+        "name": "IMG_6083.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0559",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0559-2",
+        "amount": 127000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7264",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-16",
+    "subject": "org chart",
+    "body": "Please share the updated org chart.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7265",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-16",
+    "subject": "scan",
+    "body": "Ongkos taxi kantor -> gudang hari Rabu, struknya di lampiran.",
+    "attachments": [
+      {
+        "name": "IMG_7099.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0562",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0562",
+        "amount": 145000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7266",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-17",
+    "subject": "pencairan",
+    "body": "Reimburse bulan lalu sudah cair, terima kasih.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7267",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-17",
+    "subject": "besok",
+    "body": "see you at tomorrow's 1:1",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7268",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-09-17",
+    "subject": "fwd",
+    "body": "Attached the fare slip for my ride bandara to hotel (Kamis).",
+    "attachments": [
+      {
+        "name": "IMG_2390.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0569",
+        "item_id": "IT-2",
+        "receipt_no": "TX-CLM-2026-0569-2",
+        "amount": 120000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7269",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-18",
+    "subject": "org chart",
+    "body": "Please share the updated org chart.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7270",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-09-18",
+    "subject": "besok",
+    "body": "besok ada yg ke kantor pusat?",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7271",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-09-19",
+    "subject": "org chart",
+    "body": "Please share the updated org chart.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7272",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-09-19",
+    "subject": "scan",
+    "body": "Attached the fare slip for my ride kantor to gudang (Sabtu).",
+    "attachments": [
+      {
+        "name": "IMG_5905.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0591",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0591",
+        "amount": 165000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7273",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-20",
+    "subject": "fwd",
+    "body": "Ongkos taxi kantor -> gudang hari Minggu, struknya di lampiran.",
+    "attachments": [
+      {
+        "name": "IMG_6053.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0521",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0521",
+        "amount": 114000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7274",
+    "owner_id": "EMP-002",
+    "from": "promo@taksi-2.example",
+    "date": "2026-09-20",
+    "subject": "Struk elektronik otomatis terkirim ke email",
+    "body": "Info promo pelanggan. Bukan tagihan.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7275",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-20",
+    "subject": "deck",
+    "body": "Mohon review deck untuk presentasi klien.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7276",
+    "owner_id": "EMP-002",
+    "from": "promo@taksi-2.example",
+    "date": "2026-09-20",
+    "subject": "Staycation promo: free late check-out",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7277",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-09-20",
+    "subject": "printer",
+    "body": "Printer lantai 3 rusak lagi, sudah lapor GA.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7278",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-21",
+    "subject": "AC",
+    "body": "AC ruang meeting kecil bocor.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7279",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-09-21",
+    "subject": "pencairan",
+    "body": "Reimburse bulan lalu sudah cair, terima kasih.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7280",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-09-22",
+    "subject": "PO",
+    "body": "PO sudah terbit, nomornya di sistem.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7281",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-09-22",
+    "subject": "org chart",
+    "body": "Please share the updated org chart.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7282",
+    "owner_id": "EMP-004",
+    "from": "promo@taksi-9.example",
+    "date": "2026-09-23",
+    "subject": "Staycation promo: free late check-out",
+    "body": "Info promo pelanggan. Bukan tagihan.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7283",
+    "owner_id": "EMP-005",
+    "from": "promo@taksi-8.example",
+    "date": "2026-09-23",
+    "subject": "Cashback ride ke bandara",
+    "body": "Info promo pelanggan. Bukan tagihan.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7284",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-09-23",
+    "subject": "besok",
+    "body": "see you at tomorrow's 1:1",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7285",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-09-24",
+    "subject": "org chart",
+    "body": "Please share the updated org chart.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7286",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-09-24",
+    "subject": "deck",
+    "body": "Mohon review deck untuk presentasi klien.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7287",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-09-25",
+    "subject": "siap",
+    "body": "siap, laksanakan",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7288",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-09-25",
+    "subject": "pencairan",
+    "body": "Reimburse bulan lalu sudah cair, terima kasih.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7289",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-25",
+    "subject": "PO",
+    "body": "PO sudah terbit, nomornya di sistem.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7290",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-09-25",
+    "subject": "pencairan",
+    "body": "Reimburse bulan lalu sudah cair, terima kasih.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7291",
+    "owner_id": "EMP-005",
+    "from": "promo@taksi-6.example",
+    "date": "2026-09-25",
+    "subject": "Staycation promo: free late check-out",
+    "body": "Info promo pelanggan. Bukan tagihan.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7292",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-09-25",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7293",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-26",
+    "subject": "deck",
+    "body": "Mohon review deck untuk presentasi klien.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7294",
+    "owner_id": "EMP-005",
+    "from": "promo@taksi-9.example",
+    "date": "2026-09-26",
+    "subject": "Struk elektronik otomatis terkirim ke email",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7295",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-09-26",
+    "subject": "besok",
+    "body": "see you at tomorrow's 1:1",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7296",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-09-26",
+    "subject": "deck",
+    "body": "Mohon review deck untuk presentasi klien.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7297",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-09-27",
+    "subject": "jadwal",
+    "body": "Rapat bulanan cabang dipindah ke ruang 3B, jam tetap.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7900",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7298",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-27",
+    "subject": "siap",
+    "body": "siap, laksanakan",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7299",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-09-28",
+    "subject": "pencairan",
+    "body": "Reimburse bulan lalu sudah cair, terima kasih.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7300",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-09-28",
+    "subject": "fwd",
+    "body": "Attached the fare slip for my ride kantor to gudang (Senin).",
+    "attachments": [
+      {
+        "name": "IMG_5568.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0573",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0573",
+        "amount": 145000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7301",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-28",
+    "subject": "jadwal",
+    "body": "Sesi coaching mundur seminggu.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7907",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7302",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-28",
+    "subject": "deck",
+    "body": "Mohon review deck untuk presentasi klien.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7303",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-09-29",
+    "subject": "deadline",
+    "body": "Pengumpulan forecast dimajukan ke Senin.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7304",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-09-30",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7305",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-09-30",
+    "subject": "PO",
+    "body": "PO sudah terbit, nomornya di sistem.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7306",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-09-30",
+    "subject": "jadwal",
+    "body": "Rapat bulanan cabang dipindah ke ruang 3B, jam tetap.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7904",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7307",
+    "owner_id": "EMP-002",
+    "from": "promo@taksi-2.example",
+    "date": "2026-09-30",
+    "subject": "Voucher taxi ke airport, cuma minggu ini",
+    "body": "Info promo pelanggan. Bukan tagihan.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7308",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-10-01",
+    "subject": "AC",
+    "body": "AC ruang meeting kecil bocor.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7309",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-10-01",
+    "subject": "PO",
+    "body": "PO sudah terbit, nomornya di sistem.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7310",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-10-01",
+    "subject": "fwd",
+    "body": "Ongkos taxi kantor -> gudang hari Kamis, struknya di lampiran.",
+    "attachments": [
+      {
+        "name": "IMG_2897.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0509",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0509",
+        "amount": 165000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7311",
+    "owner_id": "EMP-001",
+    "from": "promo@taksi-4.example",
+    "date": "2026-10-01",
+    "subject": "Struk elektronik otomatis terkirim ke email",
+    "body": "Info promo pelanggan. Bukan tagihan.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7312",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-10-01",
+    "subject": "deadline",
+    "body": "Pengumpulan forecast dimajukan ke Senin.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7313",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-10-02",
+    "subject": "AC",
+    "body": "AC ruang meeting kecil bocor.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7314",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-10-02",
+    "subject": "printer",
+    "body": "Printer lantai 3 rusak lagi, sudah lapor GA.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7315",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-10-03",
+    "subject": "AC",
+    "body": "AC ruang meeting kecil bocor.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7316",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-10-03",
+    "subject": "siap",
+    "body": "siap, laksanakan",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7317",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-10-04",
+    "subject": "PO",
+    "body": "PO sudah terbit, nomornya di sistem.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7318",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-10-04",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7319",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-10-04",
+    "subject": "printer",
+    "body": "Printer lantai 3 rusak lagi, sudah lapor GA.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7320",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-10-05",
+    "subject": "deadline",
+    "body": "Pengumpulan forecast dimajukan ke Senin.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7321",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-10-05",
+    "subject": "AC",
+    "body": "AC ruang meeting kecil bocor.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7322",
+    "owner_id": "EMP-004",
+    "from": "promo@taksi-9.example",
+    "date": "2026-10-05",
+    "subject": "Struk elektronik otomatis terkirim ke email",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7323",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-10-05",
+    "subject": "jadwal",
+    "body": "Townhall got rescheduled to next Tuesday.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7902",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7324",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-10-06",
+    "subject": "deck",
+    "body": "Mohon review deck untuk presentasi klien.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7325",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-10-06",
+    "subject": "pencairan",
+    "body": "Reimburse bulan lalu sudah cair, terima kasih.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7326",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-10-06",
+    "subject": "printer",
+    "body": "Printer lantai 3 rusak lagi, sudah lapor GA.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7327",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-10-06",
+    "subject": "PO",
+    "body": "PO sudah terbit, nomornya di sistem.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7328",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-10-06",
+    "subject": "deadline",
+    "body": "Pengumpulan forecast dimajukan ke Senin.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7329",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-10-07",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7330",
+    "owner_id": "EMP-003",
+    "from": "promo@taksi-4.example",
+    "date": "2026-10-08",
+    "subject": "Staycation promo: free late check-out",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7331",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-10-08",
+    "subject": "besok",
+    "body": "see you at tomorrow's 1:1",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7332",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-10-08",
+    "subject": "Review Samudra",
+    "body": "Agenda sama PT Delta Samudra dimajukan, mulai jam 8 pagi selesai jam 10.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7002",
+      "start": "08:00",
+      "end": "10:00"
+    }
+  },
+  {
+    "id": "MSG-7333",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-10-08",
+    "subject": "besok",
+    "body": "besok ada yg ke kantor pusat?",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7334",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-10-09",
+    "subject": "PO",
+    "body": "PO sudah terbit, nomornya di sistem.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7335",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-10-09",
+    "subject": "besok",
+    "body": "besok bawa charger cadangan ya",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7336",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-10-10",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7337",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-10-10",
+    "subject": "scan",
+    "body": "Ongkos taxi kantor -> gudang hari Sabtu, struknya di lampiran.",
+    "attachments": [
+      {
+        "name": "IMG_1088.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0535",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0535",
+        "amount": 62000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7338",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-10-10",
+    "subject": "PO",
+    "body": "PO sudah terbit, nomornya di sistem.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7339",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-10-10",
+    "subject": "besok",
+    "body": "see you at tomorrow's 1:1",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7340",
+    "owner_id": "EMP-004",
+    "from": "promo@taksi-1.example",
+    "date": "2026-10-10",
+    "subject": "Voucher taxi ke airport, cuma minggu ini",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7341",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-10-10",
+    "subject": "AC",
+    "body": "AC ruang meeting kecil bocor.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7342",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-10-11",
+    "subject": "deck",
+    "body": "Mohon review deck untuk presentasi klien.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7343",
+    "owner_id": "EMP-005",
+    "from": "promo@taksi-2.example",
+    "date": "2026-10-11",
+    "subject": "Staycation promo: free late check-out",
+    "body": "Info promo pelanggan. Bukan tagihan.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7344",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-10-12",
+    "subject": "jadwal",
+    "body": "Sesi coaching mundur seminggu.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7918",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7345",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-10-12",
+    "subject": "printer",
+    "body": "Printer lantai 3 rusak lagi, sudah lapor GA.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7346",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-10-12",
+    "subject": "jadwal",
+    "body": "Townhall got rescheduled to next Tuesday.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7914",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7347",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-10-12",
+    "subject": "printer",
+    "body": "Printer lantai 3 rusak lagi, sudah lapor GA.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7348",
+    "owner_id": "EMP-003",
+    "from": "promo@taksi-1.example",
+    "date": "2026-10-12",
+    "subject": "Struk elektronik otomatis terkirim ke email",
+    "body": "Info promo pelanggan. Bukan tagihan.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7349",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-10-12",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7350",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-10-13",
+    "subject": "besok",
+    "body": "besok ada yg ke kantor pusat?",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7351",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-10-13",
+    "subject": "deadline",
+    "body": "Cut-off klaim bulan ini dimajukan dua hari.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7352",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-10-13",
+    "subject": "deck",
+    "body": "Mohon review deck untuk presentasi klien.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7353",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-10-13",
+    "subject": "printer",
+    "body": "Printer lantai 3 rusak lagi, sudah lapor GA.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7354",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-10-14",
+    "subject": "org chart",
+    "body": "Please share the updated org chart.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7355",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-10-14",
+    "subject": "org chart",
+    "body": "Please share the updated org chart.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7356",
+    "owner_id": "EMP-004",
+    "from": "promo@taksi-3.example",
+    "date": "2026-10-15",
+    "subject": "Staycation promo: free late check-out",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7357",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-10-15",
+    "subject": "fwd",
+    "body": "Ongkos taxi bandara -> penginapan hari Selasa, struknya di lampiran.",
+    "attachments": [
+      {
+        "name": "IMG_8522.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-7001",
+        "item_id": "IT-3",
+        "receipt_no": "TX-CLM-2026-7001-3",
+        "amount": 135000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7358",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-10-15",
+    "subject": "Re: besok",
+    "body": "Klien PT Cakra Mandiri minta ketemuannya dipindah ke jam 15, selesai sekitar 16.30.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7001",
+      "start": "15:00",
+      "end": "16:30"
+    }
+  },
+  {
+    "id": "MSG-7359",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-10-15",
+    "subject": "jadwal",
+    "body": "Rapat bulanan cabang dipindah ke ruang 3B, jam tetap.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7912",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7360",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-10-15",
+    "subject": "besok",
+    "body": "see you at tomorrow's 1:1",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7361",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-10-15",
+    "subject": "deck",
+    "body": "Mohon review deck untuk presentasi klien.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7362",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-10-16",
+    "subject": "siap",
+    "body": "siap, laksanakan",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7363",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-10-16",
+    "subject": "pencairan",
+    "body": "Reimburse bulan lalu sudah cair, terima kasih.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7364",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-10-16",
+    "subject": "AC",
+    "body": "AC ruang meeting kecil bocor.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7365",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-10-16",
+    "subject": "deck",
+    "body": "Mohon review deck untuk presentasi klien.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7366",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-10-16",
+    "subject": "nyusul",
+    "body": "Ongkos taxi kantor -> gudang hari Jumat, struknya di lampiran.",
+    "attachments": [
+      {
+        "name": "IMG_6617.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0524",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0524",
+        "amount": 140000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7367",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-10-17",
+    "subject": "pencairan",
+    "body": "Reimburse bulan lalu sudah cair, terima kasih.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7368",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-10-17",
+    "subject": "pencairan",
+    "body": "Reimburse bulan lalu sudah cair, terima kasih.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7369",
+    "owner_id": "EMP-001",
+    "from": "promo@taksi-9.example",
+    "date": "2026-10-17",
+    "subject": "Voucher taxi ke airport, cuma minggu ini",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7370",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-10-18",
+    "subject": "jadwal",
+    "body": "Rapat bulanan cabang dipindah ke ruang 3B, jam tetap.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7915",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7371",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-10-18",
+    "subject": "AC",
+    "body": "AC ruang meeting kecil bocor.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7372",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-10-18",
+    "subject": "printer",
+    "body": "Printer lantai 3 rusak lagi, sudah lapor GA.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7373",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-10-19",
+    "subject": "printer",
+    "body": "Printer lantai 3 rusak lagi, sudah lapor GA.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7374",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-10-19",
+    "subject": "jadwal",
+    "body": "Rapat bulanan cabang dipindah ke ruang 3B, jam tetap.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example",
+    "meeting_update": {
+      "event_id": "EVT-7910",
+      "start": "14:00",
+      "end": "15:00"
+    }
+  },
+  {
+    "id": "MSG-7375",
+    "owner_id": "EMP-001",
+    "from": "promo@taksi-8.example",
+    "date": "2026-10-19",
+    "subject": "Staycation promo: free late check-out",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7376",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-10-19",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7377",
+    "owner_id": "EMP-005",
+    "from": "promo@taksi-5.example",
+    "date": "2026-10-20",
+    "subject": "Staycation promo: free late check-out",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7378",
+    "owner_id": "EMP-004",
+    "from": "yoga.firmansyah@nusantara-niaga.example",
+    "date": "2026-10-20",
+    "subject": "bukti",
+    "body": "Attached the fare slip for my ride kantor to gudang (Selasa).",
+    "attachments": [
+      {
+        "name": "IMG_5367.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0593",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0593",
+        "amount": 42000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "yoga.firmansyah@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7379",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-10-20",
+    "subject": "PO",
+    "body": "PO sudah terbit, nomornya di sistem.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7380",
+    "owner_id": "EMP-003",
+    "from": "promo@taksi-4.example",
+    "date": "2026-10-21",
+    "subject": "Voucher taxi ke airport, cuma minggu ini",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7381",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-10-21",
+    "subject": "izin",
+    "body": "Izin pulang cepat hari Jumat, ada urusan keluarga.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7382",
+    "owner_id": "EMP-001",
+    "from": "promo@taksi-3.example",
+    "date": "2026-10-22",
+    "subject": "Cashback ride ke bandara",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7383",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-10-22",
+    "subject": "Re: onboarding intern",
+    "body": "Sure, I'll join the onboarding session for the new interns on Monday and bring the printed handbooks. Also, the parking passes for the visitors are ready at the front desk, just ask for Mbak Dewi.\n\n> ini nota taksinya, hotel ke bandara tgl 21/10",
+    "attachments": [
+      {
+        "name": "lampiran1.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-7005",
+        "item_id": "IT-3",
+        "receipt_no": "TX-CLM-2026-7005-3",
+        "amount": 120000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7384",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-10-22",
+    "subject": "besok",
+    "body": "besok bawa charger cadangan ya",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7385",
+    "owner_id": "EMP-002",
+    "from": "budi.santoso@nusantara-niaga.example",
+    "date": "2026-10-22",
+    "subject": "scan",
+    "body": "Ongkos taxi kantor -> gudang hari Kamis, struknya di lampiran.",
+    "attachments": [
+      {
+        "name": "IMG_5397.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0522",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0522",
+        "amount": 136000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "budi.santoso@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7386",
+    "owner_id": "EMP-001",
+    "from": "promo@taksi-1.example",
+    "date": "2026-10-22",
+    "subject": "Struk elektronik otomatis terkirim ke email",
+    "body": "Pesan otomatis, mohon tidak membalas.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7387",
+    "owner_id": "EMP-003",
+    "from": "sari.kusumawati@nusantara-niaga.example",
+    "date": "2026-10-23",
+    "subject": "bukti",
+    "body": "Attached the fare slip for my ride kantor to gudang (Jumat).",
+    "attachments": [
+      {
+        "name": "IMG_5039.jpg",
+        "type": "receipt",
+        "claim_id": "CLM-2026-0506",
+        "item_id": "IT-1",
+        "receipt_no": "TX-CLM-2026-0506",
+        "amount": 192000
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7388",
+    "owner_id": "EMP-005",
+    "from": "putri.maharani@nusantara-niaga.example",
+    "date": "2026-10-23",
+    "subject": "deadline",
+    "body": "Cut-off klaim bulan ini dimajukan dua hari.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "putri.maharani@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-7389",
+    "owner_id": "EMP-001",
+    "from": "rina.wulandari@nusantara-niaga.example",
+    "date": "2026-10-23",
+    "subject": "pencairan",
+    "body": "Reimburse bulan lalu sudah cair, terima kasih.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  }
+]

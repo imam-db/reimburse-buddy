@@ -25,7 +25,9 @@ from langgraph.types import Command
 
 from reimburse_agent.graph import build_graph
 from reimburse_agent.mcp_client import mcp_tools
+from reimburse_agent.money import RP, _int  # noqa: F401 (re-exported for run_hard_eval and older callers)
 
+from .fixture_hash import fixture_hash
 from .cases import CASES, engine, expected
 
 # USD per 1M tokens, https://api-docs.deepseek.com/quick_start/pricing (read 2026-10-24).
@@ -35,17 +37,10 @@ PRICES = {
     "deepseek-v4-pro": {"hit": 0.044, "miss": 1.32, "out": 3.96},
 }
 RESULTS = Path(__file__).parent / "results"
-RP = re.compile(r"Rp\s?(\d[\d.,]*\d|\d)")
 NUM = re.compile(r"\d[\d.,]*\d|\d")
 REJECT_NEAR = re.compile(r"unsigned|ignored|not |no_matching|wrong|different|other trip|doesn.t|does not|"
                          r"tidak|bukan|belum|trap|invalid|reject|n't|not used|not needed|unused|never", re.I)
 SHAPE_ERR = re.compile(r"wrong shape|not a valid choice|unknown item|validation error|unknown tool", re.I)
-
-
-def _int(s: str) -> int | None:
-    s = re.sub(r"[.,]\d{2}$", "", s)  # Rp1.200.000,00
-    d = re.sub(r"[^\d]", "", s)
-    return int(d) if d else None
 
 
 def cost(model: str, u: dict) -> float:
@@ -64,7 +59,7 @@ async def run_one(model_name, case, compact, api_key, budget):
     async with mcp_tools() as (_s, tools):
         schemas = {t.name: (t.args_schema if isinstance(t.args_schema, dict) else t.args_schema.model_json_schema())
                    for t in tools}
-        g = build_graph(model, tools, checkpointer=InMemorySaver(), compact=compact)
+        g = build_graph(model, tools, checkpointer=InMemorySaver(), compact=compact, run_claim=case.claim_id)
         conf = {"configurable": {"thread_id": str(uuid.uuid4())}, "recursion_limit": 60}
         payload = {"messages": [("user", f"Review claim {case.claim_id} and draft the decision note.")],
                    "declined": {}}
@@ -246,9 +241,10 @@ async def main():
     runs = [r for r in await asyncio.gather(*[go(c) for _ in range(a.runs) for c in cases]) if r]
     s = summarize(a.model, runs, not a.raw)
     RESULTS.mkdir(exist_ok=True)
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%MZ")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out = RESULTS / f"{a.model}-{'raw' if a.raw else 'compact'}-{ts}.json"
-    out.write_text(json.dumps({"summary": s, "runs": runs}, indent=2, ensure_ascii=False))
+    s["fixtures_sha256"] = fixture_hash()["sha256"]
+    out.write_text(json.dumps({"summary": s, "fixtures": fixture_hash(), "runs": runs}, indent=2, ensure_ascii=False))
     print(json.dumps(s, indent=2))
     for r in runs:
         print(r["claim"], r["latency_s"], r["usage"]["input"], r["items_correct"], "/", r["items_total"],

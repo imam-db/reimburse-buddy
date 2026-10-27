@@ -1,0 +1,268 @@
+[
+  {
+    "id": "CLM-2026-6001",
+    "employee_id": "EMP-005",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-LARGE",
+    "purpose": "Supplier visit in Surabaya (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Surabaya",
+      "start_date": "2026-10-13",
+      "end_date": "2026-10-14"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-13",
+        "description": "outbound flight GA 601",
+        "amount": "1300000",
+        "flight_no": "GA 601",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-6001-IT-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-14",
+        "description": "return flight GA 701",
+        "amount": "1300000",
+        "flight_no": "GA 701",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-6001-IT-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "taxi",
+        "date": "2026-10-13",
+        "description": "Taxi airport to hotel",
+        "amount": "135000",
+        "receipt": false
+      }
+    ]
+  },
+  {
+    "id": "CLM-2026-6002",
+    "employee_id": "EMP-003",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-LARGE",
+    "purpose": "Client meeting in Surabaya (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Surabaya",
+      "start_date": "2026-10-15",
+      "end_date": "2026-10-16"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-15",
+        "description": "outbound flight GA 602",
+        "amount": "1300000",
+        "flight_no": "GA 602",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-6002-IT-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-16",
+        "description": "return flight GA 702",
+        "amount": "1300000",
+        "flight_no": "GA 702",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-6002-IT-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "hotel",
+        "date": "2026-10-15",
+        "description": "Hotel Surabaya, 1 night",
+        "amount": "700000",
+        "nights": 1,
+        "receipt": true,
+        "receipt_no": "HTL-CLM-2026-6002"
+      },
+      {
+        "id": "IT-4",
+        "category": "late_checkout",
+        "date": "2026-10-16",
+        "description": "Late check-out until 16:00",
+        "amount": "300000",
+        "checkout_time": "16:00",
+        "location": "Surabaya",
+        "receipt": true,
+        "receipt_no": "LC-CLM-2026-6002"
+      }
+    ]
+  },
+  {
+    "id": "CLM-2026-6003",
+    "employee_id": "EMP-002",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-LARGE",
+    "purpose": "Partner review in Makassar (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Makassar",
+      "start_date": "2026-10-08",
+      "end_date": "2026-10-09"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-08",
+        "description": "outbound flight GA 603",
+        "amount": "1300000",
+        "flight_no": "GA 603",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-6003-IT-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-09",
+        "description": "return flight GA 703",
+        "amount": "1300000",
+        "flight_no": "GA 703",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-6003-IT-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "hotel",
+        "date": "2026-10-08",
+        "description": "Hotel Makassar, 1 night",
+        "amount": "650000",
+        "nights": 1,
+        "receipt": true,
+        "receipt_no": "HTL-CLM-2026-6003"
+      },
+      {
+        "id": "IT-4",
+        "category": "late_checkout",
+        "date": "2026-10-09",
+        "description": "Late check-out until 15:00",
+        "amount": "250000",
+        "checkout_time": "15:00",
+        "location": "Makassar",
+        "receipt": true,
+        "receipt_no": "LC-CLM-2026-6003"
+      }
+    ]
+  },
+  {
+    "id": "CLM-2026-6004",
+    "employee_id": "EMP-004",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-LARGE",
+    "purpose": "Distributor visit in Makassar (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Makassar",
+      "start_date": "2026-10-09",
+      "end_date": "2026-10-10"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-09",
+        "description": "outbound flight GA 604",
+        "amount": "1300000",
+        "flight_no": "GA 604",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-6004-IT-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-10",
+        "description": "return flight GA 704",
+        "amount": "1300000",
+        "flight_no": "GA 704",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-6004-IT-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "taxi",
+        "date": "2026-10-10",
+        "description": "Taxi hotel to airport",
+        "amount": "98000",
+        "receipt": false
+      }
+    ]
+  },
+  {
+    "id": "CLM-2026-6005",
+    "employee_id": "EMP-001",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "batch": "2026-LARGE",
+    "purpose": "Sales visit in Surabaya (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Surabaya",
+      "start_date": "2026-10-20",
+      "end_date": "2026-10-21"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-20",
+        "description": "outbound flight GA 605",
+        "amount": "1300000",
+        "flight_no": "GA 605",
+        "leg": "outbound",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-6005-IT-1",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-2",
+        "category": "flight",
+        "date": "2026-10-21",
+        "description": "return flight GA 705",
+        "amount": "1300000",
+        "flight_no": "GA 705",
+        "leg": "return",
+        "receipt": true,
+        "receipt_no": "TKT-CLM-2026-6005-IT-2",
+        "boarding_pass": true
+      },
+      {
+        "id": "IT-3",
+        "category": "taxi",
+        "date": "2026-10-21",
+        "description": "Taxi hotel to airport",
+        "amount": "120000",
+        "receipt": false
+      }
+    ]
+  }
+]

@@ -48,6 +48,7 @@ def test_skill_has_no_rupiah_amounts_or_raw_numbers():
     assert not re.search(r"\b\d{5,}\b", SKILL)
 
 
-def test_skill_scopes_messaging_rule():
-    assert "Allowed without asking" in SKILL
-    assert "reset_demo" in SKILL
+def test_skill_is_draft_only():
+    assert "no write tools" in SKILL
+    assert "Still needs a human" in SKILL
+    assert 'Say "I don\'t know"' in SKILL

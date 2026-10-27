@@ -1,0 +1,96 @@
+[
+  {
+    "id": "MSG-8001",
+    "owner_id": "EMP-401",
+    "from": "no-reply@garuda-airline.example",
+    "date": "2026-10-11",
+    "subject": "Fwd: Your boarding pass GA 312 CGK-SUB 12 Oct 2026",
+    "body": "Passenger RINA WULANDARI. Flight GA 312, Jakarta (CGK) to Surabaya (SUB), 12 Oct 2026 07:40. Seat 23A.",
+    "attachments": [
+      {
+        "name": "boarding_pass_GA312.pdf",
+        "type": "boarding_pass",
+        "flight": "GA 312",
+        "date": "2026-10-12",
+        "passenger": "Rina Wulandari"
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-8002",
+    "owner_id": "EMP-401",
+    "from": "reservations@tunjungan-raya.example",
+    "date": "2026-10-10",
+    "subject": "Fwd: Booking confirmation, 12-14 Oct",
+    "body": "Two nights, deluxe room, IDR 950,000 per night.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-8003",
+    "owner_id": "EMP-402",
+    "from": "dewi.anggraini@nusantara-niaga.example",
+    "date": "2026-10-09",
+    "subject": "Fwd: Re: Expo hotel rates",
+    "body": "Hotels near the expo are fully booked at cap. See approval memo MEMO-2027-641.",
+    "attachments": [],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "bagus.pratama@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-8004",
+    "owner_id": "EMP-403",
+    "from": "frontdesk@sanur-asri.example",
+    "date": "2026-10-21",
+    "subject": "Fwd: Late check-out confirmation",
+    "body": "Late check-out until 17:00 on 21 Oct confirmed. Fee IDR 450,000.",
+    "attachments": [
+      {
+        "name": "late_checkout_invoice.pdf",
+        "type": "receipt"
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "sari.kusumawati@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-8201",
+    "owner_id": "EMP-401",
+    "from": "no-reply@citilink-air.example",
+    "date": "2026-10-01",
+    "subject": "Fwd: Check-in successful: QZ 7520 CGK-SUB, 2 Oct 2026",
+    "body": "Hi RINA WULANDARI, you are checked in for QZ 7520 Jakarta (CGK) to Surabaya (SUB) on 2 Oct 2026 06:10. Seat 14C. Show the attached pass at the gate.",
+    "attachments": [
+      {
+        "name": "QZ7520_mobile_checkin.pdf",
+        "type": "boarding_pass",
+        "flight": "QZ 7520",
+        "date": "2026-10-02",
+        "passenger": "Rina Wulandari"
+      }
+    ],
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  },
+  {
+    "id": "MSG-8202",
+    "owner_id": "EMP-401",
+    "from": "anton.wijaya@samudra-logistik.example",
+    "date": "2026-10-03",
+    "subject": "Fwd: Closing meeting moved to 13:00-15:00 tomorrow",
+    "body": "Pak Direktur has a morning commitment, so tomorrow's closing meeting moves from 10:00 to 13:00-15:00, same room.",
+    "attachments": [],
+    "meeting_update": {
+      "event_id": "EVT-3110",
+      "date": "2026-10-04",
+      "start": "13:00",
+      "end": "15:00",
+      "location": "Surabaya"
+    },
+    "mailbox": "reimburse@nusantara-niaga.example",
+    "forwarded_by": "rina.wulandari@nusantara-niaga.example"
+  }
+]

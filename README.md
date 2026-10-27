@@ -32,6 +32,67 @@ flowchart LR
 - **WorkBuddy** does the reasoning: planning, tool choice, plan revision and the human-in-the-loop.
 - **Python** does what must be exact: data access and policy arithmetic.
 
+## How the AI agent works (version B)
+
+<picture>
+  <source srcset="docs/agent-how-it-works.svg" type="image/svg+xml">
+  <img src="docs/agent-how-it-works.png" alt="How the Reimburse Buddy agent works">
+</picture>
+
+Source: [docs/agent-how-it-works.excalidraw](docs/agent-how-it-works.excalidraw) (open it at excalidraw.com).
+
+- The LangGraph agent (`agent/reimburse_agent/graph.py`) reads the claim and the policy, then calls `check_claim`. Every amount and gap comes from that deterministic rule engine, never from the LLM.
+- For each open gap it searches the mailbox with `search_for_gap`: 2 searches before asking the employee and 1 after. If a document is still missing, it asks the employee with the fixed-template `request_missing_evidence` and checks the claim again.
+- Read-only tools run freely. Every other write or message stops at an approval gate, apart from the capped evidence request.
+- Decisions that need judgment (`approve_full`, `approve_capped`, `reject`) come only from the finance reviewer, through the web question form or a reply. The graph refuses decisions the model tries to set itself.
+- Once the check is clean, or every gap has been searched and asked about, the graph drafts the decision note. Finance takes the final action.
+- Version B also offers `find_messages(employee_id, query, date_from, date_to)` (agent only, not a WorkBuddy tool). It collects the employee's messages through the same mailbox search, ranks them with BM25 plus a small local multilingual embedding model (fused with reciprocal rank fusion), and returns the top 5. Each call counts as one search against the gap's budget. If the model cannot be loaded, ranking falls back to BM25 and the result says so.
+
+### What the evaluation shows so far (synthetic data, small n, no LLM runs in this round)
+
+Retrieval was the bottleneck. With semantic retrieval, the no-LLM baseline passes 4/4 of the heuristic-hostile cases 11-14 (19/19 hard cases, 0 unsafe, 0 false approvals) and 2/5 on the held-out large set B (3/5 on tuning set A). What the LLM adds is so far untested and is measured on the reasoning track.
+
+| suite (baseline, 1 run, $0) | ranked (BM25+embedding) | BM25 only | whole mailbox, unranked (control) |
+|---|---|---|---|
+| hard, 19 cases | 19/19 | 17/19 (11, 12 fail) | 19/19 |
+| large set A (tuning), 5 | 3/5 | 2/5 | 5/5 |
+| large set B (held out), 5 | 2/5 | 3/5 | 5/5 |
+| reasoning track, 11 | 9/11 (2 false approvals) | - | 9/11 |
+
+- The whole-mailbox control passes everything because every synthetic receipt and schedule change carries structured fields (`claim_id`, `item_id`, `meeting_update`) and the rule engine keeps only what matches. On these fixtures the loss comes from the top-5 cut, not from understanding. Real mail has no such tags.
+- Large sets (`agent/eval/large_fixtures.py`): 46-68 messages per employee over Aug-Oct 2026, hand-written paraphrases combined by a seeded RNG; set A and set B share no paraphrase. Needed message recall@5 / MRR (baseline query): set A lexical 0.2/0.2, ranked 0.2/0.12; set B lexical 0.4/0.12, ranked 0.2/0.15 (`agent/eval/retrieval_metrics.py`). Every large mailbox is flagged `possibly_incomplete` (the 36 probes reach 33-47 of 46-68 messages).
+- Reasoning track (`agent/eval/reasoning_fixtures.py`, labels in `fixtures/reasoning/labels.json`, to be reviewed by Imam): the baseline falsely approves R1 (meeting moved, then moved back) and R1x (moved, then cancelled in free text). R1 exposes an engine issue: `meeting_update`s are applied in evidence-list order, not message date order.
+- Results: `agent/eval/results/{hard,large_a,large_b,reasoning}-baseline*.json` and `retrieval-*.json`; each records a SHA-256 of the fixtures.
+
+### Prepared, not yet run: model screening and an optional judge
+
+- `agent/eval/screen_models.py` screens SumoPod models on the 30 hard, large and reasoning cases. It is a dry
+  run by default. `--live` needs `--max-usd` (hard cap; `--strict-cap` stops mid-model). It runs a preflight
+  that forces each tool once, freezes the conditions (temperature 0, no parallel tool calls, the same token cap),
+  retries infrastructure errors and drops a model after two in a row, reads the cost from the gateway header,
+  ranks by unsafe actions, then false approvals, correct, protocol, cost and latency, adds the $0 baseline as
+  a reference row, and runs a gateway control (deepseek-flash direct vs. via SumoPod). The dry-run estimate is
+  about $0.81 (worst case $1.10), using third-party prices that have not been verified.
+- `agent/reimburse_agent/judge.py` is an optional Jev (`jev-1.13.0`) judge. It is off by default; set
+  `RB_JUDGE=jev`. It only escalates: a yes or unsettled answer adds a review flag. It never closes a gap,
+  picks evidence or changes an amount. Each request sends one candidate message. Code computes dates and
+  weekdays. Questions are Nouls, never Choices. A failed call is recorded as an error, never as "no". All
+  wording and thresholds are in `judge_questions.py`. Today the judge is wired only into the contradiction
+  scan of a calendar-only late checkout, and it sees the 160-character snippet, not the full body.
+- `agent/eval/judge_set.jsonl` has 62 hand-written labelled pairs (formal Indonesian, slang Indonesian,
+  English; 27 positives; hard negatives and injection attempts). `agent/eval/judge_score.py` compares Jev
+  with a flash model using structured output. It reports AUROC, Brier, miss rate at the review threshold,
+  false escalations and repeatability, overall and per register. It is a dry run by default; the estimate
+  for 3 repeats is about $0.017.
+
+### find_messages: setup and limits
+
+- Embedding model: `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`, loaded by fastembed 0.9.1 (pinned) from `Qdrant/paraphrase-multilingual-MiniLM-L12-v2-onnx-Q` at commit `faf4aa42` (pinned in `retrieval.py`). Install with `uv sync --extra embed`. The first run downloads about 240 MB into `RB_EMBED_CACHE`, else `FASTEMBED_CACHE_PATH`, else `~/.cache/fastembed`.
+- `RB_NO_EMBED=1` skips the model: BM25 only, and the result's `ranker` says so.
+- Scope: only the dedicated `reimburse@` mailbox, limited to messages the employee sent or forwarded. Personal inboxes are never read.
+- Limitation: the server offers only a substring search capped at 5 results, so `find_messages` builds its pool with 36 one-character probes (a-z, 0-9). Any probe that returns 5 may have hidden more, so the pool is flagged `possibly_incomplete`; that happens for any mailbox with 5 or more messages. A contradiction scan on an incomplete pool counts as unavailable and sends the item to review. A server-side list or paged search would remove the workaround.
+- Guards: a late checkout resolved by the calendar alone gets a graph-side scan (event title and date over the trip window; a hit at similarity >= 0.45, tuned on set A, or a schedule-change word sends it to review). After an evidence request, a reply that arrived since the pre-request mailbox snapshot and that the latest `check_claim` did not consider holds the draft once per mailbox version; a repeat draft goes through, flagged "new evidence found but not used". The same check runs when the model ends in plain text.
+
 ## Tools
 
 | Tool | Purpose |
@@ -51,6 +112,10 @@ flowchart LR
 | `update_claim_status(claim_id, status, note)` | (Mock write) `on_hold`, `approved`, `partially_approved`, `rejected` |
 | `get_outbox()` | Everything the agent sent or changed this session |
 | `reset_demo()` | Restore all in-memory state before a new take (replies, outbox, approvals, statuses) |
+
+The four `(Mock write)` tools are registered only when `REIMBURSE_ENABLE_WRITE_TOOLS=1`. The
+WorkBuddy config (`.workbuddy/mcp.json`) does not set it, so in WorkBuddy the agent can only read and
+draft; version B's agent sets it and gates every write behind a human approval.
 
 Write tools are mocks: state lives in memory for one server process. `send_message` is a
 closed loop: scripted replies in `data/replies.json` are the employee's answer and land in the reimburse@ mailbox right away,
@@ -79,6 +144,10 @@ Unresolved problems come back as **gap codes** (`receipt_missing`, `boarding_pas
 returns the top 5 summaries. Scripted replies react to English and Indonesian requests (receipt, struk,
 kuitansi, nota, bukti, taksi). The decision note's Indonesian section is fully localised and lists ignored
 evidence as an audit trail.
+
+## Employee Q&A (flag)
+
+`EMPLOYEE_QA=1` adds a read-only Q&A box on the employee claim page. It answers policy questions, says what an employee's own claim is missing and shows its status, cites a source for every answer and keeps a full audit trail. It uses a synthetic rulebook. See [docs/employee-qa.md](docs/employee-qa.md).
 
 ## Demo scenarios
 
@@ -122,6 +191,47 @@ uv run --no-dev reimburse-buddy-mcp   # starts the server on stdio (WorkBuddy no
 
 To point the server at another dataset, set `REIMBURSE_BUDDY_DATA=/path/to/data` in the `env` block.
 
+## Deployment notes: audit log
+
+Production refuses JSONL and in-memory audit logs. When `APP_ENV` is `prod` or `production`
+(case-insensitive), the audit log must be Postgres:
+
+```bash
+export APP_ENV=prod
+export REIMBURSE_AUDIT_DATABASE_URL='postgresql://user:pass@db.example:5432/reimburse'
+```
+
+- `REIMBURSE_AUDIT_DATABASE_URL` is required and must start with `postgres://` or `postgresql://`;
+  the connection must open at startup.
+- If it is missing, is not a Postgres URL, or the connection fails, the process exits with
+  `audit.AuditConfigError` (a subclass of `audit.AuditError`). There is no fallback to
+  `REIMBURSE_AUDIT_LOG` (JSONL) or the in-memory log.
+- The web app checks this in its FastAPI startup hook, so it fails before serving the first request.
+  `agent/investigate_worker.py` checks it before running, and `audit.default_log()` enforces it too.
+- Outside production (`APP_ENV` unset or any other value), behaviour is unchanged: JSONL via
+  `REIMBURSE_AUDIT_LOG`, otherwise a fresh in-memory log.
+
+### After deploy: audit log self-test
+
+Use Neon's **direct (unpooled) endpoint** for `REIMBURSE_AUDIT_DATABASE_URL` and connect with the
+application role (INSERT + SELECT only), never the owner role. psycopg connects with
+`prepare_threshold=None`, so it never creates server-side prepared statements even if a pooled/PgBouncer
+endpoint is used by mistake.
+
+Install the optional extra in the agent image and run the self-test as a Cloud Run job (same environment
+as the web/agent service):
+
+```bash
+cd agent
+uv sync --extra postgres
+uv run --extra postgres python -m reimburse_agent.audit_selftest
+```
+
+It prints one PASS/FAIL line per check — append + list roundtrip, duplicate `event_key`, UPDATE/DELETE/
+TRUNCATE denied on `audit_events`, no unmatched executions, and `prepare_threshold=None` — and exits
+non-zero if any check fails. The DSN and its password are masked in the output. There is intentionally no
+HTTP route for this: the web simulation has no admin authentication, so it is CLI/job only.
+
 ## Project layout
 
 ```
@@ -144,7 +254,8 @@ tests/
 The agent proposes, the reviewer confirms. `triage_claims` is read-only; cleared claims change status only
 through `approve_cleared_batch(..., reviewer_confirmed=true)` with the exact cleared list. Final status
 changes, rejections, above-cap approvals, escalations and decision notices always wait for the reviewer.
-Gathering evidence and asking an employee for a missing document happen automatically.
+Gathering evidence happens automatically; asking an employee for a missing document also waits for the
+reviewer's approval.
 
 In a real deployment the evidence source is a dedicated reimburse@ mailbox that employees forward
 documents to, plus connectors for calendar, HR and ERP. The mock MCP tools here stand in for those.

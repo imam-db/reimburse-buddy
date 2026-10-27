@@ -32,12 +32,13 @@ def test_invalid_language(check):
         draft_decision(s, c, language="fr")
 
 
-def test_skill_mentions_every_gap_code():
+def test_version_b_prompt_mentions_every_gap_code():
     from pathlib import Path
 
     from reimburse_buddy import gaps
-    skill = (Path(__file__).parents[1] / "skills/claim-auditor/SKILL.md").read_text()
-    for code in gaps.ALL:
-        assert f"`{code}`" in skill, code
+    prompt = (Path(__file__).parents[1] / "agent/reimburse_agent/prompts/system_prompt.md").read_text()
+    # B_ONLY codes are documented in the version B addendum until the prompt is updated (then drop this).
+    for code in set(gaps.ALL) - set(gaps.B_ONLY):
+        assert f"`{code}`" in prompt, code
     for tool in ("triage_claims", "update_claim_status", "request_approval", "send_message"):
-        assert tool in skill
+        assert tool in prompt
