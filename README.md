@@ -250,6 +250,10 @@ an action that will be refused. The plan gate in `plan_graph.py` is unchanged: t
 refusal, so an external driver calling the graph directly (for example `agent/plan_demo.py`) is not
 covered.
 
+An agent write approved from the investigation page is attributed the same way: the web layer sends the
+reviewer ID on the worker's stdin answer, the worker puts it on the graph's resume payload as
+`answer["reviewer"]`, and `graph.decide()` (unchanged) logs `human:<reviewer>`.
+
 ### Daily LLM budget
 
 One cap for the whole deployment, not one per claim, on a ledger of its own (`web/reimburse_web/spend.py`;
