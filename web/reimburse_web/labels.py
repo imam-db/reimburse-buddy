@@ -95,6 +95,11 @@ LABELS = {
     "accepted": "Diterima",
     "accepted_by_reviewer": "Diterima reviewer",
     "rejected_by_reviewer": "Ditolak reviewer",
+    # daily LLM budget (web/reimburse_web/spend.py)
+    "budget_exhausted": "Batas biaya harian demo tercapai. Coba lagi besok.",
+    "budget_remaining": "Sisa anggaran LLM hari ini",
+    "budget_unconfigured": ("Batas biaya LLM belum diatur, jadi tidak ada panggilan model yang dijalankan. "
+                            "Isi LLM_DAILY_BUDGET_USD dan harga token di environment."),
 }
 
 
