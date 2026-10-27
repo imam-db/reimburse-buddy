@@ -38,6 +38,9 @@ from .plans import router as plans_router, startup_config_check, startup_sweep
 from .qa import router as qa_router
 
 BATCH = "2026-W43"
+# A second batch with one claim owned by EMP-101, so the self-approval refusal can be shown on the claim
+# side without changing the triage numbers of the demo batch (10 claims, 7 cleared, 3 exceptions).
+OWN_BATCH = "2026-W44"
 WEB_BATCH = "web-submissions"
 MAILBOX = "reimburse@nusantara-niaga.example"
 SIGNED, UNSIGNED = "signed", '<span class="tag bad">unsigned</span>'
@@ -506,7 +509,7 @@ def admin(batch: str = BATCH, msg: str = ""):
                      f"<td>{e(c.get('batch', ''))}</td><td>{status_tag(c['status'])}</td></tr>" for c in store.claims)
     est = t["time_saved_estimate"]
     body = f"""{f'<p class="tag ok">{e(msg)}</p>' if msg else ''}
-<form method="get"><label>Batch <select name="batch" aria-label="Pilih batch" onchange="this.form.submit()">{options([(BATCH, BATCH), (WEB_BATCH, WEB_BATCH)], batch)}</select></label></form>
+<form method="get"><label>Batch <select name="batch" aria-label="Pilih batch" onchange="this.form.submit()">{options([(BATCH, BATCH), (OWN_BATCH, OWN_BATCH), (WEB_BATCH, WEB_BATCH)], batch)}</select></label></form>
 <div class="box"><h2>Triage: {t['claims']} claims, {len(cleared)} cleared, {len(t['exceptions'])} exceptions</h2>
 <p>Time saved: {e(est['minutes'])} min <span class="tag warn">estimate</span> <span class="note">{e(est['assumption'])}</span></p>
 <p class="note">Triage is read-only. Statuses change only after you confirm below.</p>

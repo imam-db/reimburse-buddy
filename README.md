@@ -177,6 +177,7 @@ evidence as an audit trail.
 | 2a | `CLM-2026-0102` | Jakarta hotel over cap. Agent finds signed memo `MEMO-2026-041`, approved. |
 | 2b | `CLM-2026-0103` | Medan hotel over cap, no memo. Agent asks the reviewer; capped amount approved. |
 | 3 | `CLM-2026-0104` | Late check-out fee. Calendar shows a contract signing until 15:30, so the fee is justified. A post-trip dinner is rejected and a suspected duplicate taxi goes to the reviewer. |
+| Self-approval | batch `2026-W44` | One claim, `CLM-2026-0120`, owned by `EMP-101` (Makassar hotel over cap). Signed in as `EMP-101` the approve controls are hidden and the server refuses; signed in as `EMP-102` they work. A separate batch, so the `2026-W43` triage numbers above stay 10 / 7 / 3. |
 
 Run them without WorkBuddy:
 
