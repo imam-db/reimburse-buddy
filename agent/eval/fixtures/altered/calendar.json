@@ -1,0 +1,62 @@
+[
+  {
+    "id": "EVT-3101",
+    "owner_id": "EMP-401",
+    "title": "Quarterly review with PT Samudra Logistik",
+    "date": "2026-10-13",
+    "start": "10:00",
+    "end": "12:00",
+    "location": "Surabaya",
+    "type": "business"
+  },
+  {
+    "id": "EVT-3102",
+    "owner_id": "EMP-402",
+    "title": "Indonesia Retail Tech Expo, booth duty",
+    "date": "2026-10-15",
+    "start": "09:00",
+    "end": "18:00",
+    "location": "Jakarta",
+    "type": "business"
+  },
+  {
+    "id": "EVT-3103",
+    "owner_id": "EMP-403",
+    "title": "Vendor onboarding workshop day 1",
+    "date": "2026-10-20",
+    "start": "09:00",
+    "end": "16:00",
+    "location": "Denpasar",
+    "type": "business"
+  },
+  {
+    "id": "EVT-3104",
+    "owner_id": "EMP-403",
+    "title": "Vendor contract signing with CV Bali Karya Mandiri",
+    "date": "2026-10-21",
+    "start": "13:00",
+    "end": "15:30",
+    "location": "Denpasar",
+    "type": "business"
+  },
+  {
+    "id": "EVT-3105",
+    "owner_id": "EMP-403",
+    "title": "Flight DPS-CGK",
+    "date": "2026-10-21",
+    "start": "18:45",
+    "end": "19:45",
+    "location": "Denpasar",
+    "type": "travel"
+  },
+  {
+    "id": "EVT-3110",
+    "owner_id": "EMP-401",
+    "title": "Contract closing meeting, PT Samudra Logistik",
+    "date": "2026-10-04",
+    "start": "10:00",
+    "end": "11:30",
+    "location": "Surabaya",
+    "type": "business"
+  }
+]

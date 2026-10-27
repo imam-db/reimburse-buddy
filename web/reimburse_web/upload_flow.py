@@ -18,10 +18,16 @@ from pathlib import Path
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from reimburse_buddy.amounts import normalize_attachment
+from reimburse_buddy.gaps import B_ONLY
 from reimburse_buddy.models import rupiah
 from reimburse_buddy.rules import check_claim
 
 from . import app as core
+from . import plans  # noqa: F401  # puts agent/ on sys.path
+from .labels import label
+from reimburse_agent.qa.tools import UNDER_REVIEW, is_sensitive_item  # noqa: E402  # same masking as Q&A
+from reimburse_buddy.models import to_jsonable  # noqa: E402
 from .extract import DOC_TYPES, FIELDS, LOW_CONFIDENCE, Draft, get_extractor
 
 router = APIRouter()
@@ -93,6 +99,7 @@ function show(){l.textContent=i.files.length?Array.from(i.files).map(f=>f.name).
 z.addEventListener('dragover',ev=>{ev.preventDefault();z.classList.add('over');});
 z.addEventListener('dragleave',()=>z.classList.remove('over'));
 z.addEventListener('drop',ev=>{ev.preventDefault();z.classList.remove('over');i.files=ev.dataTransfer.files;show();});
+const p=document.getElementById('pick-files');if(p)p.addEventListener('click',()=>i.click());
 i.addEventListener('change',show);
 </script>"""
 
@@ -102,11 +109,14 @@ def new_claim(emp: str = "EMP-001"):
     me = core.store.get_employee(emp)
     body = f"""<p><a href="/employee?emp={e(emp)}">&larr; My claims</a> &middot; {e(me['name'])}</p>
 <form method="post" action="/employee/drafts" enctype="multipart/form-data"><input type="hidden" name="emp" value="{e(emp)}">
-<div class="box"><h2>1. Trip</h2>Purpose <input name="purpose" size="40" required> Destination <input name="destination" value="Surabaya" required>
-<br>Dates <input type="date" name="start_date" required> &rarr; <input type="date" name="end_date" required></div>
+<div class="box"><h2>1. Trip</h2><label>Purpose <input name="purpose" size="40" required></label>
+<label>Destination <input name="destination" value="Surabaya" required></label>
+<br><label>Dates <input type="date" name="start_date" required></label> &rarr;
+<label>End date <input type="date" name="end_date" required></label></div>
 <div class="box"><h2>2. Drop your receipts and boarding passes</h2>
 <label id="drop" class="drop">Drag photos or PDFs here, or click to choose (up to {MAX_FILES} files, 5 MB each)
-<input id="files" type="file" name="files" multiple accept=".pdf,.png,.jpg,.jpeg" style="display:none"></label>
+<input id="files" class="visually-hidden" type="file" name="files" multiple accept=".pdf,.png,.jpg,.jpeg"></label>
+<p><button type="button" id="pick-files">Pilih file</button></p>
 <div id="picked" class="note"></div>
 <p class="note">Extraction: {e(get_extractor().name)}. You can check and fix every field on the next screen.</p>
 <button type="submit">Read files</button></div></form>{DROP_JS}"""
@@ -148,10 +158,10 @@ async def create_draft(emp: str = Form(...), purpose: str = Form(...), destinati
 def _badge(f: dict) -> str:
     src = f["source"]
     if src == "self_declared":
-        return "<span class='tag warn'>self_declared</span>"
+        return f"<span class='tag warn' title='{e(src)}'>{e(label(src))}</span>"
     if src in EXTRACTED:
         cls = "low" if f["confidence"] < LOW_CONFIDENCE else "ok"
-        return f"<span class='tag {cls}'>extracted ({e(src)} {f['confidence']:.2f})</span>"
+        return f"<span class='tag {cls}' title='{e(src)}'>extracted ({e(label(src))} {f['confidence']:.2f})</span>"
     return ""
 
 
@@ -165,7 +175,7 @@ def _input(card: dict, k: str, allowed_cats: list[str]) -> str:
     low = " class='low'" if f["source"] in EXTRACTED and f["confidence"] < LOW_CONFIDENCE and v else ""
     name = f"c_{card['id']}_{k}"
     if k == "category":
-        ctl = f"<select name='{name}'{low}>{core.options([('', 'choose...')] + [(c, c) for c in allowed_cats], v)}</select>"
+        ctl = f"<select name='{name}'{low}>{core.options([('', 'choose...')] + [(c, label(c)) for c in allowed_cats], v)}</select>"
     elif k == "date":
         ctl = f"<input type='date' name='{name}' value='{e(v)}'{low}>"
     elif k == "amount":
@@ -191,12 +201,12 @@ def draft_page(did: str):
                (["nights"] if cat == "hotel" else [])
         files = ""
         for f in c["files"]:
-            mv = (f"<select name='move_{f['id']}'>{core.options([('', 'move to...')] + others(c['id']))}</select>"
+            mv = (f"<select name='move_{f['id']}' aria-label='Pindahkan berkas ke kartu lain'>{core.options([('', 'move to...')] + others(c['id']))}</select>"
                   f"<button name=action value='move:{f['id']}'>Move</button>") if len(d["cards"]) > 1 else ""
-            files += (f"<li>{e(f['name'])} <select name='f_{f['id']}_doc_type'>{core.options([(t, t) for t in DOC_TYPES], f['doc_type'])}</select>"
+            files += (f"<li>{e(f['name'])} <select name='f_{f['id']}_doc_type' aria-label='Jenis dokumen untuk {e(f['name'])}'>{core.options([(t, label(t)) for t in DOC_TYPES], f['doc_type'])}</select>"
                       f" {_badge({'source': f['doc_type_source'], 'confidence': f['extract']['fields']['doc_type']['confidence']})}"
                       f"{_err(f)} {mv}</li>")
-        merge = (f"<select name='merge_{c['id']}'>{core.options([('', 'merge into...')] + others(c['id']))}</select>"
+        merge = (f"<select name='merge_{c['id']}' aria-label='Gabungkan kartu ke kartu lain'>{core.options([('', 'merge into...')] + others(c['id']))}</select>"
                  f"<button name=action value='merge:{c['id']}'>Merge</button>") if len(d["cards"]) > 1 else ""
         split = f"<button name=action value='split:{c['id']}'>Split</button>" if len(c["files"]) > 1 else ""
         errs = "".join(f"<div class=err>{e(x)}</div>" for x in c["errors"])
@@ -206,7 +216,7 @@ def draft_page(did: str):
     errs = "".join(f"<p class=err>{e(x)}</p>" for x in d["errors"])
     body = f"""<p>{e(h['purpose'])} &middot; {e(h['destination'])} {e(h['start_date'])} &rarr; {e(h['end_date'])}</p>
 <p class="note">3. Check the drafted items. Yellow fields were read with low confidence. Anything you type or change is
-marked self_declared for the reviewer.</p>{errs}
+marked {e(label('self_declared'))} for the reviewer.</p>{errs}
 <form method="post" action="/employee/drafts/{e(did)}"><div class="cards">{cards_html}</div>
 <p><button name=action value="save">Save changes</button> <button name=action value="add">Add an item without a file</button>
 <button name=action value="submit" style="font-weight:bold">Submit claim</button></p></form>"""
@@ -330,7 +340,11 @@ def _forward(emp: str, cid: str, item: dict, f: dict, trip: dict, dup: bool = Fa
         att = {"name": f["name"], "type": "boarding_pass", "flight": ex.get("flight_no") or "",
                "date": ex.get("date") or "", "passenger": ex.get("passenger") or ""}
     else:
-        att = {"name": f["name"], "type": "receipt", "claim_id": cid, "item_id": item["id"]}
+        # The amount comes from the file (OCR / extraction), never from the item, so the engine can compare them.
+        att = {"name": f["name"], "type": "receipt", "claim_id": cid, "item_id": item["id"], "amount_required": True}
+        if ex.get("amount") not in (None, ""):
+            att["amount"] = ex["amount"]
+        att = normalize_attachment(att)
     reasons = evidence_review_reasons(f, item, trip, me["name"], dup)
     att.update(stored_as=f["stored"], sha256=f.get("sha256", ""), linked_claim=cid, linked_item=item["id"],
                provenance=prov, self_declared=any(v == "self_declared" for v in prov.values()),
@@ -423,17 +437,20 @@ async def update_draft(did: str, request: Request):
 
 
 AWAITING = "Menunggu verifikasi finance / Awaiting finance review"
-GAP_TEXT = {"receipt_missing": "receipt missing", "boarding_pass_missing": "boarding pass missing",
-            "hotel_over_cap": "over the hotel cap: finance will review", "duplicate_suspected": "possible duplicate",
-            "hotel_nights_mismatch": "nights do not match the trip", "late_checkout_unjustified": "needs justification"}
+REVIEWING = f"{UNDER_REVIEW['note_id'].rstrip('.')} / {UNDER_REVIEW['note_en'].rstrip('.')}"
 
 
 @router.get("/employee/claims/{cid}", response_class=HTMLResponse)
-def employee_claim(cid: str, msg: str = ""):
+def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: ignore[assignment]  # direct calls pass no request
+    from . import qa as qa_web  # Employee Q&A hook; a no-op unless EMPLOYEE_QA is on
     try:
         claim = core.store.get_claim(cid)
     except KeyError:
         raise HTTPException(404, f"Unknown claim {cid}")
+    parts = qa_web.claim_page_parts(request, cid, claim["employee_id"])
+    if isinstance(parts, HTMLResponse):
+        return parts
+    qa_top, qa_box = parts
     chk = core.run_check(cid)
     files_by_item: dict[str, list] = {}
     for m in core.store.inbox:
@@ -441,28 +458,33 @@ def employee_claim(cid: str, msg: str = ""):
             if a.get("claim_id") == cid and a.get("item_id"):
                 files_by_item.setdefault(a["item_id"], []).append(a["name"])
     pending = core.pending_items(cid)
-    used = {i.item_id: i.evidence_used for i in chk.items}
     rows = ""
     for it, res in zip(claim["items"], chk.items):
-        have = files_by_item.get(it["id"], []) + [x for x in used.get(it["id"], []) if x.startswith("MSG")
-                                                  and not any(x in f for f in files_by_item.get(it["id"], []))]
-        missing = [GAP_TEXT.get(str(g), str(g).replace("_", " ")) for g in res.gaps]
+        have = list(dict.fromkeys(files_by_item.get(it["id"], [])))
+        missing = list(dict.fromkeys(REVIEWING if str(g) in B_ONLY else label(str(g)) for g in res.gaps))
+        if is_sensitive_item(to_jsonable(res)):  # fraud/suspicion signals: never detailed to the employee
+            missing = [REVIEWING]
         if it["id"] in pending:
             missing = [AWAITING]
-        status = (", ".join(missing) if missing else ("rejected" if res.status.value == "rejected" else "evidence complete"))
-        cls = "warn" if missing else ("bad" if res.status.value == "rejected" else "ok")
+        if res.status.value == "rejected":
+            status, cls = "✕ " + label("rejected"), "bad"
+        elif missing:
+            status, cls = "! Perlu tindakan: " + ", ".join(missing), "warn"
+        else:
+            status, cls = "✓ Beres", "ok"
         add = (f"<form method=post action='/employee/claims/{e(cid)}/items/{e(it['id'])}/files' enctype='multipart/form-data'>"
-               f"<input type=file name=file accept='.pdf,.png,.jpg,.jpeg' required> <button>Add file</button></form>")
-        rows += (f"<tr><td>{e(it['category'])}<div class=note>{e(it['description'])}</div></td><td>{e(it['date'])}</td>"
+               f"<input type=file name=file aria-label='Berkas bukti untuk {e(it['id'])}' accept='.pdf,.png,.jpg,.jpeg' required> "
+               "<button>Add file</button></form>")
+        rows += (f"<tr><td>{e(label(it['category']))}<div class=note>{e(it['description'])}</div></td><td>{e(it['date'])}</td>"
                  f"<td class=num>{e(rupiah(res.claimed))}</td><td>{e(', '.join(have)) or '<span class=note>none</span>'}</td>"
                  f"<td><span class='tag {cls}'>{e(status)}</span></td><td>{add}</td></tr>")
     body = f"""<p><a href="/employee?emp={e(claim['employee_id'])}">&larr; My claims</a></p>
 {f'<p class="tag ok">{e(msg)}: files were forwarded to {e(core.MAILBOX)} and linked to their items.</p>' if msg else ''}
 <p>{e(claim['purpose'])} &middot; {e(claim['trip']['destination'])} {e(claim['trip']['start_date'])} &rarr;
 {e(claim['trip']['end_date'])} &middot; status {core.status_tag(claim['status'])}</p>
-<table><tr><th>Item</th><th>Date</th><th class=num>Claimed</th><th>Files</th><th>Evidence</th><th></th></tr>{rows}</table>
+<div class="table-wrap"><table><tr><th>Item</th><th>Date</th><th class=num>Claimed</th><th>Files</th><th>Evidence</th><th></th></tr>{rows}</table></div>
 <p class="note">Finance reviews every claim. Amounts shown are what you claimed; finance decides what is approved.</p>"""
-    return core.page(f"Claim {cid}", body)
+    return core.page(f"Claim {cid}", qa_top + body + qa_box)
 
 
 @router.post("/employee/claims/{cid}/items/{iid}/files")

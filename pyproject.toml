@@ -7,12 +7,16 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = ["mcp>=1.2,<2"]
 
+[project.optional-dependencies]
+# The web process opens PostgresAuditLog when REIMBURSE_AUDIT_DATABASE_URL is set.
+postgres = ["psycopg[binary]>=3.2"]
+
 [project.scripts]
 reimburse-buddy-mcp = "reimburse_buddy.server:main"
 
 [dependency-groups]
 dev = ["pytest>=8", "pytest-asyncio>=0.23", {include-group = "web"}, {include-group = "ocr"}, "httpx>=0.27"]
-web = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9"]
+web = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9", "langgraph>=0.6"]
 ocr = ["pillow>=10", "pytesseract>=0.3.10", "pdf2image>=1.17"]
 rapidocr = ["rapidocr>=3.4", "onnxruntime>=1.18"]
 

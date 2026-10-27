@@ -10,6 +10,14 @@ dependencies = [
     "langchain-mcp-adapters>=0.1",
 ]
 
+[project.optional-dependencies]
+embed = [
+    "fastembed==0.9.1",
+]
+postgres = [
+    "psycopg[binary]>=3.2",
+]
+
 [dependency-groups]
 dev = ["pytest>=8", "pytest-asyncio>=0.23"]
 
@@ -20,3 +28,4 @@ package = false
 testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = ["."]
+markers = ["postgres: AuditLog contract against a real Postgres (needs DATABASE_URL and psycopg; skipped otherwise)"]

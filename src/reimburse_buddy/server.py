@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import os
+
 from mcp.server.fastmcp import FastMCP
 
 from .data_store import DataStore
 from .decision import draft_decision as _draft
+from .evidence_request import request_missing_evidence as _request_evidence
 from .models import to_jsonable
 from .rules import check_claim as _check
 from .triage import approve_cleared_batch as _approve_batch
@@ -82,12 +85,26 @@ def triage_claims(batch: str = "") -> dict:
     return _triage(store, batch)
 
 
-@mcp.tool()
-def approve_cleared_batch(batch_id: str, claim_ids: list[str], reviewer_confirmed: bool = False) -> dict:
+def _once(action_id: str, run) -> dict:
+    """Mock outbox idempotency: an action_id the server already executed is refused, never re-run."""
+    if action_id:
+        seen = store.__dict__.setdefault("executed_actions", {})
+        if action_id in seen:
+            return {"error": "duplicate_action_id", "message": f"action {action_id} was already executed",
+                    "first_result": seen[action_id]}
+        res = run()
+        if not (isinstance(res, dict) and "error" in res):
+            seen[action_id] = res
+        return res
+    return run()
+
+
+def approve_cleared_batch(batch_id: str, claim_ids: list[str], reviewer_confirmed: bool = False,
+                          action_id: str = "") -> dict:
     """(Mock write) Mark auto-cleared claims as approved in one step. Only works when the reviewer
     explicitly confirmed (reviewer_confirmed=true) and claim_ids exactly equal the claims that
     triage_claims(batch_id) currently clears. Otherwise returns an error and changes nothing."""
-    return _approve_batch(store, batch_id, claim_ids, reviewer_confirmed)
+    return _once(action_id, lambda: _approve_batch(store, batch_id, claim_ids, reviewer_confirmed))
 
 
 @mcp.tool()
@@ -99,23 +116,28 @@ def draft_decision(claim_id: str, evidence_ids: list[str] | None = None,
     return _draft(store, _check(store, claim_id, evidence_ids, human_decisions), note, language)
 
 
-@mcp.tool()
-def send_message(to: str, body: str, subject: str = "", claim_id: str = "") -> dict:
+def send_message(to: str, body: str, subject: str = "", claim_id: str = "", action_id: str = "") -> dict:
     """(Mock) Email an employee, e.g. to ask for a missing receipt. Goes to the outbox.
     The employee's scripted reply arrives in the reimburse@ mailbox; check with search_reimburse_mailbox."""
-    return store.send_message(to, body, subject, claim_id)
+    return _once(action_id, lambda: store.send_message(to, body, subject, claim_id))
 
 
-@mcp.tool()
-def request_approval(manager_id: str, claim_id: str, item_id: str, reason: str = "") -> dict:
+def request_missing_evidence(claim_id: str, item_id: str, gap_code: str, evidence_ids: list[str] | None = None,
+                             human_decisions: dict[str, str] | None = None, action_id: str = "") -> dict:
+    """(Mock) Ask the claim's owner for a missing document, using a fixed template (no free text,
+    no amounts, no decision). gap_code must still be reported by check_claim for that item given
+    evidence_ids and human_decisions. An unanswered identical request is returned, not resent."""
+    return _once(action_id, lambda: _request_evidence(store, claim_id, item_id, gap_code, evidence_ids, human_decisions))
+
+
+def request_approval(manager_id: str, claim_id: str, item_id: str, reason: str = "", action_id: str = "") -> dict:
     """(Mock) Ask the claimant's manager to approve one item. Returns a pending request."""
-    return store.request_approval(manager_id, claim_id, item_id, reason)
+    return _once(action_id, lambda: store.request_approval(manager_id, claim_id, item_id, reason))
 
 
-@mcp.tool()
-def update_claim_status(claim_id: str, status: str, note: str = "") -> dict:
+def update_claim_status(claim_id: str, status: str, note: str = "", action_id: str = "") -> dict:
     """(Mock) Set claim status: submitted, on_hold, approved, partially_approved or rejected."""
-    return store.update_claim_status(claim_id, status, note)
+    return _once(action_id, lambda: store.update_claim_status(claim_id, status, note))
 
 
 @mcp.tool()
@@ -125,11 +147,19 @@ def get_outbox() -> dict:
             "status_changes": store.status_log}
 
 
-@mcp.tool()
 def reset_demo() -> dict:
     """Restore all demo state: removes delivered replies, clears outbox, approval requests and status changes."""
     store.reset()
     return {"status": "reset", "claims": len(store.claims), "mailbox_messages": len(store.inbox)}
+
+
+# Version B only: WorkBuddy's server (version A) exposes no write tools.
+if os.environ.get("REIMBURSE_ENABLE_EVIDENCE_TOOL") == "1":
+    mcp.tool()(request_missing_evidence)
+if os.environ.get("REIMBURSE_ENABLE_WRITE_TOOLS") == "1":
+    for _write_tool in (send_message, request_approval, update_claim_status, approve_cleared_batch,
+                        reset_demo):
+        mcp.tool()(_write_tool)
 
 
 def main() -> None:

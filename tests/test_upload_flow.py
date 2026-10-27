@@ -57,7 +57,7 @@ def test_drop_makes_cards_and_pairs_flight_files(client):
     assert cards[3]["amount"] is None  # unreadable -> empty card for manual input
     assert d["cards"][0]["fields"]["amount"]["source"] == "ocr"
     page = client.get(f"/employee/drafts/{d['id']}").text
-    assert "extracted (ocr" in page and "Could not read this file" in page
+    assert "extracted (OCR" in page and "Could not read this file" in page
 
 
 def test_edits_are_self_declared_and_submit_forwards_files(client):
@@ -99,7 +99,7 @@ def test_missing_evidence_then_add_file(client):
                                 f"c_{new}_merchant": "Taksi"})
     r = client.post(f"/employee/drafts/{d['id']}", data=dict(form, action="submit"), follow_redirects=False)
     cid = r.headers["location"].split("/")[3].split("?")[0]
-    assert "receipt missing" in client.get(f"/employee/claims/{cid}").text
+    assert "Struk belum ada" in client.get(f"/employee/claims/{cid}").text
     client.post(f"/employee/claims/{cid}/items/IT-2/files",
                 files={"file": ("taxi2.jpg", (SAMPLES / "heldout" / "taxi_2digit_year_cash.jpg").read_bytes())})
     assert all("receipt_missing" not in i.gaps for i in web.run_check(cid).items)
@@ -153,6 +153,10 @@ def test_unreadable_evidence_needs_explicit_acceptance(client):
     assert "approve_full" not in admin
     client.post(f"/admin/claims/{cid}/evidence/MSG-W002/review", data={"verdict": "accept"})
     assert web.pending_items(cid) == {}
+    # Accepted, but the file shows no amount: web uploads require one, so finance settles the item.
+    it2 = next(i for i in web.run_check(cid).items if i.item_id == "IT-2")
+    assert it2.gaps == ["receipt_amount_mismatch"]
+    client.post(f"/admin/claims/{cid}/decide", data={"item_id": "IT-2", "choice": "approve_full"})
     assert web.run_check(cid).decision.value == "approve"
     log = web.review(cid)["evidence_log"]
     assert log[-1] | {"at": ""} == {"at": "", "evidence_id": "MSG-W002", "item_id": "IT-2",
@@ -166,7 +170,7 @@ def test_rejected_evidence_leaves_item_missing(client):
     chk = web.run_check(cid)
     assert "receipt_missing" in chk.items[1].gaps and chk.decision.value == "needs_info"
     assert web.review(cid)["evidence_log"][-1]["verdict"] == "rejected"
-    assert "receipt missing" in client.get(loc).text
+    assert "Struk belum ada" in client.get(loc).text
 
 
 def test_self_declared_doc_type_needs_review(client):
