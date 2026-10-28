@@ -69,10 +69,30 @@ def _sign_in_notice() -> str:
     return auth.sign_in_notice()
 
 
-CSS = """.qa{border:2px solid #3a7bd5;border-radius:10px;padding:12px 16px;margin:16px 0;background:#f6f9ff}
-.qa .q{font-weight:600;margin-top:10px}.qa .a{white-space:pre-wrap;background:#fff;border:1px solid #d5dae3;border-radius:8px;
-padding:8px 10px;margin:4px 0}.qa .src{font-size:12px;color:#445}.qa .refused{border-color:#e08a00;background:#fff8ec}
-.qa input[type=text]{width:70%;padding:6px}.demo{background:#fff3cd;border:1px dashed #b38600;padding:8px;border-radius:6px}"""
+CSS = """.qa{border:2px solid #3a7bd5;border-radius:10px;padding:12px 16px;margin:16px 0;background:#f6f9ff;max-width:100%;box-sizing:border-box}
+.qa-log{max-height:min(55vh,480px);overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:8px;margin:8px 0;
+background:#fff;border:1px solid #d5dae3;border-radius:8px}
+.qa .q{align-self:flex-end;max-width:85%;background:#3a7bd5;color:#fff;border-radius:14px 14px 2px 14px;padding:6px 12px;
+overflow-wrap:anywhere}
+.qa .a{align-self:flex-start;max-width:92%;white-space:pre-wrap;overflow-wrap:anywhere;background:#eef1f6;border:1px solid #d5dae3;
+border-radius:14px 14px 14px 2px;padding:8px 12px}
+.qa .src{align-self:flex-start;font-size:12px;color:#445;margin:-2px 0 6px 4px;overflow-wrap:anywhere}
+.qa .refused{border-color:#e08a00;background:#fff8ec}
+.qa .hint{color:#556;font-size:14px;margin:4px}
+.qa form.ask{display:flex;gap:8px;margin:8px 0 0}.qa form.ask input[type=text]{flex:1;min-width:0;padding:6px}
+.qa form.quick{margin:8px 0 0}.qa button[disabled]{opacity:.6;cursor:wait}
+.demo{background:#fff3cd;border:1px dashed #b38600;padding:8px;border-radius:6px}"""
+
+JS = """<script>(function(){var l=document.getElementById('qa-log');if(l)l.scrollTop=l.scrollHeight;
+var b=document.getElementById('qa');if(!b)return;
+b.querySelectorAll('form').forEach(function(f){f.addEventListener('submit',function(e){
+var n=b.querySelectorAll('button');var s=e.submitter;
+if(s&&s.name){var h=document.createElement('input');h.type='hidden';h.name=s.name;h.value=s.value;f.appendChild(h);}
+setTimeout(function(){n.forEach(function(x){x.disabled=true;});
+if(s)s.textContent='Menjawab... / Answering...';},0);});});})();</script>"""
+
+EMPTY_HINT = ("<p class='hint'>Belum ada pertanyaan. Coba: \"Apa yang kurang?\" atau \"Berapa plafon hotel?\"<br>"
+              "No questions yet. Try: \"What's missing?\" or \"Hotel cap?\"</p>")
 
 
 def _labelled(text: str) -> str:
@@ -84,15 +104,25 @@ def _qa_box(sess: Session, cid: str) -> str:
     turns = "".join(
         f"<div class='q'>{escape(q)}</div><div class='a{' refused' if r['refused'] else ''}'>{escape(_labelled(r['answer']))}</div>"
         f"<div class='src'>Sumber / Sources: {escape(', '.join(r['sources']) or '-')}</div>" for q, r in hist[-6:])
+    log = f"<div class='qa-log' id='qa-log' role='log' aria-live='polite'>{turns or EMPTY_HINT}</div>"
     quick = "".join(f"<button name='quick' value='{escape(v)}'>{escape(text)}</button> " for v, text in QUICK)
-    return (f"<div class='qa' id='qa'><h2>Tanya-jawab / Ask about this claim</h2>"
+    title = "Tanya-jawab / Ask about this claim" if cid else "Tanya-jawab reimburse / Ask about reimbursement"
+    return (f"<div class='qa' id='qa'><h2>{title}</h2>"
             f"<p class='note'>Hanya kebijakan dan klaim Anda sendiri. Jawaban tidak mengubah klaim; keputusan akhir ada di finance."
-            f" / Policy and your own claims only; answers never change a claim.</p>{turns}"
+            f" / Policy and your own claims only; answers never change a claim.</p>{log}"
             # Two forms: pressing Enter in the text box must submit the text, not the first quick button.
             f"<form method='post' action='/employee/qa' class='quick'><input type='hidden' name='claim_id' value='{escape(cid)}'>{quick}</form>"
             f"<form method='post' action='/employee/qa' class='ask'><input type='hidden' name='claim_id' value='{escape(cid)}'>"
-            f"<p><input type='text' name='question' aria-label='Pertanyaan' maxlength='500' placeholder='Tulis pertanyaan / Ask a question'>"
-            f" <button>Tanya / Ask</button></p></form></div>")
+            f"<input type='text' name='question' aria-label='Pertanyaan' maxlength='500' placeholder='Tulis pertanyaan / Ask a question'>"
+            f"<button>Tanya / Ask</button></form>{JS}</div>")
+
+
+def portal_box(request: Request) -> str:
+    """The Q&A box for the /employee portal (policy questions need no claim). "" with the flag off or no employee session."""
+    if not qa_engine.enabled():
+        return ""
+    sess = session_of(request)
+    return f"<style>{CSS}</style>{_qa_box(sess, '')}" if sess else ""
 
 
 @router.get("/employee/claims")
