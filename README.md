@@ -245,7 +245,7 @@ Create the table and the accounts (owner role, never from the app; the passwords
 
 ```bash
 psql "$OWNER_DATABASE_URL" -f agent/migrations/007_app_users.sql
-uv run python -m reimburse_web.seed_users --dsn "$OWNER_DATABASE_URL" --employee EMP-100 --role reviewer
+uv --directory web run python -m reimburse_web.seed_users --dsn "$OWNER_DATABASE_URL" --employee EMP-100 --role reviewer
 ```
 
 ### Who may approve

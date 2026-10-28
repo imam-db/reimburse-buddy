@@ -1,6 +1,6 @@
 """Create or update one login account. Run manually with the OWNER role, never from the app:
 
-    uv run python -m reimburse_web.seed_users --dsn "$OWNER_DATABASE_URL" --employee EMP-100 --role reviewer
+    uv --directory web run python -m reimburse_web.seed_users --dsn "$OWNER_DATABASE_URL" --employee EMP-100 --role reviewer
 
 The email comes from data/employees.json; the password is read with getpass (never an argument, never
 printed). Upsert by employee_id: re-running rotates the password and role and re-activates the account.
