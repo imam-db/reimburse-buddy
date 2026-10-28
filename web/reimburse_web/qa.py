@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import re
 from html import escape
+from urllib.parse import quote
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -94,15 +95,10 @@ def _qa_box(sess: Session, cid: str) -> str:
             f" <button>Tanya / Ask</button></p></form></div>")
 
 
-@router.get("/employee/claims", response_class=HTMLResponse)
-def my_claims_page(request: Request):
-    sess = session_of(request)
-    web = _web()
-    if not sess:
-        return web.page("Klaim saya / My claims", _sign_in_notice())
-    rows = "".join(f"<li><a href='/employee/claims/{escape(c['id'])}'>{escape(c['id'])}</a> {escape(c['trip']['destination'])}"
-                   f" {escape(c['trip']['start_date'])}</li>" for c in web.store.claims if c["employee_id"] == sess.employee_id)
-    return web.page("Klaim saya / My claims", f"<ul>{rows}</ul>")
+@router.get("/employee/claims")
+def my_claims_page(msg: str = ""):
+    """The employee portal is /employee; this old address redirects there (keeping ?msg=)."""
+    return RedirectResponse("/employee" + (f"?msg={quote(msg)}" if msg else ""), status_code=303)
 
 
 def claim_page_parts(request: Request | None, cid: str, owner: str) -> tuple[str, str] | HTMLResponse:
@@ -127,7 +123,7 @@ def ask(request: Request, question: str = Form(""), quick: str = Form(""), claim
     sess = session_of(request)
     if not sess:
         raise HTTPException(401, "Silakan masuk dulu / please sign in first")
-    target = f"/employee/claims/{claim_id}" if claim_id.startswith("CLM-") else "/employee/claims"
+    target = f"/employee/claims/{claim_id}" if claim_id.startswith("CLM-") else "/employee"
     if not question:
         return RedirectResponse(target + "#qa", status_code=303)
     r = service().ask(sess, question, context_claim_id=claim_id or None)

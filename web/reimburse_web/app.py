@@ -78,7 +78,7 @@ async def require_demo_login(request: Request, call_next):
 
     A browser navigation (GET/HEAD) is redirected to the form; anything else gets 401, so a script
     cannot post its way in. A signed-in employee may only open the employee pages (navigations are sent
-    to /employee/claims, anything else gets 403). With no user store or DSN outside production the gate
+    to /employee, anything else gets 403). With no user store or DSN outside production the gate
     is off and every request passes through untouched."""
     if not auth.enabled() or request.url.path in auth.PUBLIC_PATHS:
         return await call_next(request)

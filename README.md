@@ -223,7 +223,7 @@ Accounts live in the Postgres table `app_users` (`agent/migrations/007_app_users
 `is_active`. The app role can only `SELECT` and `UPDATE (last_login_at)`. With the gate on, every route
 except `/login`, `/logout` and `/healthz` needs the signed `rb_auth` cookie: a browser navigation is
 redirected to the form, anything else gets `401`. `reviewer` and `finance` open the admin pages; an
-`employee` is sent to `/employee/claims` and gets `403` on anything else.
+`employee` is sent to `/employee` and gets `403` on anything else.
 
 - Session: `issued_at|employee_id|role|nonce` plus an HMAC, 12 hours, `httponly`, `samesite=lax`,
   `secure` in production, checked on every request. `auth.reviewer_of` returns the employee_id, which is

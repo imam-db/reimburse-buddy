@@ -220,13 +220,13 @@ def test_expired_and_forged_cookies_are_refused(client):
 # --- roles --------------------------------------------------------------------------------
 def test_employee_role_is_sent_to_their_claims_and_cannot_open_reviewer_pages(client):
     r = login_as(client, "EMP-001", next_path="/admin")
-    assert r.status_code == 303 and r.headers["location"] == "/employee/claims"
+    assert r.status_code == 303 and r.headers["location"] == "/employee"
     for path in ("/admin", "/admin/plans", "/admin/intake", "/admin/claims/CLM-2026-0103", "/"):
         r = client.get(path, follow_redirects=False)
-        assert r.status_code == 303 and r.headers["location"] == "/employee/claims", path
+        assert r.status_code == 303 and r.headers["location"] == "/employee", path
     for path in ("/admin/reset", "/admin/batch/approve", "/admin/plans/req-x/decide"):
         assert client.post(path, data={}, follow_redirects=False).status_code == 403, path
-    assert client.get("/employee/claims", follow_redirects=False).status_code == 200
+    assert client.get("/employee", follow_redirects=False).status_code == 200
 
 
 @pytest.mark.parametrize("emp", ["EMP-100", "EMP-101", "EMP-102"])
@@ -405,3 +405,19 @@ def test_prod_with_everything_set_serves_the_app(prod, store):
         assert login_as(c, "EMP-100").status_code == 303
         assert c.get("/").status_code == 200
         assert "secure" in login_as(c, "EMP-100").headers["set-cookie"].lower()
+
+
+def test_employee_login_lands_on_portal_and_old_claims_url_redirects(client):
+    r = login_as(client, "EMP-001")
+    assert r.status_code == 303 and r.headers["location"] == "/employee"
+    r = client.get("/employee/claims", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/employee"
+    r = client.get("/employee/claims?msg=File+added", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/employee?msg=File%20added"
+
+
+def test_portal_lists_only_own_claims_with_links(client):
+    login_as(client, "EMP-003")
+    page = client.get("/employee").text
+    assert "href='/employee/claims/CLM-2026-0104'" in page
+    assert "CLM-2026-0101" not in page

@@ -3,7 +3,7 @@
 Every route except `/login`, `/logout` and `/healthz` needs the signed session cookie. The cookie is
 `issued_at|employee_id|role|nonce` plus an HMAC, 12 hours, checked on every request; the role comes from
 the user's row at login time. Reviewer and finance roles reach the admin pages; an employee is sent to
-`/employee/claims`.
+`/employee`.
 
 The gate is always on in production. Elsewhere it is on when a user store is installed (tests, local dev) or
 a user DSN is configured, and off otherwise, so a plain local run and the rest of the test suite behave as
@@ -195,7 +195,7 @@ def is_reviewer_role(role: str | None) -> bool:
 
 def home_for(role: str | None) -> str:
     """Where a role lands after login."""
-    return "/" if is_reviewer_role(role) else "/employee/claims"
+    return "/" if is_reviewer_role(role) else "/employee"
 
 
 def may_open(role: str | None, path: str) -> bool:
