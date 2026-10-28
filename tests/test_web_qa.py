@@ -255,6 +255,26 @@ def test_every_answer_shows_the_remaining_questions(client):
     assert "Sisa pertanyaan: 9 dari 10" in client.get("/employee").text
 
 
+def test_new_conversation_clears_only_the_visible_history(client):
+    login(client, "EMP-001")
+    client.post("/employee/qa", data={"question": "Berapa plafon hotel?", "claim_id": "CLM-2026-0101"})
+    before = len(plans.log().list())
+    assert "POL-4" in client.get("/employee/claims/CLM-2026-0101").text
+    r = client.post("/employee/qa/new", data={"claim_id": "CLM-2026-0101"}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/employee/claims/CLM-2026-0101#qa"
+    box = client.get("/employee/claims/CLM-2026-0101").text.split("id='qa'", 1)[1]
+    assert "Percakapan baru" in box and "Belum ada pertanyaan" in box and "POL-4" not in box
+    assert "Sisa pertanyaan: 9 dari 10" in box
+    assert len(plans.log().list()) == before
+
+
+def test_new_conversation_is_closed_with_the_flag_off(client, monkeypatch):
+    monkeypatch.setenv("EMPLOYEE_QA", "0")
+    login(client, "EMP-001")
+    assert "Percakapan baru" not in client.get("/employee").text
+    assert client.post("/employee/qa/new", data={}).status_code == 404
+
+
 def test_cap_disables_the_box_and_points_to_finance(client):
     login(client, "EMP-001")
     for _ in range(10):

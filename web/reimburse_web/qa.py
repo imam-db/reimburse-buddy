@@ -81,7 +81,7 @@ border-radius:14px 14px 14px 2px;padding:8px 12px}
 .qa .refused{border-color:#e08a00;background:#fff8ec}
 .qa .hint{color:#556;font-size:14px;margin:4px}
 .qa form.ask{display:flex;gap:8px;margin:8px 0 0}.qa form.ask input[type=text]{flex:1;min-width:0;padding:6px}
-.qa form.quick{margin:8px 0 0}.qa button[disabled]{opacity:.6;cursor:wait}
+.qa form.quick{margin:8px 0 0}.qa form.new{margin:8px 0 0}.qa button[disabled]{opacity:.6;cursor:wait}
 .qa .quota{font-size:13px;color:#445;margin:4px 0}.qa .quota.limit{color:#8a4b00;font-weight:600}
 .demo{background:#fff3cd;border:1px dashed #b38600;padding:8px;border-radius:6px}"""
 
@@ -161,6 +161,8 @@ def _qa_box(sess: Session, cid: str) -> str:
     return (f"<div class='qa' id='qa'><h2>{title}</h2>"
             f"<p class='note'>Hanya kebijakan dan klaim Anda sendiri. Jawaban tidak mengubah klaim; keputusan akhir ada di finance."
             f" / Policy and your own claims only; answers never change a claim.</p>{quota}{log}"
+            f"<form method='post' action='/employee/qa/new' class='new'><input type='hidden' name='claim_id' value='{escape(cid)}'>"
+            f"<button>Percakapan baru / New conversation</button></form>"
             # Two forms: pressing Enter in the text box must submit the text, not the first quick button.
             f"<form method='post' action='/employee/qa' class='quick'><input type='hidden' name='claim_id' value='{escape(cid)}'>{quick}</form>"
             f"<form method='post' action='/employee/qa' class='ask'><input type='hidden' name='claim_id' value='{escape(cid)}'>"
@@ -194,6 +196,19 @@ def claim_page_parts(request: Request | None, cid: str, owner: str) -> tuple[str
     if owner != sess.employee_id:
         raise HTTPException(404, f"Unknown claim {cid}")
     return f"<style>{CSS}</style>", _qa_box(sess, cid)
+
+
+@router.post("/employee/qa/new")
+def new_conversation(request: Request, claim_id: str = Form("")):
+    """Clear the turns shown for this session. The question counter and the audit log stay as they are."""
+    if not qa_engine.enabled():
+        raise HTTPException(404, "Not found")
+    sess = session_of(request)
+    if not sess:
+        raise HTTPException(401, "Silakan masuk dulu / please sign in first")
+    STATE.get("history", {}).pop(sess.session_id, None)
+    target = f"/employee/claims/{claim_id}" if claim_id.startswith("CLM-") else "/employee"
+    return RedirectResponse(target + "#qa", status_code=303)
 
 
 @router.post("/employee/qa")
