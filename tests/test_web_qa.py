@@ -37,7 +37,7 @@ def test_flag_off_hides_box_and_endpoint(client, monkeypatch):
 def test_policy_answer_with_source(client):
     login(client, "EMP-001")
     r = client.post("/employee/qa", data={"question": "Berapa plafon hotel?", "claim_id": "CLM-2026-0101"})
-    assert r.status_code == 200 and "Pasal 4" in r.text and "POL-4" in r.text and "Apa yang kurang?" in r.text
+    assert r.status_code == 200 and "Pasal 4" in r.text and "POL-4" in r.text and "Apa yang kurang di klaim ini?" in r.text
 
 
 def test_other_claim_page_and_answer_look_like_missing(client):
@@ -72,6 +72,21 @@ def test_quick_button_with_empty_text_box(client):
     login(client, "EMP-001")
     r = client.post("/employee/qa", data={"quick": "Berapa plafon hotel?", "question": "", "claim_id": "CLM-2026-0101"})
     assert r.status_code == 200 and "POL-" in r.text.split("id='qa'", 1)[1]
+
+
+def _quick_labels(html):
+    form = html.split("class='quick'", 1)[1].split("</form>", 1)[0]
+    return re.findall(r"<button name='quick'[^>]*>([^<]+)</button>", form)
+
+
+def test_quick_buttons_follow_the_page_and_use_indonesian_labels(client):
+    login(client, "EMP-001")
+    assert _quick_labels(client.get("/employee").text) == [
+        "Status klaim saya", "Apa yang kurang?", "Berapa plafon hotel?", "Uang harian"]
+    claim = client.get("/employee/claims/CLM-2026-0101").text
+    assert _quick_labels(claim) == [
+        "Apa yang kurang di klaim ini?", "Status klaim ini", "Berapa plafon hotel?"]
+    assert "/ What" not in " ".join(_quick_labels(claim))
 
 
 def test_empty_question_is_ignored(client):

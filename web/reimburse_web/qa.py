@@ -27,7 +27,8 @@ from reimburse_agent.qa.tools import Session  # noqa: E402
 router = APIRouter()
 DEV_EMPLOYEE_ENV = auth.DEV_EMPLOYEE_ENV
 STATE: dict = {}  # service, history per session id
-QUICK = (("Apa yang kurang?", "Apa yang kurang? / What's missing?"), ("Berapa plafon hotel?", "Berapa plafon hotel? / Hotel cap?"))
+QUICK_PORTAL = ("Status klaim saya", "Apa yang kurang?", "Berapa plafon hotel?", "Uang harian")
+QUICK_CLAIM = ("Apa yang kurang di klaim ini?", "Status klaim ini", "Berapa plafon hotel?")
 
 
 def _web():
@@ -141,7 +142,8 @@ def _qa_box(sess: Session, cid: str) -> str:
         quota += (f"<p class='quota limit'>Batas pertanyaan untuk sesi ini sudah tercapai. Hubungi "
                   f"{_finance_link(cid)}.</p>")
     off = "" if left else " disabled"
-    quick = "".join(f"<button name='quick' value='{escape(v)}'{off}>{escape(text)}</button> " for v, text in QUICK)
+    quick = "".join(f"<button name='quick' value='{escape(q)}'{off}>{escape(q)}</button> "
+                    for q in (QUICK_CLAIM if cid else QUICK_PORTAL))
     title = "Tanya-jawab / Ask about this claim" if cid else "Tanya-jawab reimburse / Ask about reimbursement"
     return (f"<div class='qa' id='qa'><h2>{title}</h2>"
             f"<p class='note'>Hanya kebijakan dan klaim Anda sendiri. Jawaban tidak mengubah klaim; keputusan akhir ada di finance."
