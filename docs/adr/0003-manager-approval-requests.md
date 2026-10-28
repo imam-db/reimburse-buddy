@@ -29,3 +29,14 @@ stage it through the approval gate, but no page lets the manager answer, and not
   clears it.
 - Making a manager approval close a gap automatically (as a signed memo does) would change the rule
   engine and needs its own ADR.
+
+## Implementation notes (2026-10-28)
+
+- The agent runs in its own process with its own store, so its `request_approval` never reaches the web
+  store. Finance therefore gets a "Minta persetujuan atasan" form per item on `/admin/claims/<id>`
+  (`POST /admin/claims/<id>/items/<item>/manager`). It calls `request_approval` for the claimant's
+  manager, allows one open request per item, and refuses when the claimant has no manager.
+- Answers use existing event types: `approval` / `rejection`, `run_id` `approval_request:<request id>`,
+  `action_id` = the request id, actor `human:<manager>`. The run id is never a plan or investigation run,
+  so the action executor never reads it. The answer is logged before the request changes, and an audit
+  failure is a `503` that changes nothing. A refusal on the manager's own claim is `access_denied`.
