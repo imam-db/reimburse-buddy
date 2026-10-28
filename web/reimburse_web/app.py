@@ -1,14 +1,16 @@
-"""Two-sided web simulation for reimburse-buddy (portfolio version B, not part of the hackathon demo).
+"""Two-sided web simulation for reimburse-buddy (version B, the Challenge B demo).
 
 Employee side: submit a claim, forward evidence to the shared reimburse@ mailbox, read messages from finance.
 Finance side: batch triage, reviewer-confirmed bulk approval, exception detail with findings and evidence tools.
 
-No LLM runs here: the reviewer drives the investigation and every amount comes from the rule engine.
-A LangGraph agent will later plug in at `investigate()` and call the same tools over MCP.
+The only LLM path is "Selidiki dengan agent", which starts `agent/investigate_worker.py` as a subprocess
+(see agent_bridge.py); every amount still comes from the rule engine. All routes sit behind the demo
+password in auth.py when DEMO_PASSWORD is set (always, in production).
 """
 
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import re
@@ -17,9 +19,10 @@ from datetime import date
 from decimal import Decimal
 from html import escape
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 
 from reimburse_buddy.data_store import DataStore
 from reimburse_buddy.decision import draft_decision
@@ -27,6 +30,7 @@ from reimburse_buddy.models import rupiah
 from reimburse_buddy.rules import check_claim
 from reimburse_buddy.triage import approve_cleared_batch, triage_claims
 
+from . import auth, spend
 from .agent_bridge import NO_KEY_MESSAGE, Investigator, RateLimited, key_configured
 from .intake import router as intake_router
 from .labels import label, person
@@ -34,15 +38,20 @@ from .plans import router as plans_router, startup_config_check, startup_sweep
 from .qa import router as qa_router
 
 BATCH = "2026-W43"
+# A second batch with one claim owned by EMP-101, so the self-approval refusal can be shown on the claim
+# side without changing the triage numbers of the demo batch (10 claims, 7 cleared, 3 exceptions).
+OWN_BATCH = "2026-W44"
 WEB_BATCH = "web-submissions"
 MAILBOX = "reimburse@nusantara-niaga.example"
 SIGNED, UNSIGNED = "signed", '<span class="tag bad">unsigned</span>'
 CHOICES = ("approve_full", "approve_capped", "reject")
 UPLOAD_DIR = Path(os.environ.get("REIMBURSE_WEB_UPLOADS", Path(__file__).resolve().parent.parent / "uploads"))
 
-# Startup order matters: refuse a production deployment without a Postgres audit log before doing any work,
+# Startup order matters: refuse a production deployment without a Postgres audit log before doing any
+# work, then one without a demo password / session key, then one that cannot cap or charge a model call,
 # then run the one-per-process expiry sweep (agent workers opening the log never sweep).
-app = FastAPI(title="reimburse-buddy web simulation", on_startup=[startup_config_check, startup_sweep])
+app = FastAPI(title="reimburse-buddy web simulation",
+              on_startup=[startup_config_check, auth.startup_check, spend.startup_check, startup_sweep])
 app.include_router(plans_router)
 app.include_router(intake_router)
 app.include_router(qa_router)
@@ -55,8 +64,78 @@ DRAFTS: dict[str, dict] = {}
 INVESTIGATOR = Investigator()
 
 
+# --- demo password gate ------------------------------------------------------------------
+def client_ip(request: Request) -> str:
+    """Rate-limit key. Behind a proxy every request shares one address, which only makes the limit
+    stricter; X-Forwarded-For is deliberately not trusted here."""
+    return request.client.host if request.client else ""
+
+
+@app.middleware("http")
+async def require_demo_login(request: Request, call_next):
+    """Close every route except /login, /logout and /healthz when DEMO_PASSWORD is set.
+
+    A browser navigation (GET/HEAD) is redirected to the form; anything else gets 401, so a script
+    cannot post its way in. With DEMO_PASSWORD unset outside production the gate is off and every
+    request passes through untouched, exactly as before this change."""
+    if not auth.enabled() or request.url.path in auth.PUBLIC_PATHS:
+        return await call_next(request)
+    session = auth.session_of(request)
+    if session is None:
+        if request.method in ("GET", "HEAD"):
+            return RedirectResponse(auth.login_url(request.url.path), status_code=303)
+        return JSONResponse({"detail": "Silakan masuk dulu. / Please sign in first."}, status_code=401)
+    token = auth.set_current(session.reviewer)
+    try:
+        return await call_next(request)
+    finally:
+        auth.reset_current(token)
+
+
 def review(cid: str) -> dict:
     return REVIEW.setdefault(cid, {"evidence": [], "decisions": {}, "pending": {}, "evidence_log": []})
+
+
+def self_approval_refusal(request: Request, cid: str, attempt: str) -> str | None:
+    """The Indonesian refusal when the signed-in reviewer owns this claim, else None.
+
+    Fail closed: the caller returns before touching any state. Only the approval direction is refused
+    (accept evidence, approve an item, move the status off `on_hold`, approve a staged write); rejecting
+    or holding your own claim cannot approve it, so those stay available.
+
+    The audit entry is an `access_denied` event attributed to `human:<reviewer>`, one per claim and
+    attempt, so a double submit cannot flood the log."""
+    try:
+        owner = store.get_claim(cid)["employee_id"]
+    except KeyError:
+        return None  # let the handler answer 404 as before
+    reviewer = auth.reviewer_of(request)
+    if not reviewer or owner != reviewer:
+        return None
+    auth.audit_self_approval(f"claim:{cid}", reviewer, f"self_approval:claim:{cid}:{attempt}",
+                             claim_id=cid, attempt=attempt)
+    return label("self_approval_blocked")
+
+
+def back_to_claim(cid: str, message: str) -> RedirectResponse:
+    """Redirect to the claim page with the message in `msg` (the page shows it as a tag)."""
+    return RedirectResponse(f"/admin/claims/{cid}?msg={quote(message, safe='')}", status_code=303)
+
+
+def submitter_of(request: Request) -> str:
+    """The signed-in reviewer, recorded as the plan's submitter; "" when the demo gate is off.
+
+    With the gate off there is no identity to record, so the intake keeps the old behaviour (the requester
+    field is the only source, and tests/test_request_intake.py is unaffected)."""
+    return auth.reviewer_of(request) if auth.enabled() else ""
+
+
+def submitted_by_note(reviewer: str) -> str:
+    """Intake form note: the request is filed under the signed-in reviewer, whatever requester is picked."""
+    if not reviewer:
+        return ""
+    return (f'<p class="note" id="submitted-by">{e(label("submitted_by_note"))} '
+            f'<b>{e(person(store, reviewer))}</b>.</p>')
 
 
 def pending_items(cid: str) -> dict[str, list[str]]:
@@ -130,17 +209,34 @@ NAV_CSS = ("nav{margin-bottom:12px}nav a{margin-right:14px}nav .note{margin-left
 
 
 def nav_html() -> str:
+    reviewer = auth.current_reviewer()
+    account = ""
+    if reviewer:
+        account = (f'<span class="note" id="signed-in">Masuk sebagai <b>{e(auth.reviewer_name(reviewer))}</b></span>'
+                   f'<form method="post" action="/logout" style="display:inline">'
+                   f'<button type="submit" id="logout">Keluar</button></form>')
     return (f'<nav><b>reimburse-buddy</b> &middot; <a href="/">Beranda</a>\n'
             f'<a href="/employee">Employee</a> <a href="/admin">Finance admin</a> '
-            f'<a href="/admin/intake">Permintaan baru</a>{_pending_nav()}'
+            f'<a href="/admin/intake">Permintaan baru</a>{_pending_nav()}{account}{_budget_nav()}'
             f'<span class="note">Synthetic data. Simulation only.</span></nav>')
 
 
-def page(title: str, body: str) -> HTMLResponse:
+def _budget_nav() -> str:
+    """Today's remaining LLM budget. A ledger problem must never break every page."""
+    try:
+        left = spend.remaining()
+    except Exception:  # noqa: BLE001 - see docstring
+        return ""
+    if left is None:
+        return ""
+    return f'<span class="note" id="llm-budget">{e(label("budget_remaining"))}: ${left:.2f}</span> '
+
+
+def page(title: str, body: str, status_code: int = 200) -> HTMLResponse:
     return HTMLResponse(f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>{escape(title)}</title>
 <style>{CSS}</style></head><body>{nav_html()}
-<h1>{escape(title)}</h1>{body}</body></html>""")
+<h1>{escape(title)}</h1>{body}</body></html>""", status_code=status_code)
 
 
 def e(x) -> str:
@@ -173,6 +269,70 @@ def status_tag(s: str) -> str:
     cls = {"approved": "ok", "partially_approved": "warn", "rejected": "bad", "on_hold": "warn"}.get(s, "")
     icon = STATUS_ICON.get(s, "")
     return f'<span class="tag {cls}" title="{e(s)}">{e(icon + label(s))}</span>'
+
+
+# --- login / logout / health ---------------------------------------------------------------
+@app.get("/login", response_class=HTMLResponse)
+def login_page(next: str = "", error: str = ""):
+    """The only public form. With the gate off (no DEMO_PASSWORD outside production) it says so."""
+    target = auth.safe_next(next)
+    if not auth.enabled():
+        return page(label("sign_in"), f"""<div class="box" id="login-off">
+<p id="auth-off">{e(label("auth_off"))}</p>
+<p><a class="btn" href="{e(target)}">{e(label("continue"))}</a></p></div>""")
+    opts = "".join(f'<option value="{e(v)}"{" selected" if v == auth.DEFAULT_REVIEWER else ""}>{e(text)}</option>'
+                   for v, text in auth.reviewer_options())
+    body = f"""<div class="box" id="login">
+{f'<p class="tag bad" id="login-error">{e(error)}</p>' if error else ''}
+<form method="post" action="/login">
+<input type="hidden" name="next" value="{e(target)}">
+<label>{e(label("sign_in_as"))}<br><select name="reviewer" aria-label="{e(label("sign_in_as"))}">{opts}</select></label>
+<label>{e(label("demo_password"))}<br><input type="password" name="password" aria-label="{e(label("demo_password"))}"
+ autocomplete="current-password" required></label>
+<p><button type="submit" id="login-submit">{e(label("sign_in"))}</button></p></form>
+<p class="note">{e(label("demo_limited"))}</p></div>"""
+    return page(label("sign_in"), body, status_code=401 if error else 200)
+
+
+@app.post("/login")
+def login_submit(request: Request, reviewer: str = Form(auth.DEFAULT_REVIEWER),
+                 password: str = Form(""), next: str = Form("/")):
+    target = auth.safe_next(next)
+    if not auth.enabled():
+        return RedirectResponse(target, status_code=303)
+    ip = client_ip(request)
+    if auth.too_many_failures(ip):
+        auth.audit_denied("rate_limited", ip=ip)
+        return login_page(next=target, error=label("auth_rate_limited"))
+    if not hmac.compare_digest(password, auth.password()):
+        auth.record_failure(ip)
+        auth.audit_denied("bad_password", ip=ip)  # reason only: never the password, never the IP
+        return login_page(next=target, error=label("auth_bad_password"))
+    auth.clear_failures(ip)
+    chosen = reviewer if reviewer in auth.REVIEWERS else auth.DEFAULT_REVIEWER
+    r = RedirectResponse(target, status_code=303)
+    r.set_cookie(auth.COOKIE, auth.new_cookie_value(chosen), max_age=auth.TTL_SECONDS, path="/",
+                 httponly=True, samesite="lax", secure=auth.is_production())
+    return r
+
+
+@app.get("/logout")
+def logout_page():
+    """A bookmark or a back button should land on the form, not on a 404."""
+    return RedirectResponse("/login", status_code=303)
+
+
+@app.post("/logout")
+def logout():
+    r = RedirectResponse("/login", status_code=303)
+    r.delete_cookie(auth.COOKIE, path="/")
+    return r
+
+
+@app.get("/healthz", response_class=PlainTextResponse)
+def healthz():
+    """Liveness only: no audit write, no LLM, no store access, and no login (the platform probes it)."""
+    return PlainTextResponse("ok")
 
 
 # --- index ------------------------------------------------------------------
@@ -349,7 +509,7 @@ def admin(batch: str = BATCH, msg: str = ""):
                      f"<td>{e(c.get('batch', ''))}</td><td>{status_tag(c['status'])}</td></tr>" for c in store.claims)
     est = t["time_saved_estimate"]
     body = f"""{f'<p class="tag ok">{e(msg)}</p>' if msg else ''}
-<form method="get"><label>Batch <select name="batch" aria-label="Pilih batch" onchange="this.form.submit()">{options([(BATCH, BATCH), (WEB_BATCH, WEB_BATCH)], batch)}</select></label></form>
+<form method="get"><label>Batch <select name="batch" aria-label="Pilih batch" onchange="this.form.submit()">{options([(BATCH, BATCH), (OWN_BATCH, OWN_BATCH), (WEB_BATCH, WEB_BATCH)], batch)}</select></label></form>
 <div class="box"><h2>Triage: {t['claims']} claims, {len(cleared)} cleared, {len(t['exceptions'])} exceptions</h2>
 <p>Time saved: {e(est['minutes'])} min <span class="tag warn">estimate</span> <span class="note">{e(est['assumption'])}</span></p>
 <p class="note">Triage is read-only. Statuses change only after you confirm below.</p>
@@ -364,7 +524,23 @@ def admin(batch: str = BATCH, msg: str = ""):
 
 
 @app.post("/admin/batch/approve")
-def batch_approve(batch: str = Form(...), claim_ids: list[str] = Form([]), reviewer_confirmed: str = Form("false")):
+def batch_approve(request: Request, batch: str = Form(...), claim_ids: list[str] = Form([]),
+                  reviewer_confirmed: str = Form("false")):
+    reviewer = auth.reviewer_of(request)
+    mine = []
+    for cid in claim_ids:
+        try:
+            if store.get_claim(cid)["employee_id"] == reviewer:
+                mine.append(cid)
+        except KeyError:
+            continue  # approve_cleared_batch reports the unknown ID itself
+    if mine:
+        # Refuse the whole batch rather than dropping the reviewer's own claim silently: the reviewer
+        # must see that their claim is still waiting for someone else.
+        auth.audit_self_approval(f"batch:{batch}", reviewer, f"self_approval:batch:{batch}:{mine[0]}",
+                                 claim_id=mine[0], batch=batch)
+        msg = f"{label('self_approval_blocked')} Batch tidak disetujui; klaim Anda: {', '.join(mine)}."
+        return RedirectResponse(f"/admin?batch={batch}&msg={quote(msg, safe='')}", status_code=303)
     held = [c for c in claim_ids if pending_items(c)]
     claim_ids = [c for c in claim_ids if c not in held]
     res = approve_cleared_batch(store, batch, claim_ids, reviewer_confirmed == "true")
@@ -379,12 +555,15 @@ def reset():
 
 
 @app.get("/admin/claims/{cid}", response_class=HTMLResponse)
-def claim_detail(cid: str, q: str = "", msg: str = ""):
+def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
     try:
         claim = store.get_claim(cid)
     except KeyError:
         raise HTTPException(404, f"Unknown claim {cid}")
     emp, trip = claim["employee_id"], claim["trip"]
+    # The reviewer cannot approve their own claim: the buttons are hidden here and the server refuses
+    # the request anyway (self_approval_refusal).
+    self_blocked = emp == auth.reviewer_of(request)
     r = review(cid)
     c = investigate(cid)
     pending = pending_items(cid)
@@ -425,6 +604,8 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
                        f"<div class=note>{e(mid)}: <span title='{e(p['reason'])}'>{e(why)}</span></div>"
                        f"<button name=verdict value=accept>Accept evidence</button> "
                        f"<button name=verdict value=reject>Reject evidence</button></form>") + dec
+        if self_blocked:  # UX only: the server refuses these requests anyway
+            dec = f"<div class=note id='self-approval'>{e(label('self_approval_note'))}</div>"
         item_rows += (f"<tr id='item-{e(it.item_id)}'><td>{e(it.item_id)}</td>"
                       f"<td>{e(label(it.category))}<div class=note>{e(src['description'])}</div></td>"
                       f"<td class=num>{e(rupiah(it.claimed))}</td><td class=num>{e(rupiah(it.approvable))}</td>"
@@ -432,7 +613,10 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
     needs = [(it, [g for g in it.gaps if g in DECISION_GAPS]) for it in c.items
              if any(g in DECISION_GAPS for g in it.gaps) and not it.human_decision
              and it.item_id not in pending]
-    if needs:
+    if self_blocked:
+        needs_you = (f"<div class='box' id='needs-you'>{e(label('self_approval_note'))} "
+                     f"{e(label('self_approval_blocked'))}</div>")
+    elif needs:
         links = ", ".join(f"<a href='#item-{e(it.item_id)}'>{e(', '.join(label(g) for g in gs))}</a>"
                           for it, gs in needs)
         needs_you = (f"<div class='box' id='needs-you'><b>Klaim ini butuh {len(needs)} keputusan Anda:</b> "
@@ -468,6 +652,13 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
     allowed_status = STATUS_FOR_DECISION[c.decision.value]
     if pending_items(cid):
         allowed_status = ["on_hold"]
+    if self_blocked:
+        status_form = (f"<div class='note' id='self-approval-status'>{e(label('self_approval_note'))}</div>")
+    else:
+        status_form = (f"<form method=post action=\"/admin/claims/{e(cid)}/status\"><label>Final status "
+                       f"<select name=status aria-label=\"Status akhir\">{options([(s, label(s)) for s in allowed_status])}"
+                       f"</select></label>\n<label><input type=checkbox name=reviewer_confirmed value=true> "
+                       f"I confirm this decision</label> <button>Apply status</button></form>")
     body = f"""<p><a href="/admin">&larr; Triage</a> &middot; <a href="/admin/claims/{e(cid)}/audit">Lihat jejak audit</a></p>{f'<p class="tag ok">{e(msg)}</p>' if msg else ''}
 <p><span title="{e(emp)}">{e(person(store, emp))}</span> &middot; {e(claim['purpose'])} &middot; {e(trip['destination'])}
 {e(trip['start_date'])} &rarr; {e(trip['end_date'])} &middot; status {status_tag(claim['status'])}</p>
@@ -490,8 +681,7 @@ def claim_detail(cid: str, q: str = "", msg: str = ""):
 <label>Isi <input name=body aria-label="Isi pesan" size=60 placeholder="Mohon kirim struk taksi tanggal 3 Okt (IT-5)." required></label>
 <button>Send</button></form>{f'<ul>{sent_rows}</ul>' if sent_rows else ''}</div>
 <div class="box"><h2>Decision note preview (EN + ID)</h2><pre>{e(note)}</pre>
-<form method=post action="/admin/claims/{e(cid)}/status"><label>Final status <select name=status aria-label="Status akhir">{options([(s, label(s)) for s in allowed_status])}</select></label>
-<label><input type=checkbox name=reviewer_confirmed value=true> I confirm this decision</label> <button>Apply status</button></form>
+{status_form}
 <p class="note">Status options follow the engine decision ({e(label(c.decision.value))}). To override, record an item decision above.
 Status changes only after you confirm. Notes are sent only by you.</p></div>"""
     return page(f"Claim {cid}", body)
@@ -547,11 +737,15 @@ def add_evidence(cid: str, evidence_id: str = Form(...), q: str = Form("")):
 
 
 @app.post("/admin/claims/{cid}/evidence/{mid}/review")
-def review_evidence(cid: str, mid: str, verdict: str = Form(...)):
+def review_evidence(cid: str, mid: str, request: Request, verdict: str = Form(...)):
     """Explicit reviewer verdict on evidence that extraction could not verify. Logged."""
     from datetime import datetime
 
     store.get_claim(cid)
+    if verdict == "accept":  # accepting evidence for your own claim is the approval direction
+        refused = self_approval_refusal(request, cid, f"evidence:{mid}:accept")
+        if refused:
+            return back_to_claim(cid, refused)
     r = review(cid)
     p = r["pending"].get(mid)
     if not p:
@@ -571,9 +765,13 @@ def review_evidence(cid: str, mid: str, verdict: str = Form(...)):
 
 
 @app.post("/admin/claims/{cid}/decide")
-def decide(cid: str, item_id: str = Form(...), choice: str = Form(...)):
+def decide(cid: str, request: Request, item_id: str = Form(...), choice: str = Form(...)):
     if choice not in CHOICES:
         raise HTTPException(400, f"choice must be one of {CHOICES}")
+    if choice != "reject":  # an approval-direction decision on your own claim
+        refused = self_approval_refusal(request, cid, f"decide:{item_id}:{choice}")
+        if refused:
+            return back_to_claim(cid, refused)
     if item_id in pending_items(cid):
         raise HTTPException(409, f"{item_id} has evidence awaiting review: accept or reject it first")
     review(cid)["decisions"][item_id] = choice
@@ -593,9 +791,13 @@ def message(cid: str, subject: str = Form(...), body: str = Form(...)):
 
 
 @app.post("/admin/claims/{cid}/status")
-def set_status(cid: str, status: str = Form(...), reviewer_confirmed: str = Form("false")):
+def set_status(cid: str, request: Request, status: str = Form(...), reviewer_confirmed: str = Form("false")):
     if reviewer_confirmed != "true":
         return RedirectResponse(f"/admin/claims/{cid}?msg=Not+changed:+tick+the+confirmation+first", status_code=303)
+    if status != "on_hold":  # holding your own claim is not an approval; anything else is
+        refused = self_approval_refusal(request, cid, f"status:{status}")
+        if refused:
+            return back_to_claim(cid, refused)
     c = run_check(cid)
     if pending_items(cid) and status != "on_hold":
         return RedirectResponse(f"/admin/claims/{cid}?msg=Not+changed:+evidence+is+awaiting+review", status_code=303)
@@ -626,17 +828,48 @@ def _agent_ready() -> bool:
     return bool(INVESTIGATOR.fake_script) or key_configured()
 
 
+def _audit_limit(cid: str, kind: str, **extra) -> None:
+    """A `limit` event, so a refused run is visible in the audit trail. Best effort."""
+    try:
+        from . import plans  # late import: app.py includes its router
+        from reimburse_agent import audit
+        plans.log().append(audit.make_event(f"investigate:{cid}", "limit", f"{kind}:{cid}", actor="system",
+                                            payload={"kind": kind, **extra}))
+    except Exception:  # noqa: BLE001 - an audit problem must not turn a refusal into a 500
+        pass
+
+
 @app.post("/admin/claims/{cid}/investigate")
 def investigate_start(cid: str):
     store.get_claim(cid)
     if not _agent_ready():
         return page(f"Investigate {cid}", f"<p><a href='/admin/claims/{e(cid)}'>&larr; Claim</a></p>"
                     f"<div class='box'><h2>Agent not configured</h2><p class='tag warn' id=no-key>{e(NO_KEY_MESSAGE)}</p></div>")
+    if spend.is_production() and not spend.configured():
+        # Defence in depth: startup already refuses this, and no uncapped run may start either way.
+        _audit_limit(cid, "llm_budget_unconfigured")
+        return page(f"Investigate {cid}", f"<p><a href='/admin/claims/{e(cid)}'>&larr; Claim</a></p>"
+                    f"<div class='box'><p class='tag warn' id=budget-unconfigured>{e(label('budget_unconfigured'))}</p></div>")
     try:
         run = INVESTIGATOR.start(cid)
     except RateLimited as exc:
         return page(f"Investigate {cid}", f"<p><a href='/admin/claims/{e(cid)}'>&larr; Claim</a></p>"
                     f"<div class='box'><p class='tag warn' id=rate-limited>{e(exc)}</p></div>")
+    except spend.LedgerUnavailable as exc:
+        # The ledger could not be reached even after a reconnect: refuse the run, say so plainly. Do not
+        # ask the ledger for the remaining budget here - it is the thing that is down.
+        return page(f"Investigate {cid}", f"<p><a href='/admin/claims/{e(cid)}'>&larr; Claim</a></p>"
+                    f"<div class='box'><p class='tag bad' id=ledger-unavailable>{e(str(exc))}</p></div>")
+    except spend.BudgetRefused:
+        # A second ledger call here must not turn the refusal into a 500 if the database drops meanwhile.
+        try:
+            left = f"${spend.remaining():.2f}"
+            _audit_limit(cid, "daily_llm_budget", budget=str(spend.budget()), committed=str(spend.committed()))
+        except Exception:  # noqa: BLE001 - the refusal itself already happened
+            left = "?"
+        return page(f"Investigate {cid}", f"<p><a href='/admin/claims/{e(cid)}'>&larr; Claim</a></p>"
+                    f"<div class='box'><p class='tag warn' id=budget-exhausted>{e(label('budget_exhausted'))}</p>"
+                    f"<p class='note'>{e(label('budget_remaining'))}: {e(left)}</p></div>")
     return RedirectResponse(f"/admin/investigations/{run.id}", status_code=303)
 
 
@@ -708,8 +941,11 @@ def run_started_at(run, start: dict) -> float:
 
 
 @app.get("/admin/investigations/{rid}", response_class=HTMLResponse)
-def investigation_page(rid: str):
+def investigation_page(rid: str, request: Request):
     run = _get_run(rid)
+    # A reviewer may not approve a write on their own claim; the approve control is hidden here and
+    # /resume refuses it server-side.
+    self_blocked = store.get_claim(run.claim_id)["employee_id"] == auth.reviewer_of(request)
     evs = run.snapshot()
     start = next((x for x in evs if x["type"] == "start"), {})
     rows = ""
@@ -726,17 +962,25 @@ def investigation_page(rid: str):
             dec = ", ".join(f"{k}: {v}" for k, v in (x.get("decisions") or {}).items()) or "none"
             rows += f"<tr><td></td><td colspan=3 class=note>Reviewer replied (decisions: {e(dec)})</td></tr>"
         elif x["type"] == "answer_applied":  # shown only once the worker acknowledged it
+            who = (f" oleh {e(person(store, x['reviewer']))}" if x.get("reviewer") else "")
             rows += (f"<tr><td></td><td colspan=3 class=note>Reviewer {'approved' if x['approved'] else 'declined'} "
-                     f"<code>{e(x['tool'])}</code></td></tr>")
+                     f"<code>{e(x['tool'])}</code>{who}</td></tr>")
     pend = run.pending
     pending_html = ""
+    approve_form = ""
+    if pend and not self_blocked:
+        approve_form = (f"<form method=post action=\"/admin/investigations/{e(rid)}/resume\" style=\"display:inline\">"
+                        f"<input type=hidden name=approval_id value=\"{e(pend['approval_id'])}\">"
+                        f"<input type=hidden name=approved value=true><button>Approve</button></form>")
+    elif pend:
+        approve_form = (f"<p class='note' id='self-approval'>{e(label('self_approval_note'))}</p>")
     if pend:
         pending_html = f"""<div class="box" id=pending><h2>Pending write: awaiting your approval</h2>
 <p><code>{e(pend['tool'])}</code></p>{('<p><strong>' + e(pend['prompt']) + '</strong></p>') if pend.get('prompt') else ''}<pre>{e(json.dumps(pend['args'], ensure_ascii=False, indent=2))}</pre>
 {decision_box(pend.get('current_decision'))}
 {engine_box(pend.get('engine'))}
-<p class=note>This call runs only if you click Approve. Read-only lookups, and a plain evidence request to the claim's owner (no amounts), run without asking; every other write or message waits here. Unanswered approvals are declined automatically.</p>
-<form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=approval_id value="{e(pend['approval_id'])}"><input type=hidden name=approved value=true><button>Approve</button></form>
+<p class=note>{e(label("investigation_gate_note"))}</p>
+{approve_form}
 <form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=approval_id value="{e(pend['approval_id'])}"><input type=hidden name=approved value=false>
 <label>Alasan <input name=reason aria-label="Alasan penolakan (opsional)" size=40 placeholder="Reason (optional)"></label><button>Decline</button></form></div>"""
     q = run.question
@@ -768,8 +1012,10 @@ setInterval(function(){{s+=1;n.textContent=s;}},1000);}})();</script></div>"""
     tail = ""
     if final:
         t = final.get("tokens", {})
+        hit = f" ({t.get('cache_hit', 0)} cache hit)" if t.get("cache_hit") else ""
         tail = (f"<div class=box id=final><h2>Agent's final note</h2><pre>{e(final['note'])}</pre>"
-                f"<p class=note>Tokens: {t.get('input', 0)} in / {t.get('output', 0)} out. Amounts come from tool results; verify against the rule engine.</p></div>")
+                f"<p class=note>Tokens: {t.get('input', 0)} in{hit} / {t.get('output', 0)} out. Amounts come "
+                f"from tool results; verify against the rule engine.</p></div>")
     if err:
         msg = NO_KEY_MESSAGE if err.get("code") == "no_key" else err.get("message", "")
         tail += f"<div class=box id=error><p class='tag bad'>{e(msg)}</p>"
@@ -791,10 +1037,15 @@ setInterval(function(){{s+=1;n.textContent=s;}},1000);}})();</script></div>"""
 
 
 @app.post("/admin/investigations/{rid}/resume")
-def investigation_resume(rid: str, approval_id: str = Form(""), approved: str = Form("false"),
+def investigation_resume(rid: str, request: Request, approval_id: str = Form(""), approved: str = Form("false"),
                          reason: str = Form("")):
     run = _get_run(rid)
-    run.resume(approval_id, approved == "true", reason)  # stale/duplicate answers are ignored
+    if approved == "true":
+        refused = self_approval_refusal(request, run.claim_id, f"investigation:{rid}:resume")
+        if refused:
+            return back_to_claim(run.claim_id, refused)
+    run.resume(approval_id, approved == "true", reason,
+               reviewer=auth.reviewer_of(request))  # stale/duplicate answers are ignored
     return RedirectResponse(f"/admin/investigations/{rid}", status_code=303)
 
 
@@ -803,7 +1054,12 @@ async def investigation_reply(rid: str, request: Request):
     run = _get_run(rid)
     form = await request.form()
     decisions = {k[4:]: str(v) for k, v in form.items() if k.startswith("dec_") and str(v)}
-    run.reply(str(form.get("question_id", "")), str(form.get("reply", "")), decisions)  # stale answers ignored
+    if any(v.startswith("approve") for v in decisions.values()):
+        refused = self_approval_refusal(request, run.claim_id, f"investigation:{rid}:reply")
+        if refused:
+            return back_to_claim(run.claim_id, refused)
+    run.reply(str(form.get("question_id", "")), str(form.get("reply", "")), decisions,
+              reviewer=auth.reviewer_of(request))  # stale answers ignored
     return RedirectResponse(f"/admin/investigations/{rid}", status_code=303)
 
 

@@ -65,18 +65,22 @@ Source: [docs/agent-how-it-works.excalidraw](docs/agent-how-it-works.excalidraw)
 
 ### What the evaluation shows so far (synthetic data, small n, no LLM runs in this round)
 
-Retrieval was the bottleneck. With semantic retrieval, the no-LLM baseline passes 4/4 of the heuristic-hostile cases 11-14 (19/19 hard cases, 0 unsafe, 0 false approvals) and 2/5 on the held-out large set B (3/5 on tuning set A). What the LLM adds is so far untested and is measured on the reasoning track.
+Retrieval was the bottleneck. With the whole mailbox in hand the no-LLM baseline passes all 19 hard cases (0 unsafe, 0 false approvals) and 5/5 on each large set; with BM25 ranking only it passes 17/19 (cases 11 and 12 need the paraphrase) and 2/5 and 3/5. What the LLM adds is so far untested and is measured on the reasoning track.
 
-| suite (baseline, 1 run, $0) | ranked (BM25+embedding) | BM25 only | whole mailbox, unranked (control) |
+| suite (baseline, $0) | ranked (BM25+embedding), 5 runs | BM25 only, 1 run | whole mailbox, unranked (control), 1 run |
 |---|---|---|---|
-| hard, 19 cases | 19/19 | 17/19 (11, 12 fail) | 19/19 |
-| large set A (tuning), 5 | 3/5 | 2/5 | 5/5 |
-| large set B (held out), 5 | 2/5 | 3/5 | 5/5 |
-| reasoning track, 11 | 9/11 (2 false approvals) | - | 9/11 |
+| hard, 19 cases | 93/95 (18 cases 5/5, case 13 3/5) | 17/19 (11, 12 fail) | 19/19 |
+| large set A (tuning), 5 | 14/25 (A-slang_reply 4/5, A-reschedule_later and A-quoted 0/5) | 2/5 | 5/5 |
+| large set B (held out), 5 | 10/25 (B-slang_reply, B-reschedule_later, B-quoted 0/5) | 3/5 | 5/5 |
+| reasoning track, 11 | 50/55 (R1x 0/5, one false approval per run) | 10/11 (R1c) | 10/11 (R1x, 1 false approval) |
+
+Run 2026-10-28 on this branch (`agent/eval/results/*-20261028T0*.json`). The ranked column is five runs per case, not one: case 13 passes 3 times in 5, so a single run reports 19/19 or 18/19 depending on the draw, and the same case is what makes `test_ranked_baseline_on_heuristic_hard_cases[13-True]` fail now and then. The BM25 and whole-mailbox columns are single runs.
+
+Against the 25 Oct run the hard set goes from 17/19 to 19/19 in whole-mailbox mode (two scoring bugs, `docs/regression-hard-eval.md`), and large A, large B and the reasoning track each had one case that only failed because the scripted reviewer declined the evidence request that delivers the case's receipt. Those four cases now get a reviewer that grants a document request, and in whole-mailbox mode the two large sets are back to 5/5 and the reasoning track to 10/11. In ranked mode the receipts in those cases are not retrievable (the reply is "wkwk maap telat": no shared term with the item), so they depend on the graph's post-ask hold, which fires 4 times in 5 on set A and never on set B. That is a retrieval/hold limit, not a gate failure, and it is not fixed here.
 
 - The whole-mailbox control passes everything because every synthetic receipt and schedule change carries structured fields (`claim_id`, `item_id`, `meeting_update`) and the rule engine keeps only what matches. On these fixtures the loss comes from the top-5 cut, not from understanding. Real mail has no such tags.
 - Large sets (`agent/eval/large_fixtures.py`): 46-68 messages per employee over Aug-Oct 2026, hand-written paraphrases combined by a seeded RNG; set A and set B share no paraphrase. Needed message recall@5 / MRR (baseline query): set A lexical 0.2/0.2, ranked 0.2/0.12; set B lexical 0.4/0.12, ranked 0.2/0.15 (`agent/eval/retrieval_metrics.py`). Every large mailbox is flagged `possibly_incomplete` (the 36 probes reach 33-47 of 46-68 messages).
-- Reasoning track (`agent/eval/reasoning_fixtures.py`, labels in `fixtures/reasoning/labels.json`, to be reviewed by Imam): the baseline falsely approves R1 (meeting moved, then moved back) and R1x (moved, then cancelled in free text). R1 exposed an engine issue: `meeting_update`s were applied in evidence-list order, not message date order. This is fixed (PR #30: updates are applied by message date, and a late checkout justified by the calendar alone is flagged); the table above predates the fix and has not been re-run.
+- Reasoning track (`agent/eval/reasoning_fixtures.py`, labels in `fixtures/reasoning/labels.json`, to be reviewed by Imam): the PR #30 fix (meeting updates applied by message date) cleared R1, so the false approvals drop from two to one. The one left is R1x (moved, then cancelled in free text): the cancellation is prose only, `meeting_update` cannot express it, so the tag-based engine still sees a live move to 15:00-16:30 and approves the 16:00 checkout. Under BM25 R1x passes, but for the wrong reason — the cancellation message is not retrieved at all, so the agent routes it to the reviewer; that is luck, not understanding. R1c fails only under BM25 (its paraphrase is not lexically retrievable).
 - Results: `agent/eval/results/{hard,large_a,large_b,reasoning}-baseline*.json` and `retrieval-*.json`; each records a SHA-256 of the fixtures.
 
 ### Prepared, not yet run: model screening and an optional judge
@@ -177,6 +181,7 @@ evidence as an audit trail.
 | 2a | `CLM-2026-0102` | Jakarta hotel over cap. Agent finds signed memo `MEMO-2026-041`, approved. |
 | 2b | `CLM-2026-0103` | Medan hotel over cap, no memo. Agent asks the reviewer; capped amount approved. |
 | 3 | `CLM-2026-0104` | Late check-out fee. Calendar shows a contract signing until 15:30, so the fee is justified. A post-trip dinner is rejected and a suspected duplicate taxi goes to the reviewer. |
+| Self-approval | batch `2026-W44` | One claim, `CLM-2026-0120`, owned by `EMP-101` (Makassar hotel over cap). Signed in as `EMP-101` the approve controls are hidden and the server refuses; signed in as `EMP-102` they work. A separate batch, so the `2026-W43` triage numbers above stay 10 / 7 / 3. |
 
 Run them without WorkBuddy:
 
@@ -202,12 +207,90 @@ uv run --no-dev reimburse-buddy-mcp   # starts the server on stdio (WorkBuddy no
 ```bash
 uv sync && (cd agent && uv sync)
 export DEEPSEEK_API_KEY=...   # only for "Selidiki dengan agent"; never commit it
+export DEMO_PASSWORD='...'    # 12+ characters; without it the demo login is off outside production
 EMPLOYEE_QA=1 uv run uvicorn --app-dir web reimburse_web.app:app --port 8000
-# open http://127.0.0.1:8000/
+# open http://127.0.0.1:8000/ (sign in at /login)
 ```
 
 Without a model key everything except the agent investigation works: triage, claim pages, request
 intake and plan confirmation, and employee Q&A (offline router) need no LLM.
+
+### Demo password
+
+One shared password closes the whole app. With `DEMO_PASSWORD` set, every route except `/login`,
+`/logout` and `/healthz` needs the signed `rb_auth` cookie: a browser navigation is redirected to the
+form, anything else gets `401`. The form also picks which synthetic reviewer the session acts as
+(`EMP-100` by default, `EMP-101` and `EMP-102` Finance the others), which is what makes a self-approval
+refusable.
+
+- Session: `issued_at|reviewer|nonce` plus an HMAC, 12 hours, `httponly`, `samesite=lax`, `secure` in
+  production, checked on every request.
+- Five wrong passwords per IP per minute; after that the form refuses even the right one. Failures are
+  written to the audit log as `access_denied` (`run_id=auth`, actor `system`, `payload.reason`), one
+  event per IP and minute, without the password or the IP in clear.
+- `next=` only accepts a local path, so the form cannot be used as an open redirect.
+- `GET /healthz` answers `ok` without touching the audit log, the store or the LLM.
+- Outside production an unset `DEMO_PASSWORD` turns the gate off, so local runs and the test suite
+  behave as before. In production a missing or short password, or an unset
+  `REIMBURSE_DEMO_SESSION_KEY`, stops startup with `auth.AuthConfigError`.
+
+### Who may approve
+
+The reviewer picked at login is the actor on every decision. Nobody may approve their own work:
+
+- A plan whose `requester` is the reviewer cannot be approved (`POST /admin/plans/<run_id>/decide`);
+  the approve radio is disabled on the confirmation page.
+- Neither can a plan the reviewer **submitted**: the intake records `submitted_by` (the signed-in
+  reviewer), so picking a colleague as the requester does not make the plan approvable by its author.
+  The page shows both lines: `peminta / requester` and `Diajukan oleh / submitted by`.
+- A claim owned by the reviewer cannot be approved: item decisions (`approve_full`, `approve_capped`),
+  a status change off `on_hold`, `Accept evidence`, an agent write (`/resume`) or an agent question
+  answered with an approve decision (`/reply`).
+- `POST /admin/batch/approve` refuses the **whole** batch and names the claim, rather than dropping it
+  silently.
+
+Rejecting, adding a note and putting your own claim `on_hold` stay available: they cannot approve
+anything. A refusal changes no state and is written to the audit log as `access_denied` with actor
+`human:<reviewer>`, `payload.reason = "self_approval"` and `payload.blocked` naming the rule that fired
+(`requester` or `submitted_by`). The intake form defaults the requester to `EMP-101`, so the demo
+reviewer is `EMP-100` (the login form's default) and the third reviewer is `EMP-102` (Finance): the demo
+shows the refusal as `EMP-100`, then the approval as `EMP-102`.
+
+The server checks are the guard; the hidden/disabled buttons are only there so the page does not offer
+an action that will be refused. The plan gate in `plan_graph.py` is unchanged: this is a web-layer
+refusal, so an external driver calling the graph directly (for example `agent/plan_demo.py`) is not
+covered.
+
+An agent write approved from the investigation page is attributed the same way: the web layer sends the
+reviewer ID on the worker's stdin answer, the worker puts it on the graph's resume payload as
+`answer["reviewer"]`, and `graph.decide()` (unchanged) logs `human:<reviewer>`.
+
+### Daily LLM budget
+
+One cap for the whole deployment, not one per claim, on a ledger of its own (`web/reimburse_web/spend.py`;
+`agent/migrations/005_llm_spend.sql`). The day boundary is Asia/Jakarta (UTC+07:00 all year, no DST).
+
+- Before a worker starts, the run **reserves** its worst case: `REIMBURSE_AGENT_MAX_TOKENS` tokens all
+  billed at the output price. If `committed + worst case > LLM_DAILY_BUDGET_USD`, the run is refused with
+  "Batas biaya harian demo tercapai. Coba lagi besok." and a `limit` audit event
+  (`payload.kind = daily_llm_budget`). Check and insert happen under one lock (a file lock for the JSONL
+  ledger, `pg_advisory_xact_lock` for Postgres), so two concurrent starts cannot both take the last slot.
+- When the worker reports tokens (`final`, or `error`/`token_limit`), the run **settles** the real cost
+  from the input hit/miss and output split (the worker accumulates `graph.message_usage()`, so cache-hit
+  input is billed at the hit price). A run that ends without a token report (cancel, deadline, crash)
+  keeps its whole reservation: the ledger fails safe instead of assuming the money was not spent.
+- The Jakarta day is taken once, when the run is reserved: a run that crosses midnight WIB settles on the
+  day it was reserved, so its reservation is always replaced and never leaks into the next day's cap.
+- If Postgres dropped the connection (a Neon endpoint suspends when idle), the ledger reconnects and
+  retries once; if it is still unreachable the run is refused with "Ledger biaya LLM tidak bisa
+  dihubungi, jadi tidak ada run yang dijalankan." instead of a 500, and nothing is spawned.
+- Committed for a day = every settle, plus the reservation of each run that never settled.
+- The remaining amount is shown in the nav ("Sisa anggaran LLM hari ini: $x.xx") and the ledger is
+  append-only: the app role has INSERT + SELECT on `llm_spend`, never UPDATE or DELETE.
+- In production a missing budget or price stops startup with `spend.SpendConfigError` (and refuses LLM
+  runs as a second line of defence). Outside production an unconfigured ledger simply means no cap.
+- Not metered yet: the optional `LLMQAModel` (Q&A with a real key) and the Jev judge. Both are off by
+  default and the demo runs the offline Q&A router and no judge, so the demo cannot spend there.
 
 ### Environment variables
 
@@ -215,7 +298,9 @@ Secrets come from the environment (or a git-ignored `.env.local`) and are never 
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `APP_ENV` | unset | `prod` / `production` requires a Postgres audit log and refuses JSONL or memory |
+| `APP_ENV` | unset | `prod` / `production` requires a Postgres audit log, a demo password, a session key and the LLM budget with its prices; refuses JSONL or memory |
+| `DEMO_PASSWORD` | unset | Shared demo password, 12+ characters (secret). Unset outside production means the login gate is off; unset in production aborts startup |
+| `REIMBURSE_DEMO_SESSION_KEY` | random per process | HMAC key for the demo session cookies (`rb_auth`, `rb_demo_session`); required in production, set it in any shared deploy (secret) |
 | `REIMBURSE_AUDIT_DATABASE_URL` | unset | Postgres DSN for the audit log (secret; app role, Neon direct endpoint) |
 | `REIMBURSE_AUDIT_LOG` | unset | JSONL audit log path outside production; unset means in memory |
 | `DEEPSEEK_API_KEY` or `REIMBURSE_AGENT_API_KEY` | unset | Model key for the claim agent (secret) |
@@ -224,9 +309,11 @@ Secrets come from the environment (or a git-ignored `.env.local`) and are never 
 | `REIMBURSE_AGENT_RUN_DEADLINE` | 600 | Seconds of agent work per run (paused while an approval is pending) |
 | `REIMBURSE_AGENT_APPROVAL_DEADLINE` | 900 | Seconds a pending approval waits before it is declined |
 | `REIMBURSE_INVESTIGATE_MAX_PER_MIN` | 3 | Agent runs started per minute per web process (one live run at a time) |
+| `LLM_DAILY_BUDGET_USD` | unset | Global LLM budget per Asia/Jakarta day, in USD. Unset outside production means no cap; unset in production aborts startup |
+| `LLM_PRICE_INPUT_MISS_PER_MTOK` / `LLM_PRICE_INPUT_HIT_PER_MTOK` / `LLM_PRICE_OUTPUT_PER_MTOK` | unset | Token prices in USD per million tokens, read from the provider's pricing page at deploy time (never hard-coded) |
+| `REIMBURSE_LLM_SPEND_LEDGER` | `<plan store>/llm_spend.jsonl` | Dev/test spend ledger; production uses the Postgres table from migration 005 |
 | `REIMBURSE_APPROVAL_DEADLINE_MIN` | 30 | Minutes before an unanswered staged action of a dead run is expired |
 | `EMPLOYEE_QA` | off | Employee Q&A box and `POST /employee/qa` (see [docs/employee-qa.md](docs/employee-qa.md)) |
-| `REIMBURSE_DEMO_SESSION_KEY` | random per process | HMAC key for the demo session cookie; set it in any shared deploy |
 | `REIMBURSE_PLAN_STORE` | `agent/.plans` | Where plans, requests and per-run mock office state are stored |
 | `REIMBURSE_OFFICE_CONTACTS` / `REIMBURSE_OFFICE_RULES` | bundled synthetic files | Contact directory and operating rules for request intake |
 | `REIMBURSE_EXTRACTOR` | `ocr` | Upload extraction: `ocr`, `dual`, `rapidocr` or `vision` (see [File extraction](#file-extraction)) |
@@ -254,6 +341,12 @@ Production refuses JSONL and in-memory audit logs. When `APP_ENV` is `prod` or `
 ```bash
 export APP_ENV=prod
 export REIMBURSE_AUDIT_DATABASE_URL='postgresql://user:pass@db.example:5432/reimburse'
+export DEMO_PASSWORD='...'                 # 12+ characters (secret)
+export REIMBURSE_DEMO_SESSION_KEY='...'    # stable HMAC key (secret)
+export LLM_DAILY_BUDGET_USD=2.00           # cap for the whole deployment, per Asia/Jakarta day
+export LLM_PRICE_INPUT_MISS_PER_MTOK=...   # from the provider's pricing page on the day you deploy
+export LLM_PRICE_INPUT_HIT_PER_MTOK=...
+export LLM_PRICE_OUTPUT_PER_MTOK=...
 ```
 
 - `REIMBURSE_AUDIT_DATABASE_URL` is required and must start with `postgres://` or `postgresql://`;
@@ -263,6 +356,12 @@ export REIMBURSE_AUDIT_DATABASE_URL='postgresql://user:pass@db.example:5432/reim
   `REIMBURSE_AUDIT_LOG` (JSONL) or the in-memory log.
 - The web app checks this in its FastAPI startup hook, so it fails before serving the first request.
   `agent/investigate_worker.py` checks it before running, and `audit.default_log()` enforces it too.
+- Production startup also refuses a missing `DEMO_PASSWORD` (or one shorter than 12 characters), a
+  missing `REIMBURSE_DEMO_SESSION_KEY` and a missing `LLM_DAILY_BUDGET_USD` or token price
+  (`auth.AuthConfigError` / `spend.SpendConfigError`), so a deploy cannot come up with every route open
+  or able to spend without a cap.
+- Apply migrations `001`-`005` before the first request: `005_llm_spend.sql` adds the spend ledger the
+  daily cap reads and writes.
 - Outside production (`APP_ENV` unset or any other value), behaviour is unchanged: JSONL via
   `REIMBURSE_AUDIT_LOG`, otherwise a fresh in-memory log.
 
@@ -290,13 +389,14 @@ HTTP route for this: the web simulation has no admin authentication, so it is CL
 ## Project layout
 
 ```
-web/reimburse_web/      version B web app (FastAPI): app.py, intake.py, plans.py, qa.py, upload_flow.py,
-                        agent_bridge.py (starts the agent worker), labels.py (Indonesian UI labels)
+web/reimburse_web/      version B web app (FastAPI): app.py, auth.py (demo password), intake.py, plans.py,
+                        qa.py, upload_flow.py, agent_bridge.py (starts the agent worker), spend.py (daily
+                        LLM budget), labels.py (Indonesian UI labels)
 agent/
   reimburse_agent/      graph.py (claim agent), plan_graph.py, office/ (plan, directory, rules, mock tools),
                         audit.py, injection.py, qa/, retrieval.py, audit_selftest.py
   investigate_worker.py agent subprocess used by the web app
-  migrations/           Postgres audit log schema (001-004)
+  migrations/           Postgres schemas: audit log (001-004) and the LLM spend ledger (005)
   eval/                 synthetic eval suites and results
 docs/                   architecture and flow diagrams, request intake, employee Q&A, UI notes
 src/reimburse_buddy/
@@ -426,8 +526,13 @@ Synthetic sample uploads live in `web/sample_uploads/` (`make_samples.py` regene
 (TOTAL (3 item), cash larger than the total, 2-digit year, TOTAL DISKON last) not used to tune the parser.
 `uv run python web/sample_uploads/measure_accuracy.py` reports both (see the table above). Both sets are synthetic and small.
 
-Known limits before any public deploy: shared in-memory state, no auth, local uploads (basic 5 MB / type
-limits only), and a self-declared field is only flagged, not verified. Dual mode detects OCR misreads, not edited
+Known limits before any public deploy: shared in-memory state (claims, drafts, reviewer decisions and agent
+runs live in one process, so a restart loses them and a second instance sees a different demo); one shared
+demo password rather than accounts, so the app cannot tell two reviewers apart beyond the ID chosen at login
+and there is no way to revoke one person's access; local uploads (basic 5 MB / type limits only); and a
+self-declared field is only flagged, not verified. The daily LLM cap covers the investigation worker only:
+the optional Q&A model and the Jev judge are not metered (both are off by default and the demo runs
+neither). Dual mode detects OCR misreads, not edited
 receipts; PDFs, single-engine reads and near-duplicate files are not cross-checked yet (planned after the hackathon).
 
 Known limitation: the cross-checks compare the item with what OCR read from the same file, so a convincingly

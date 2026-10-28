@@ -123,6 +123,17 @@ def test_token_limit_guard(tmp_path):
     assert code == 3 and evs[-1]["code"] == "token_limit"
 
 
+def test_token_report_carries_the_cache_split(tmp_path):
+    """spend.cost_of() bills cache-hit input at its own (cheaper) price, so the worker has to report the
+    three counters, not just a total."""
+    code, evs = run_worker(["--claim", HERO, "--fake-script", script(tmp_path, {"content": "done"})])
+    assert code == 0
+    final = next(e for e in evs if e["type"] == "final")
+    assert set(final["tokens"]) == {"input", "cache_hit", "output"}
+    code, evs = run_worker(["--claim", "C", "--fake-script", script(tmp_path, {"content": "x"}), "--max-tokens", "-1"])
+    assert set(evs[-1]["tokens"]) == {"input", "cache_hit", "output"}
+
+
 def test_question_reply_carries_reviewer_decisions_into_the_graph(tmp_path):
     ask = {"content": "Should I cap the hotel IT-3?"}
     same = {"tool_calls": [{"name": "check_claim", "id": "k1", "args": {

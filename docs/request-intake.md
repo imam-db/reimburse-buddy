@@ -12,24 +12,44 @@ office tools only after a logged approval.
 ## Flow
 
 1. `GET /admin/intake` renders the form: `request` (required), `document` (optional; stored as `DOC-1`),
-   and `requester` (a directory select, default `EMP-101`).
+   and `requester` (a directory select, default `EMP-101`). With the demo password gate on, the page also
+   names the signed-in reviewer: the request is filed under that person whatever requester is picked.
 2. `POST /admin/intake`:
    - generates a run id `req-<8 hex>`;
    - reads the UTC clock once and passes it as `run_input(..., now=...)`, so `run_started_at` is frozen
      for the whole run (including every resume);
    - writes `<plan store>/<run_id>/request.json` with the original request, requester, documents and the
-     frozen start time, so the run can be replayed;
+     frozen start time, so the run can be replayed; with the gate on it also records
+     `submitted_by: <EMP-ID>` (the reviewer who filled the form), and the same field is copied onto
+     `plan.json` as soon as the plan is staged (`plan_graph.py` is not involved: the web layer stamps it);
    - invokes one per-process plan graph (in-memory `MemorySaver`, one thread per run). Its mock office
      dispatches per run to `<plan store>/<run_id>/mock_office.json`, like `agent/plan_demo.py`;
    - redirects with `303` to `/admin/plans/<run_id>`.
 3. `/admin/plans/<run_id>` renders whichever state the run is in:
    - a **clarification question** while the graph is interrupted on `clarify`;
-   - the normal **plan confirmation page** once actions are staged;
+   - the normal **plan confirmation page** once actions are staged (it shows the requester and
+     `Diajukan oleh / submitted by: <name>`);
    - the **not-staged / refusal** page when staging validation failed (for example, no recipient).
 4. `POST /admin/plans/<run_id>/decide` saves the reviewer's decision map and, when this web process still
    holds the live graph for the run, resumes it (`approval -> executor -> mock tools`). Without a live
    graph the decisions are only stored, exactly as before, so an external driver such as
    `agent/plan_demo.py` keeps working.
+   The decision map records the reviewer from the demo login as `human:<EMP-ID>`. An `approve` decision is
+   refused before anything is stored (an `access_denied` event with `reason: self_approval` and
+   `payload.blocked` saying which rule fired) when the reviewer is the plan's `requester` **or** the
+   person who submitted the request; the approve radio is disabled on the page in both cases.
+   Rejecting and notes stay available. The gate in `plan_graph.py` is not changed by this check, so a
+   driver that calls the graph directly bypasses it.
+
+The submitter rule closes a gap the requester rule alone leaves open: the intake lets the reviewer pick
+any requester, so without it the same person could file a request "for" a colleague and then approve it.
+With the demo password gate off there is no identity, so nothing is recorded and the requester rule is
+the only one (dev and the existing tests behave as before).
+
+Demo flow (`DEMO_PASSWORD` set): log in as `EMP-100`, submit Example Test 1 with `EMP-101` as the
+requester — `EMP-100` cannot approve it (they submitted it) and `EMP-101` cannot either (they are the
+requester); log in as the third reviewer, `EMP-102` (Finance), and the approval goes through with actor
+`human:EMP-102`.
 
 ## Clarification
 

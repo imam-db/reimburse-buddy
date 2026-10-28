@@ -82,7 +82,8 @@ CASES = [
              ["MSG-9401", "MSG-9402"], reviewer="approve_owner_doc_request"),
     HardCase("10a", "altered IDs: hero", "CLM-2027-0510", ALTERED, _p("CLM-2027-0510"),
              ["MSG-8201", "EVT-3110", "MSG-8202", "MSG-8203"], ["MSG-8001", "MEMO-2027-638"],
-             {"IT-3": "approve_capped"}, reviewer_says="Reviewer: cap the hotel."),
+             {"IT-3": "approve_capped"}, reviewer="approve_owner_doc_request",
+             reviewer_says="Reviewer: cap the hotel."),
     HardCase("10b", "altered IDs: boarding pass + wrong-trip trap", "CLM-2027-0501", ALTERED, _p("CLM-2027-0501"),
              ["MSG-8001"], ["MSG-8201"]),
     # Claude review 6: keyword heuristics should fail here (synthetic, see hard_fixtures.HEURISTIC_HARD_INBOX).
@@ -235,6 +236,11 @@ def _large_cases(data: Path, tag: str) -> list[HardCase]:
         if fam == "reschedule_earlier":
             out.append(HardCase(f"{tag}-{fam}", f"large set {tag}: {fam}", t["claim_id"], data, _p(t["claim_id"]), good, [],
                                 {"IT-4": "reject"}, reviewer="decide_if_asked", reviewer_says="Reviewer: reject the late checkout."))
+        elif t.get("via_reply"):
+            # The receipt exists only in replies.json, so it arrives only if the evidence request that
+            # delivers it is approved. Every request is gated, so the case needs a reviewer that grants one.
+            out.append(HardCase(f"{tag}-{fam}", f"large set {tag}: {fam}", t["claim_id"], data, _p(t["claim_id"]), good, [],
+                                reviewer="approve_owner_doc_request"))
         else:
             out.append(HardCase(f"{tag}-{fam}", f"large set {tag}: {fam}", t["claim_id"], data, _p(t["claim_id"]), good))
     return out
@@ -248,11 +254,20 @@ LARGE_CASES = {"large_a": _large_cases(Path(__file__).parent / "fixtures" / "lar
 def _reasoning_cases() -> list[HardCase]:
     import json
     data = Path(__file__).parent / "fixtures" / "reasoning"
+    # A claim whose evidence arrives as a scripted reply (replies.json) only gets it through an evidence
+    # request, and every request is gated: without a reviewer that approves one, the reply never lands.
+    by_reply = {r["claim_id"] for r in json.loads((data / "replies.json").read_text())}
     out = []
     for cid, t in json.loads((data / "labels.json").read_text()).items():
         hd = t["human_decisions"]
+        if hd:
+            reviewer = "decide_if_asked"
+        elif t["claim_id"] in by_reply:
+            reviewer = "approve_owner_doc_request"
+        else:
+            reviewer = "decline_all"
         out.append(HardCase(cid, f"reasoning {cid}: {t['label']}", t["claim_id"], data, _p(t["claim_id"]), t["good_evidence"], [],
-                            hd, reviewer="decide_if_asked" if hd else "decline_all",
+                            hd, reviewer=reviewer,
                             reviewer_says=f"Reviewer: {t['label']}." if hd else ""))
     return out
 

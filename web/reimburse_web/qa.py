@@ -8,9 +8,7 @@ not rendered and POST /employee/qa answers 404.
 
 from __future__ import annotations
 
-import hashlib
 import hmac
-import os
 import re
 import secrets
 from html import escape
@@ -19,6 +17,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from . import plans  # puts agent/ on sys.path and owns the shared audit log
+from .auth import sign as _sign  # one HMAC key for both demo cookies (REIMBURSE_DEMO_SESSION_KEY)
 from .labels import label
 
 from reimburse_agent.qa import engine as qa_engine  # noqa: E402
@@ -26,7 +25,6 @@ from reimburse_agent.qa.tools import Session  # noqa: E402
 
 router = APIRouter()
 COOKIE = "rb_demo_session"
-_KEY = (os.environ.get("REIMBURSE_DEMO_SESSION_KEY") or secrets.token_hex(32)).encode()
 STATE: dict = {}  # service, history per session id
 QUICK = (("Apa yang kurang?", "Apa yang kurang? / What's missing?"), ("Berapa plafon hotel?", "Berapa plafon hotel? / Hotel cap?"))
 
@@ -51,10 +49,6 @@ def service() -> qa_engine.QAService:
         from reimburse_buddy.messages import render
         STATE["svc"] = qa_engine.QAService(_Data(), log=plans.log(), render=render, employees=_web().store.employees)
     return STATE["svc"]
-
-
-def _sign(value: str) -> str:
-    return value + "." + hmac.new(_KEY, value.encode(), hashlib.sha256).hexdigest()[:32]
 
 
 def session_of(request: Request) -> Session | None:

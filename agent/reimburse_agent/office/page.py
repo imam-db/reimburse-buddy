@@ -93,7 +93,11 @@ def _person(directory: Directory, emp: str) -> str:
 
 
 def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, action_url: str | None = None,
-           msg: str = "") -> str:
+           msg: str = "", allow_approve: bool = True, blocked_note: str | None = None) -> str:
+    """The confirmation page. `allow_approve=False` disables the Approve control (the requester, or the
+    reviewer who submitted the request, may not approve it): the radio is rendered disabled so the form
+    cannot submit "approve", and a note explains why (`blocked_note` overrides the default wording).
+    Reject stays available. Presentation only: the gate in plan_graph still decides."""
     log_notices_shown(plan, log)
     events = log.list(plan["run_id"])
     run = e(plan["run_id"])
@@ -106,9 +110,17 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
            f"<style>{CSS}</style></head><body>",
            f"<h1>Konfirmasi rencana / Plan confirmation</h1>",
            f"<p class=muted>Run {run} &middot; {e(plan['plan_id'])} &middot; peminta / requester: "
-           f"{_person(directory, plan['requester'])}</p>",
+           f"{_person(directory, plan['requester'])}"
+           + (f" &middot; <span id=submitted-by>Diajukan oleh / submitted by: "
+              f"{_person(directory, plan['submitted_by'])}</span>" if plan.get("submitted_by") else "")
+           + "</p>",
            "<p><b>Belum ada yang dikirim sampai Anda menyetujui.</b> "
            "Nothing is sent or scheduled until you approve. Mock tools only.</p>"]
+    if not allow_approve:
+        note = blocked_note or "Anda peminta rencana ini, jadi tombol Setujui dimatikan."
+        out.append(f"<div class='notice' id='self-approval'><b>Anda tidak dapat menyetujui rencana ini</b>"
+                   f"<p>{e(note)} Anda tetap bisa menolak atau meminta rekan lain menyetujuinya. / You "
+                   "cannot approve this plan yourself; rejecting stays available.</p></div>")
     if expired:
         reason = _expired_reason(events, expired)
         reason_id = EXPIRED_REASON_ID.get(reason, EXPIRED_FALLBACK_ID)
@@ -205,8 +217,12 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
                          for x in assume_here)
         decide = ""
         if form and st is None:
-            decide = (f"<p class=\"decision\"><label><input type=radio name='decision:{e(aid)}' value=approve> "
-                      f"Setujui / Approve</label> "
+            approve_control = (
+                f"<label><input type=radio name='decision:{e(aid)}' value=approve> Setujui / Approve</label> "
+                if allow_approve else
+                f"<label><input type=radio name='decision:{e(aid)}' value=approve disabled> "
+                f"Setujui / Approve (dimatikan: Anda peminta)</label> ")
+            decide = (f"<p class=\"decision\">{approve_control}"
                       f"<label><input type=radio name='decision:{e(aid)}' value=reject checked> Tolak / Reject</label></p>"
                       f"<p><label>Catatan (opsional, agen akan mengusulkan rencana baru) / Note (optional, the agent "
                       f"proposes a new plan):<br><textarea name='note:{e(aid)}' rows=2 cols=70></textarea></label></p>")
