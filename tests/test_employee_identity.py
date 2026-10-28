@@ -92,6 +92,10 @@ def test_other_employees_objects_are_404(env, qa_on):
     assert a.get(f"/employee/drafts/{b_draft}").status_code == 404
     assert a.post(f"/employee/drafts/{b_draft}", data={"action": "submit"}).status_code == 404
     assert a.get("/employee/drafts/nope").json()["detail"].replace("nope", "X") ==         a.get(f"/employee/drafts/{b_draft}").json()["detail"].replace(b_draft, "X")
+    inbox_before = len(web.store.inbox)
+    fwd = a.post("/employee/forward", data={"subject": "s", "claim_id": B_CLAIM, "item_id": "IT-1"},
+                 files={"file": ("r.pdf", b"%PDF", "application/pdf")})
+    assert fwd.status_code == 404 and len(web.store.inbox) == inbox_before
     assert b_draft in web.DRAFTS and web.store.get_claim(B_CLAIM)["employee_id"] == B
     # The owner still gets in.
     assert b.get(f"/employee/claims/{B_CLAIM}").status_code == 200

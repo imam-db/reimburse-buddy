@@ -528,6 +528,8 @@ async def forward_evidence(request: Request, subject: str = Form(...), claim_id:
                            att_type: str = Form("receipt"), item_id: str = Form(""), flight: str = Form(""),
                            att_date: str = Form(""), body: str = Form(""), file: UploadFile | None = File(None)):
     emp = require_employee(request)
+    if claim_id:  # a receipt may only be linked to the sender's own claim
+        owned_claim(claim_id, emp)
     me = store.get_employee(emp)
     mid = f"MSG-W{len([m for m in store.inbox if m['id'].startswith('MSG-W')]) + 1:03d}"
     att = None
