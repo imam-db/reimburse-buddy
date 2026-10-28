@@ -215,6 +215,18 @@ def test_sources_use_readable_names_and_own_claims_are_links(client):
     assert any(s.startswith("IT-") for s in audit["sources"])  # the audit keeps the raw list
 
 
+def test_sources_are_separated_by_a_middle_dot(client):
+    login(client, "EMP-001")
+    client.post("/employee/qa", data={"question": "Apa yang kurang?", "claim_id": "CLM-2026-0101"})
+    sources = _sources_line(client.get("/employee/claims/CLM-2026-0101").text)
+    assert "CLM-2026-0101</a> · Pasal 6, Bukti pembayaran dan boarding pass" in sources
+    assert "</a>, Pasal 6" not in sources
+
+
+def _sources_line(html):
+    return html.rsplit("Sumber / Sources: ", 1)[1].split("</div>", 1)[0]
+
+
 def test_english_answer_names_the_english_article_title(client):
     login(client, "EMP-001")
     client.post("/employee/qa", data={"question": "What is the hotel cap?", "claim_id": ""})
@@ -286,3 +298,14 @@ def test_cap_disables_the_box_and_points_to_finance(client):
     assert re.search(r"<input type='text' name='question'[^>]* disabled>", box)
     buttons = re.findall(r"<button name='quick'[^>]*>", box)
     assert buttons and all(tag.endswith(" disabled>") for tag in buttons)
+
+
+def test_cap_then_new_conversation_shows_the_limit_hint_not_the_try_hint(client):
+    login(client, "EMP-001")
+    for _ in range(10):
+        client.post("/employee/qa", data={"question": "Berapa plafon hotel?", "claim_id": ""})
+    client.post("/employee/qa/new", data={"claim_id": ""})
+    box = client.get("/employee").text.split("id='qa'", 1)[1]
+    assert "Batas pertanyaan sesi ini sudah tercapai" in box
+    assert "Percakapan dikosongkan" in box
+    assert "Coba:" not in box

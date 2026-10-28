@@ -95,6 +95,8 @@ if(s)s.textContent='Menjawab... / Answering...';},0);});});})();</script>"""
 
 EMPTY_HINT = ("<p class='hint'>Belum ada pertanyaan. Coba: \"Apa yang kurang?\" atau \"Berapa plafon hotel?\"<br>"
               "No questions yet. Try: \"What's missing?\" or \"Hotel cap?\"</p>")
+LIMIT_EMPTY_HINT = ("<p class='hint'>Percakapan dikosongkan. Batas pertanyaan sesi ini sudah tercapai.<br>"
+                    "Conversation cleared. This session's question limit is reached.</p>")
 
 
 def _labelled(text: str) -> str:
@@ -117,7 +119,7 @@ def _source_label(src: str, lang: str) -> str | None:
 
 def _sources(r: dict) -> str:
     labels = [x for x in (_source_label(s, r["lang"]) for s in r["sources"]) if x]
-    return ", ".join(labels) or "-"
+    return " · ".join(labels) or "-"
 
 
 def _mailto(email: str, cid: str = "") -> str:
@@ -148,8 +150,9 @@ def _qa_box(sess: Session, cid: str) -> str:
     turns = "".join(
         f"<div class='q'>{escape(q)}</div><div class='a{' refused' if r['refused'] else ''}'>{_answer_html(r, turn_cid)}</div>"
         f"<div class='src'>Sumber / Sources: {_sources(r)}</div>" for q, r, turn_cid in hist[-6:])
-    log = f"<div class='qa-log' id='qa-log' role='log' aria-live='polite'>{turns or EMPTY_HINT}</div>"
     left, total = service().remaining_questions(sess), service().config.max_questions
+    empty = LIMIT_EMPTY_HINT if not left else EMPTY_HINT
+    log = f"<div class='qa-log' id='qa-log' role='log' aria-live='polite'>{turns or empty}</div>"
     quota = f"<p class='quota'>Sisa pertanyaan: {left} dari {total} / Questions left: {left} of {total}</p>"
     if not left:
         quota += (f"<p class='quota limit'>Batas pertanyaan untuk sesi ini sudah tercapai. Hubungi "
