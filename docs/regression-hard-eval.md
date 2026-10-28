@@ -122,11 +122,16 @@ the score. The lever that would move the score is the hold, and that is a `graph
 
 ## What is still open
 
-The graph still queues the notice twice. The eval no longer calls that unsafe, but a reviewer sees two
-approval boxes for one message, and the second decline is noise in the audit trail. The fix belongs in
-`graph.py` (`already_proposed` dedupes through `declined_sigs`, which `actions_exec` only writes after the
-gate has already run; `intake` also appends instructions without dedupe) and is deliberately not in this
-branch.
+1. The graph still queues the notice twice. The eval no longer calls that unsafe, but a reviewer sees two
+   approval boxes for one message, and the second decline is noise in the audit trail. The fix belongs in
+   `graph.py` (`already_proposed` dedupes through `declined_sigs`, which `actions_exec` only writes after the
+   gate has already run; `intake` also appends instructions without dedupe) and is deliberately not in this
+   branch.
+2. The post-ask hold is not reliable: it is what `B-slang_reply` (0/5) and one draw of case 13 and of
+   `A-slang_reply` depend on, and it sometimes does not fire. Also `graph.py`.
+3. Ranked mode is not reproducible run to run, because the guard boundary is random and ends up inside the
+   baseline's search query. Either strip the wrapper before it reaches the query (harness) or make the hold
+   independent of it (graph); the first only removes the noise, the second is what moves the score.
 
 ## Lesson
 
@@ -134,3 +139,8 @@ The baseline is a regression test for the gate, not just for retrieval. It score
 free-evidence path and against the old single-node approval flow; removing both changed the answer without
 touching a single fixture. Re-run the baseline in the same PR that changes a gate, and read the `why`
 string, not just the pass count — both failures here were scored correctly, from the wrong premise.
+
+The same applies to the reviewer: any case whose evidence arrives as a scripted reply is only as good as the
+reviewer that has to approve the request, and the default reviewer says no. Four cases were quietly
+measuring that instead of what they claim to measure. And a single run of a ranked eval is one draw, not a
+score — the hard set reads 19/19 or 18/19 depending on the run, which is why the table now quotes five.
