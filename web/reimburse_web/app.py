@@ -5,12 +5,11 @@ Finance side: batch triage, reviewer-confirmed bulk approval, exception detail w
 
 The only LLM path is "Selidiki dengan agent", which starts `agent/investigate_worker.py` as a subprocess
 (see agent_bridge.py); every amount still comes from the rule engine. All routes sit behind the demo
-password in auth.py when DEMO_PASSWORD is set (always, in production).
+login in auth.py (email + password against app_users; always on in production).
 """
 
 from __future__ import annotations
 
-import hmac
 import json
 import os
 import re
@@ -30,7 +29,7 @@ from reimburse_buddy.models import rupiah
 from reimburse_buddy.rules import check_claim
 from reimburse_buddy.triage import approve_cleared_batch, triage_claims
 
-from . import auth, plan_state, spend
+from . import auth, plan_state, spend, users
 from .agent_bridge import NO_KEY_MESSAGE, Investigator, RateLimited, key_configured
 from .intake import router as intake_router
 from .labels import label, person
@@ -48,7 +47,7 @@ CHOICES = ("approve_full", "approve_capped", "reject")
 UPLOAD_DIR = Path(os.environ.get("REIMBURSE_WEB_UPLOADS", Path(__file__).resolve().parent.parent / "uploads"))
 
 # Startup order matters: refuse a production deployment without a Postgres audit log before doing any
-# work, then one without a demo password / session key, then one that cannot cap or charge a model call,
+# work, then one without a user database / session key, then one that cannot cap or charge a model call,
 # then one whose plan store or checkpoint tables are unusable (REIMBURSE_PLAN_BACKEND=postgres), and
 # finally run the one-per-process expiry sweep (agent workers opening the log never sweep).
 app = FastAPI(title="reimburse-buddy web simulation",
@@ -75,11 +74,12 @@ def client_ip(request: Request) -> str:
 
 @app.middleware("http")
 async def require_demo_login(request: Request, call_next):
-    """Close every route except /login, /logout and /healthz when DEMO_PASSWORD is set.
+    """Close every route except /login, /logout and /healthz when the login gate is on.
 
     A browser navigation (GET/HEAD) is redirected to the form; anything else gets 401, so a script
-    cannot post its way in. With DEMO_PASSWORD unset outside production the gate is off and every
-    request passes through untouched, exactly as before this change."""
+    cannot post its way in. A signed-in employee may only open the employee pages (navigations are sent
+    to /employee/claims, anything else gets 403). With no user store or DSN outside production the gate
+    is off and every request passes through untouched."""
     if not auth.enabled() or request.url.path in auth.PUBLIC_PATHS:
         return await call_next(request)
     session = auth.session_of(request)
@@ -87,6 +87,10 @@ async def require_demo_login(request: Request, call_next):
         if request.method in ("GET", "HEAD"):
             return RedirectResponse(auth.login_url(request.url.path), status_code=303)
         return JSONResponse({"detail": "Silakan masuk dulu. / Please sign in first."}, status_code=401)
+    if not auth.may_open(session.role, request.url.path):
+        if request.method in ("GET", "HEAD"):
+            return RedirectResponse(auth.home_for(session.role), status_code=303)
+        return JSONResponse({"detail": "Akses ditolak. / Access denied."}, status_code=403)
     token = auth.set_current(session.reviewer)
     try:
         return await call_next(request)
@@ -273,48 +277,88 @@ def status_tag(s: str) -> str:
     return f'<span class="tag {cls}" title="{e(s)}">{e(icon + label(s))}</span>'
 
 
+LOGIN_CSS = """*{box-sizing:border-box}body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+padding:16px;font-family:system-ui,sans-serif;color:#1d1d1f;background:#f4f5f8}
+.login-card{width:100%;max-width:380px;background:#fff;border:1px solid #e1e3ea;border-radius:12px;padding:28px 24px;
+box-shadow:0 4px 18px rgba(20,30,60,.08)}
+.login-card h1{font-size:22px;margin:0 0 4px}.login-card .sub{color:#555;font-size:14px;margin:0 0 20px}
+.login-card label{display:block;font-size:14px;font-weight:600;margin:14px 0 6px}
+.login-card input{width:100%;min-height:44px;padding:8px 12px;font-size:16px;border:1px solid #b9bcc6;border-radius:8px}
+.pw-row{display:flex;gap:8px}.pw-row input{flex:1;min-width:0}
+.pw-row button{min-width:92px;min-height:44px;padding:0 10px;border:1px solid #b9bcc6;border-radius:8px;background:#fff;font-size:14px;cursor:pointer}
+.login-card .submit{width:100%;margin-top:22px;min-height:46px;border:0;border-radius:8px;background:#1a5fb4;color:#fff;
+font-size:16px;font-weight:600;cursor:pointer}.login-card .submit:hover{background:#174f95}
+.login-error{background:#f8d7da;color:#842029;border:1px solid #f1aeb5;border-radius:8px;padding:10px 12px;font-size:14px;margin:0 0 6px}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid #1a5fb4;outline-offset:2px}"""
+
+
 # --- login / logout / health ---------------------------------------------------------------
 @app.get("/login", response_class=HTMLResponse)
-def login_page(next: str = "", error: str = ""):
-    """The only public form. With the gate off (no DEMO_PASSWORD outside production) it says so."""
+def login_page(next: str = "", error: str = "", email: str = ""):
+    """The only public form: a centered card with email and password. With the gate off (no user store
+    or DSN outside production) it says so instead."""
     target = auth.safe_next(next)
     if not auth.enabled():
         return page(label("sign_in"), f"""<div class="box" id="login-off">
 <p id="auth-off">{e(label("auth_off"))}</p>
 <p><a class="btn" href="{e(target)}">{e(label("continue"))}</a></p></div>""")
-    opts = "".join(f'<option value="{e(v)}"{" selected" if v == auth.DEFAULT_REVIEWER else ""}>{e(text)}</option>'
-                   for v, text in auth.reviewer_options())
-    body = f"""<div class="box" id="login">
-{f'<p class="tag bad" id="login-error">{e(error)}</p>' if error else ''}
+    return login_card(target, error, email, 401 if error else 200)
+
+
+def login_card(target: str, error: str, email: str, status_code: int) -> HTMLResponse:
+    err = f'<p class="login-error" id="login-error" role="alert">{e(error)}</p>' if error else ""
+    show, hide = e(label("show_password")), e(label("hide_password"))
+    html = f"""<!doctype html><html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>{e(label("sign_in"))} - Reimburse Buddy</title>
+<style>{LOGIN_CSS}</style></head><body>
+<main class="login-card" id="login">
+<h1>Reimburse Buddy</h1><p class="sub">{e(label("login_subtitle"))}</p>
+{err}
 <form method="post" action="/login">
 <input type="hidden" name="next" value="{e(target)}">
-<label>{e(label("sign_in_as"))}<br><select name="reviewer" aria-label="{e(label("sign_in_as"))}">{opts}</select></label>
-<label>{e(label("demo_password"))}<br><input type="password" name="password" aria-label="{e(label("demo_password"))}"
- autocomplete="current-password" required></label>
-<p><button type="submit" id="login-submit">{e(label("sign_in"))}</button></p></form>
-<p class="note">{e(label("demo_limited"))}</p></div>"""
-    return page(label("sign_in"), body, status_code=401 if error else 200)
+<label for="email">{e(label("email"))}</label>
+<input type="email" id="email" name="email" value="{e(email)}" autocomplete="username" aria-label="{e(label("email"))}" required>
+<label for="password">{e(label("password"))}</label>
+<div class="pw-row"><input type="password" id="password" name="password" autocomplete="current-password"
+ aria-label="{e(label("password"))}" required>
+<button type="button" id="toggle-password" aria-controls="password" aria-pressed="false">{show}</button></div>
+<button type="submit" class="submit" id="login-submit">{e(label("sign_in"))}</button>
+</form></main>
+<script>
+var pw=document.getElementById("password"),tg=document.getElementById("toggle-password");
+tg.addEventListener("click",function(){{var on=pw.type==="password";pw.type=on?"text":"password";
+tg.textContent=on?"{hide}":"{show}";tg.setAttribute("aria-pressed",on?"true":"false");}});
+</script></body></html>"""
+    return HTMLResponse(html, status_code=status_code)
 
 
 @app.post("/login")
-def login_submit(request: Request, reviewer: str = Form(auth.DEFAULT_REVIEWER),
-                 password: str = Form(""), next: str = Form("/")):
+def login_submit(request: Request, email: str = Form(""), password: str = Form(""), next: str = Form("/")):
     target = auth.safe_next(next)
     if not auth.enabled():
         return RedirectResponse(target, status_code=303)
     ip = client_ip(request)
     if auth.too_many_failures(ip):
         auth.audit_denied("rate_limited", ip=ip)
-        return login_page(next=target, error=label("auth_rate_limited"))
-    if not hmac.compare_digest(password, auth.password()):
+        return login_card(target, label("auth_rate_limited"), email, 401)
+    try:
+        store = auth.user_store()
+        user = users.authenticate(store, email, password) if store else None
+        if user:
+            store.touch_login(user.id)
+    except Exception:  # noqa: BLE001 - a user database outage is a 503 page, never a stack trace
+        auth.audit_denied("user_store_unavailable", ip=ip)
+        return login_card(target, label("auth_unavailable"), email, 503)
+    if user is None:
         auth.record_failure(ip)
-        auth.audit_denied("bad_password", ip=ip)  # reason only: never the password, never the IP
-        return login_page(next=target, error=label("auth_bad_password"))
+        auth.audit_denied("bad_credentials", ip=ip)  # reason only: never the email, password or IP
+        return login_card(target, label("auth_bad_credentials"), email, 401)
     auth.clear_failures(ip)
-    chosen = reviewer if reviewer in auth.REVIEWERS else auth.DEFAULT_REVIEWER
+    if not auth.may_open(user.role, target) or (target == "/" and not auth.is_reviewer_role(user.role)):
+        target = auth.home_for(user.role)
     r = RedirectResponse(target, status_code=303)
-    r.set_cookie(auth.COOKIE, auth.new_cookie_value(chosen), max_age=auth.TTL_SECONDS, path="/",
-                 httponly=True, samesite="lax", secure=auth.is_production())
+    r.set_cookie(auth.COOKIE, auth.new_cookie_value(user.employee_id, user.role), max_age=auth.TTL_SECONDS,
+                 path="/", httponly=True, samesite="lax", secure=auth.is_production())
     return r
 
 

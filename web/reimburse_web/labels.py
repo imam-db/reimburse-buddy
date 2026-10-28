@@ -95,15 +95,18 @@ LABELS = {
     "accepted": "Diterima",
     "accepted_by_reviewer": "Diterima reviewer",
     "rejected_by_reviewer": "Ditolak reviewer",
-    # demo login (web/reimburse_web/auth.py)
+    # login (web/reimburse_web/auth.py)
     "sign_in": "Masuk",
-    "sign_in_as": "Masuk sebagai reviewer",
-    "demo_password": "Kata sandi demo",
-    "demo_limited": "Data sintetis. Demo terbatas.",
+    "email": "Email",
+    "password": "Kata sandi",
+    "login_subtitle": "Masuk dengan akun kantor Anda.",
+    "show_password": "Tampilkan",
+    "hide_password": "Sembunyikan",
     "continue": "Lanjut",
-    "auth_off": ("Gerbang login mati: DEMO_PASSWORD tidak diatur, jadi semua halaman terbuka. "
-                 "Ini hanya untuk pengembangan lokal."),
-    "auth_bad_password": "Kata sandi demo salah.",
+    "auth_off": ("Gerbang login mati: belum ada database akun (REIMBURSE_AUTH_DATABASE_URL), jadi semua "
+                 "halaman terbuka. Ini hanya untuk pengembangan lokal."),
+    "auth_bad_credentials": "Email atau kata sandi salah.",
+    "auth_unavailable": "Layanan masuk sedang bermasalah. Coba lagi sebentar lagi.",
     "auth_rate_limited": "Terlalu banyak percobaan. Coba lagi dalam satu menit.",
     # self-approval guard (web/reimburse_web/app.py, plans.py)
     "self_approval_blocked": "Anda tidak dapat menyetujui permintaan/klaim Anda sendiri.",

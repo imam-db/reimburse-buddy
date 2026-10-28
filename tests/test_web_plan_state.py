@@ -11,6 +11,7 @@ No database is opened here: `plan_state.pool` is replaced by a fake that fails o
 import pytest
 from fastapi.testclient import TestClient
 
+from conftest import install_test_users, login_as
 from reimburse_web import app as web
 from reimburse_web import plan_state, plans
 
@@ -153,7 +154,7 @@ def test_the_web_app_refuses_to_start_with_a_broken_plan_state(monkeypatch):
     monkeypatch.setenv("APP_ENV", "prod")
     monkeypatch.setenv("REIMBURSE_AUDIT_DATABASE_URL", "postgresql://user@db.example:5432/reimburse")
     monkeypatch.setenv("REIMBURSE_PLAN_BACKEND", "postgres")
-    monkeypatch.setenv("DEMO_PASSWORD", "correct-horse-battery-staple")
+    install_test_users()
     monkeypatch.setenv("REIMBURSE_DEMO_SESSION_KEY", "test-session-key-not-a-secret")
     monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "2.00")
     monkeypatch.setenv("LLM_PRICE_INPUT_MISS_PER_MTOK", "0.27")

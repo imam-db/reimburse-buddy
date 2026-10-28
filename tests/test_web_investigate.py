@@ -10,6 +10,7 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
+from conftest import install_test_users, login_as
 from reimburse_web import app as web
 from reimburse_web.agent_bridge import Investigator, redact
 
@@ -197,12 +198,11 @@ def test_approval_is_attributed_to_the_signed_in_reviewer(client, monkeypatch, t
     the audit log, where graph.decide() reads answer["reviewer"]."""
     log = tmp_path / "audit.jsonl"
     monkeypatch.setenv("REIMBURSE_AUDIT_LOG", str(log))
-    monkeypatch.setenv("DEMO_PASSWORD", "correct-horse-battery-staple")
+    install_test_users()
     monkeypatch.setenv("REIMBURSE_DEMO_SESSION_KEY", "test-session-key-not-a-secret")
     use_script(monkeypatch, tmp_path, [WRITE,
         {"tool_calls": [{"name": "get_outbox", "args": {}, "id": "o1"}]}, {"content": "status set"}])
-    r = client.post("/login", data={"password": "correct-horse-battery-staple", "reviewer": "EMP-100",
-                                    "next": "/admin"}, follow_redirects=False)
+    r = login_as(client, "EMP-100")
     assert r.status_code == 303
 
     rid = start(client)

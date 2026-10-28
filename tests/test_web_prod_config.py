@@ -8,6 +8,7 @@ No real database is opened: the success case swaps PostgresAuditLog for a fake.
 import pytest
 from fastapi.testclient import TestClient
 
+from conftest import install_test_users, login_as
 from reimburse_web import app as web
 from reimburse_web import plans
 
@@ -87,10 +88,10 @@ def test_startup_accepts_postgres_in_prod(monkeypatch):
     # Production also defaults the plan state to Postgres; this test is about the audit gate, so the plan
     # store stays on disk (test_web_plan_state.py covers the plan-state startup check).
     monkeypatch.setenv("REIMBURSE_PLAN_BACKEND", "file")
-    # Production also requires the demo password gate (web/reimburse_web/auth.py) and the daily LLM
+    # Production also requires the login gate (user store installed below) (web/reimburse_web/auth.py) and the daily LLM
     # budget with its prices (web/reimburse_web/spend.py); without them startup stops with
     # AuthConfigError / SpendConfigError, which tests/test_web_auth.py and test_web_cost_cap.py cover.
-    monkeypatch.setenv("DEMO_PASSWORD", "correct-horse-battery-staple")
+    install_test_users()
     monkeypatch.setenv("REIMBURSE_DEMO_SESSION_KEY", "test-session-key-not-a-secret")
     monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "2.00")
     monkeypatch.setenv("LLM_PRICE_INPUT_MISS_PER_MTOK", "0.27")
@@ -99,8 +100,8 @@ def test_startup_accepts_postgres_in_prod(monkeypatch):
     monkeypatch.setattr(A, "PostgresAuditLog", FakePostgresLog)
 
     with TestClient(web.app) as client:
-        assert client.get("/", follow_redirects=False).status_code == 303  # the demo password gate is on
-        client.post("/login", data={"password": "correct-horse-battery-staple", "reviewer": "EMP-100"})
+        assert client.get("/", follow_redirects=False).status_code == 303  # the login gate is on
+        login_as(client, "EMP-100")
         assert client.get("/").status_code == 200
 
     assert opened == [dsn]

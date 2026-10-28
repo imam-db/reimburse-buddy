@@ -1,16 +1,16 @@
-"""Demo password gate for the version B web app.
+"""Login gate for the version B web app: email + password checked against `app_users` (users.py).
 
-There are no real accounts. One shared password (`DEMO_PASSWORD`) closes every route except `/login`,
-`/logout` and `/healthz`, and the login form also picks which synthetic reviewer the session acts as
-(`REVIEWERS`, default `EMP-100`). The session is a signed cookie: `issued_at|reviewer|nonce` plus an
-HMAC, 12 hours, checked on every request.
+Every route except `/login`, `/logout` and `/healthz` needs the signed session cookie. The cookie is
+`issued_at|employee_id|role|nonce` plus an HMAC, 12 hours, checked on every request; the role comes from
+the user's row at login time. Reviewer and finance roles reach the admin pages; an employee is sent to
+`/employee/claims`.
 
-Outside production an unset `DEMO_PASSWORD` turns the gate off, so a local run and the existing test
-suite behave exactly as before. In production a missing or short password, or an unset session key,
-aborts startup instead of serving an unprotected demo: a random per-process key logs everyone out on
-restart and cannot work behind more than one instance.
+The gate is always on in production. Elsewhere it is on when a user store is installed (tests, local dev) or
+a user DSN is configured, and off otherwise, so a plain local run and the rest of the test suite behave as
+before. In production a missing session key, a missing DSN or an unreachable user table aborts startup
+instead of serving an unprotected app.
 
-The password is never logged, never written to the audit log, and never echoed back to the page.
+Passwords and emails are never logged and never written to the audit log.
 """
 
 from __future__ import annotations
@@ -24,17 +24,12 @@ import time
 from contextvars import ContextVar
 from dataclasses import dataclass
 
+from . import users
+
 COOKIE = "rb_auth"
 TTL_SECONDS = 12 * 60 * 60
-MIN_PASSWORD_CHARS = 12
 MAX_FAILS_PER_MINUTE = 5
 PRODUCTION_ENVS = frozenset({"prod", "production"})
-# Synthetic reviewers the login form offers. Intake defaults the requester to EMP-101, so the demo
-# reviewer is EMP-100: the same person may not request and approve (see self_approval.py). EMP-102
-# (Finance) is the third reviewer, so the demo can show "refused as EMP-100, approved as EMP-102"
-# without changing who the request is for.
-REVIEWERS = ("EMP-100", "EMP-101", "EMP-102")
-DEFAULT_REVIEWER = "EMP-100"
 # Who a decision is attributed to when the gate is off (dev, tests): the value used before identities.
 FALLBACK_REVIEWER = "reviewer"
 PUBLIC_PATHS = frozenset({"/login", "/logout", "/healthz"})
@@ -43,21 +38,38 @@ _PROCESS_KEY = secrets.token_hex(32)
 
 
 class AuthConfigError(RuntimeError):
-    """Production is configured without a usable demo password or session key."""
+    """Production is configured without a usable user database or session key."""
 
 
 def is_production() -> bool:
     return os.environ.get("APP_ENV", "").strip().lower() in PRODUCTION_ENVS
 
 
-def password() -> str:
-    """The shared demo password, read per call so a test (or a restart) can change it."""
-    return os.environ.get("DEMO_PASSWORD", "") or ""
+_STORE: users.UserStore | None = None
+_STORE_LOCK = threading.Lock()
+
+
+def set_store(store: users.UserStore | None) -> None:
+    """Install a user store (tests, local dev), or None to forget it and any lazily built Postgres store."""
+    global _STORE
+    with _STORE_LOCK:
+        _STORE = store
+
+
+def user_store() -> users.UserStore | None:
+    """The installed store, else a PostgresUserStore built once from the user DSN, else None."""
+    global _STORE
+    with _STORE_LOCK:
+        if _STORE is None:
+            dsn = users.user_dsn()
+            if dsn:
+                _STORE = users.PostgresUserStore(dsn)
+        return _STORE
 
 
 def enabled() -> bool:
-    """False outside production when DEMO_PASSWORD is unset: every route stays open, as before."""
-    return bool(password())
+    """Production: always. Elsewhere: only when a user store or a user DSN exists (no connection made here)."""
+    return is_production() or _STORE is not None or bool(users.user_dsn())
 
 
 def session_key() -> bytes:
@@ -65,21 +77,24 @@ def session_key() -> bytes:
 
 
 def startup_check() -> None:
-    """Refuse a production deployment that would serve an open or restart-fragile demo.
+    """Refuse a production deployment that would serve an open or restart-fragile app.
 
     Registered after plans.startup_config_check (the audit log is the first thing to be right) and
-    before startup_sweep, so a misconfigured production process exits before serving a request."""
+    before startup_sweep, so a misconfigured production process exits before serving a request. An
+    installed store (tests) is trusted as is; otherwise the user DSN must exist and connect."""
     if not is_production():
         return
-    pw = password()
-    if not pw:
-        raise AuthConfigError(
-            "APP_ENV=prod requires DEMO_PASSWORD: without it every route except /login, /logout and "
-            "/healthz would be open. Set DEMO_PASSWORD (12+ characters) in the environment.")
-    if len(pw) < MIN_PASSWORD_CHARS:
-        raise AuthConfigError(
-            f"APP_ENV=prod: DEMO_PASSWORD must be at least {MIN_PASSWORD_CHARS} characters "
-            f"(got {len(pw)}).")
+    if _STORE is None:
+        if not users.user_dsn():
+            raise AuthConfigError(
+                "APP_ENV=prod requires REIMBURSE_AUTH_DATABASE_URL (or REIMBURSE_AUDIT_DATABASE_URL): "
+                "logins are checked against the app_users table.")
+        try:
+            user_store()
+        except Exception as exc:  # noqa: BLE001 - never echo the DSN or the driver's message
+            raise AuthConfigError(
+                f"APP_ENV=prod: cannot connect to the user database ({type(exc).__name__}). "
+                "Check REIMBURSE_AUTH_DATABASE_URL and that migration 007_app_users.sql is applied.") from None
     if not (os.environ.get("REIMBURSE_DEMO_SESSION_KEY") or "").strip():
         raise AuthConfigError(
             "APP_ENV=prod requires REIMBURSE_DEMO_SESSION_KEY: a random per-process key logs everyone "
@@ -94,13 +109,14 @@ def sign(value: str) -> str:
 
 @dataclass(frozen=True)
 class Session:
-    reviewer: str
+    reviewer: str  # the signed-in person's employee_id (kept under this name for the self-approval checks)
+    role: str
     issued_at: int
     nonce: str
 
 
-def new_cookie_value(reviewer: str, *, now: int | None = None) -> str:
-    return sign(f"{int(now if now is not None else time.time())}|{reviewer}|{secrets.token_hex(8)}")
+def new_cookie_value(employee_id: str, role: str = "reviewer", *, now: int | None = None) -> str:
+    return sign(f"{int(now if now is not None else time.time())}|{employee_id}|{role}|{secrets.token_hex(8)}")
 
 
 def parse(raw: str, *, now: float | None = None) -> Session | None:
@@ -111,9 +127,9 @@ def parse(raw: str, *, now: float | None = None) -> Session | None:
     if not body or not hmac.compare_digest(sign(body), raw):
         return None
     parts = body.split("|")
-    if len(parts) != 3:
+    if len(parts) != 4:
         return None
-    issued, reviewer, nonce = parts
+    issued, employee_id, role, nonce = parts
     try:
         issued_at = int(issued)
     except ValueError:
@@ -123,9 +139,9 @@ def parse(raw: str, *, now: float | None = None) -> Session | None:
         return None
     if current - issued_at > TTL_SECONDS:
         return None
-    if reviewer not in REVIEWERS:
+    if role not in users.ROLES or not employee_id:
         return None
-    return Session(reviewer, issued_at, nonce)
+    return Session(employee_id, role, issued_at, nonce)
 
 
 def session_of(request) -> Session | None:
@@ -139,9 +155,23 @@ def session_of(request) -> Session | None:
 
 
 def reviewer_of(request) -> str:
-    """Who is acting: the signed-in reviewer, else FALLBACK_REVIEWER when the gate is off."""
+    """Who is acting: the signed-in employee_id, else FALLBACK_REVIEWER when the gate is off."""
     session = session_of(request)
     return session.reviewer if session else FALLBACK_REVIEWER
+
+
+def is_reviewer_role(role: str | None) -> bool:
+    return role in users.REVIEWER_ROLES
+
+
+def home_for(role: str | None) -> str:
+    """Where a role lands after login."""
+    return "/" if is_reviewer_role(role) else "/employee/claims"
+
+
+def may_open(role: str | None, path: str) -> bool:
+    """Reviewer and finance may open everything; an employee only the employee pages."""
+    return is_reviewer_role(role) or path == "/employee" or path.startswith("/employee/")
 
 
 # --- who is signed in, for the nav ---------------------------------------------------------------------
@@ -164,7 +194,7 @@ def reset_current(token) -> None:
 
 
 def reviewer_name(reviewer: str | None) -> str:
-    """Display name for a reviewer ID (the office directory when reachable, else the ID)."""
+    """Display name for an employee ID (the office directory when reachable, else the ID)."""
     if not reviewer:
         return ""
     try:
@@ -173,20 +203,6 @@ def reviewer_name(reviewer: str | None) -> str:
     except Exception:
         contact = None
     return contact.name if contact else reviewer
-
-
-def reviewer_options() -> list[tuple[str, str]]:
-    """(id, label) pairs for the login select: name and role when the directory is reachable."""
-    try:
-        from .plans import directory
-        contacts = directory()
-    except Exception:
-        contacts = None
-    out: list[tuple[str, str]] = []
-    for rid in REVIEWERS:
-        contact = contacts.get(rid) if contacts is not None else None
-        out.append((rid, f"{contact.name} — {contact.role}" if contact else rid))
-    return out
 
 
 # --- login attempts ------------------------------------------------------------------------------------
@@ -218,7 +234,7 @@ def clear_failures(ip: str) -> None:
 
 
 def reset_attempts() -> None:
-    """Forget every failure counter (tests, and Reset demo)."""
+    """Forget every failure counter (tests)."""
     with _LOCK:
         _FAILS.clear()
 
@@ -227,7 +243,7 @@ def reset_attempts() -> None:
 def audit_denied(reason: str, *, ip: str = "", run_id: str = "auth", **extra) -> None:
     """One `access_denied` event per IP and minute: guessing cannot flood the audit log.
 
-    The payload carries a reason and never the password or the IP in clear."""
+    The payload carries a reason and never the password, the email or the IP in clear."""
     bucket = int(time.time() // 60)
     ip_hash = hashlib.sha256(ip.encode("utf-8")).hexdigest()[:12] if ip else "none"
     _append(run_id, "access_denied", f"{reason}:{ip_hash}:{bucket}", "system",

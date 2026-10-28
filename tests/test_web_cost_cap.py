@@ -17,6 +17,7 @@ from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
 
+from conftest import install_test_users, login_as
 from reimburse_web import app as web
 from reimburse_web import plans, spend
 from reimburse_web.agent_bridge import Investigator
@@ -276,7 +277,7 @@ def _fake_postgres(monkeypatch):
 def prod(ledger_file, monkeypatch):
     monkeypatch.setenv("APP_ENV", "prod")
     monkeypatch.setenv("REIMBURSE_AUDIT_DATABASE_URL", "postgresql://user@db.example:5432/reimburse")
-    monkeypatch.setenv("DEMO_PASSWORD", "correct-horse-battery-staple")
+    install_test_users()
     monkeypatch.setenv("REIMBURSE_DEMO_SESSION_KEY", "test-session-key-not-a-secret")
     # Production also defaults the plan state to Postgres (web/reimburse_web/plan_state.py). These tests are
     # about the daily cap, so the plan store stays on disk.
@@ -318,7 +319,8 @@ def test_prod_without_a_price_fails_startup(prod):
 
 def test_prod_with_budget_and_prices_serves_the_app(prod):
     configure(prod)
-    with TestClient(web.app) as c:
+    with TestClient(web.app, base_url="https://testserver") as c:
+        assert login_as(c, "EMP-100", next_path="/").status_code == 303
         assert c.get("/").status_code == 200
         assert "Sisa anggaran LLM hari ini: $1.00" in c.get("/").text
 
@@ -432,8 +434,7 @@ def test_an_unreachable_ledger_refuses_the_run_instead_of_a_500(prod, monkeypatc
 
     # https, because in production the session cookie is Secure and TestClient would not send it otherwise
     with TestClient(web.app, base_url="https://testserver") as c:
-        c.post("/login", data={"password": "correct-horse-battery-staple", "reviewer": "EMP-100",
-                               "next": "/admin"}, follow_redirects=False)  # production needs the gate
+        login_as(c, "EMP-100")  # production needs the gate
         r = c.post(f"/admin/claims/{HERO}/investigate", follow_redirects=False)
     assert r.status_code == 200  # not a 500
     assert "id=ledger-unavailable" in r.text and "tidak ada run yang dijalankan" in r.text

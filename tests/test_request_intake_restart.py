@@ -23,13 +23,13 @@ from reimburse_web import auth, intake, plan_state, plans
 from reimburse_agent import audit as A
 from reimburse_agent.office.store import FilePlanStore
 
-PW = "correct-horse-battery-staple"
+from conftest import TEST_PASSWORD as PW, install_test_users, login_as
 REQ = "Tolong kirim notulen ke Pak Budi ya, terus jadwalin follow-up Jumat siang."
 STALE = "tidak bisa dilanjutkan"
 
 
 def _isolate(monkeypatch, tmp_path):
-    monkeypatch.setenv("DEMO_PASSWORD", PW)
+    install_test_users()
     monkeypatch.setenv("REIMBURSE_DEMO_SESSION_KEY", "test-session-key-not-a-secret")
     monkeypatch.setenv("REIMBURSE_AUDIT_LOG", str(tmp_path / "audit.jsonl"))
     monkeypatch.setenv("REIMBURSE_PLAN_STORE", str(tmp_path / "plans"))
@@ -83,9 +83,7 @@ def restart() -> None:
 
 
 def login(c, reviewer):
-    c.cookies.clear()
-    r = c.post("/login", data={"password": PW, "reviewer": reviewer, "next": "/admin"},
-               follow_redirects=False)
+    r = login_as(c, reviewer)
     assert r.status_code == 303, r.text
 
 
