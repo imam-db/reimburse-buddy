@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 
 from reimburse_web import app as web
 
+from conftest import install_test_users, login_as
+
 DUP_CLAIM = "CLM-2026-0104"  # IT-6 is duplicate_suspected
 SENSITIVE_TEXT = ["possible duplicate", "duplicate", "dup_suspected", "receipt_amount_mismatch",
                   "receipt amount mismatch", "multiple_receipts", "multiple receipts", "receipt_shared"]
@@ -14,6 +16,7 @@ SENSITIVE_TEXT = ["possible duplicate", "duplicate", "dup_suspected", "receipt_a
 @pytest.fixture
 def client(monkeypatch):
     web.reset_all()
+    install_test_users()
     yield TestClient(web.app)
     web.reset_all()
 
@@ -26,8 +29,7 @@ def _visible(html: str) -> str:
 @pytest.mark.parametrize("flag", ["0", "1"])
 def test_employee_page_masks_duplicate(client, monkeypatch, flag):
     monkeypatch.setenv("EMPLOYEE_QA", flag)
-    if flag == "1":  # Q&A on: the page needs a demo session for the claim's owner
-        client.post("/employee/session", data={"emp": "EMP-003", "back": f"/employee/claims/{DUP_CLAIM}"})
+    login_as(client, "EMP-003", f"/employee/claims/{DUP_CLAIM}")  # the claim's owner
     r = client.get(f"/employee/claims/{DUP_CLAIM}")
     assert r.status_code == 200
     text = _visible(r.text)
@@ -43,5 +45,6 @@ def test_masking_uses_qa_source_of_truth():
 
 
 def test_admin_page_still_shows_finding(client):
+    login_as(client, "EMP-100")
     text = _visible(client.get(f"/admin/claims/{DUP_CLAIM}").text)
     assert "duplikat" in text

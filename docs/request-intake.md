@@ -51,7 +51,7 @@ any requester, so without it the same person could file a request "for" a collea
 With the demo password gate off there is no identity, so nothing is recorded and the requester rule is
 the only one (dev and the existing tests behave as before).
 
-Demo flow (`DEMO_PASSWORD` set): log in as `EMP-100`, submit Example Test 1 with `EMP-101` as the
+Demo flow (login gate on, accounts seeded): log in as `EMP-100`, submit Example Test 1 with `EMP-101` as the
 requester — `EMP-100` cannot approve it (they submitted it) and `EMP-101` cannot either (they are the
 requester); log in as the third reviewer, `EMP-102` (Finance), and the approval goes through with actor
 `human:EMP-102`.

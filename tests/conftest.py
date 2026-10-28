@@ -6,6 +6,46 @@ import pytest
 
 from reimburse_buddy.data_store import DEFAULT_DATA_DIR, DataStore
 
+from reimburse_web import auth, users
+
+# Login test accounts (test values only). Emails are the ones in data/employees.json.
+TEST_PASSWORD = "correct-horse-battery-staple"
+TEST_ACCOUNTS = {  # employee_id -> (email, role)
+    "EMP-100": ("dewi.anggraini@nusantara-niaga.example", "reviewer"),
+    "EMP-101": ("hendra.saputra@nusantara-niaga.example", "reviewer"),
+    "EMP-102": ("rani.kusuma@nusantara-niaga.example", "finance"),
+    "EMP-001": ("rina.wulandari@nusantara-niaga.example", "employee"),
+    "EMP-003": ("sari.kusumawati@nusantara-niaga.example", "employee"),
+}
+_HASH: dict[str, str] = {}
+
+
+def install_test_users() -> users.MemoryUserStore:
+    """Install a MemoryUserStore with the accounts above (one scrypt hash, computed once per run)."""
+    _HASH.setdefault("pw", users.hash_password(TEST_PASSWORD))
+    store = users.MemoryUserStore()
+    for emp, (email, role) in TEST_ACCOUNTS.items():
+        store.add(emp, email, role=role, password_hash=_HASH["pw"])
+    auth.set_store(store)
+    return store
+
+
+def login_as(client, employee_id: str, next_path: str = "/admin"):
+    """Sign `client` in as one of TEST_ACCOUNTS and return the (non-followed) response."""
+    client.cookies.clear()
+    return client.post("/login", data={"email": TEST_ACCOUNTS[employee_id][0], "password": TEST_PASSWORD,
+                                       "next": next_path}, follow_redirects=False)
+
+
+@pytest.fixture(autouse=True)
+def _clean_login_state(monkeypatch):
+    """No test may reach a real user database or inherit another test's user store."""
+    for name in ("REIMBURSE_AUTH_DATABASE_URL", "REIMBURSE_AUDIT_DATABASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+    auth.set_store(None)
+    yield
+    auth.set_store(None)
+
 
 @pytest.fixture
 def make_store(tmp_path):

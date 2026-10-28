@@ -1,6 +1,6 @@
 """A reviewer may not approve their own request or claim.
 
-The identity comes from the demo login (auth.reviewer_of): the form picks EMP-100, EMP-101 or EMP-102,
+The identity comes from the login (auth.reviewer_of): the account signed in as EMP-100, EMP-101 or EMP-102,
 and the same person who requested a plan, or who owns a claim, is refused on every approval path. The
 refusals are fail closed (nothing is stored, nothing executes) and land in the audit log as
 `access_denied` with actor `human:<reviewer>`.
@@ -26,7 +26,7 @@ from reimburse_web.agent_bridge import Run
 from reimburse_agent import audit as A
 from reimburse_agent.office.store import FilePlanStore
 
-PW = "correct-horse-battery-staple"
+from conftest import TEST_PASSWORD as PW, install_test_users, login_as
 REQ = "Tolong kirim notulen ke Pak Budi ya, terus jadwalin follow-up Jumat siang."
 OWN_CLAIM = "CLM-2026-9901"  # a copy of CLM-2026-0103 (Medan hotel over cap) owned by EMP-100
 SHOWCASE_CLAIM = "CLM-2026-0120"  # data/claims.json, batch 2026-W44, owned by EMP-101
@@ -41,7 +41,7 @@ def _own_claim() -> dict:
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("DEMO_PASSWORD", PW)
+    install_test_users()
     monkeypatch.setenv("REIMBURSE_DEMO_SESSION_KEY", "test-session-key-not-a-secret")
     monkeypatch.setenv("REIMBURSE_PLAN_STORE", str(tmp_path / "plans"))
     monkeypatch.setenv("REIMBURSE_AUDIT_LOG", str(tmp_path / "audit.jsonl"))
@@ -64,8 +64,7 @@ def client(tmp_path, monkeypatch):
 
 
 def login(c, reviewer):
-    c.cookies.clear()
-    r = c.post("/login", data={"password": PW, "reviewer": reviewer, "next": "/admin"}, follow_redirects=False)
+    r = login_as(c, reviewer)
     assert r.status_code == 303, r.text
 
 
@@ -430,7 +429,7 @@ def test_showcase_claim_blocks_its_owner_and_lets_another_reviewer_in(client):
 def test_without_a_login_the_actor_is_unchanged(client, monkeypatch):
     """The gate is off in dev: decisions stay attributed to human:reviewer, and no submitter is recorded,
     exactly as before this change."""
-    monkeypatch.delenv("DEMO_PASSWORD", raising=False)
+    auth.set_store(None)
     c = TestClient(web.app)
     run_id = start_plan(c, requester="EMP-101")
     plan = plans.store().load_plan(run_id)

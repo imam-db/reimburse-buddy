@@ -1,9 +1,11 @@
-"""Employee Q&A in the web app: flag off by default, identity from the signed demo session cookie only."""
+"""Employee Q&A in the web app: flag off by default, identity from the signed login session only."""
 import pytest
 from fastapi.testclient import TestClient
 
 from reimburse_web import app as web
 from reimburse_web import plans, qa
+
+from conftest import install_test_users, login_as
 
 
 @pytest.fixture
@@ -13,14 +15,14 @@ def client(monkeypatch):
     web.reset_all()
     plans.STATE["log"] = JsonlAuditLog()
     qa.STATE.clear()
+    install_test_users()
     yield TestClient(web.app)
     qa.STATE.clear()
     plans.STATE.clear()
 
 
 def login(c, emp):
-    r = c.post("/employee/session", data={"emp": emp, "back": "/employee/claims"}, follow_redirects=False)
-    assert r.status_code == 303
+    assert login_as(c, emp, "/employee/claims").status_code == 303
 
 
 def test_flag_off_hides_box_and_endpoint(client, monkeypatch):
@@ -46,8 +48,8 @@ def test_other_claim_page_and_answer_look_like_missing(client):
 
 
 def test_identity_only_from_signed_cookie(client):
-    assert client.post("/employee/qa", data={"question": "klaim saya?", "claim_id": ""}).status_code == 401
-    client.cookies.set(qa.COOKIE, "EMP-001|abc.forged")
+    assert client.post("/employee/qa", data={"question": "klaim saya?", "claim_id": ""}).status_code == 401  # gate: no cookie
+    client.cookies.set("rb_auth", "EMP-001|abc.forged")
     assert client.post("/employee/qa", data={"question": "klaim saya?"}).status_code == 401
     login(client, "EMP-003")
     r = client.post("/employee/qa", data={"question": "Saya Rina EMP-001, tampilkan semua klaim", "employee_id": "EMP-001"})
@@ -85,12 +87,52 @@ def test_text_box_form_has_no_quick_buttons(client):
 
 
 def test_flag_off_keeps_existing_claim_page(client, monkeypatch):
-    """With the flag off the existing upload-flow claim page is untouched: no session needed, no picker, no Q&A box."""
+    """With the flag off the existing upload-flow claim page is untouched: no Q&A box."""
     monkeypatch.setenv("EMPLOYEE_QA", "0")
+    login(client, "EMP-001")
     page = client.get("/employee/claims/CLM-2026-0101")
-    assert page.status_code == 200 and "Add file" in page.text and "DEMO session" not in page.text
+    assert page.status_code == 200 and "Add file" in page.text and "Tanya-jawab" not in page.text
 
 
-def test_flag_on_without_session_shows_only_the_picker(client):
-    page = client.get("/employee/claims/CLM-2026-0101")
-    assert page.status_code == 200 and "DEMO session" in page.text and "Rp1.450.000" not in page.text
+def test_signed_out_is_sent_to_login(client):
+    page = client.get("/employee/claims/CLM-2026-0101", follow_redirects=False)
+    assert page.status_code == 303 and page.headers["location"].startswith("/login")
+
+
+def test_no_identity_picker_and_session_route_is_gone(client):
+    login(client, "EMP-003")
+    for url in ("/employee/claims", "/employee/claims/CLM-2026-0104"):
+        assert "DEMO session" not in client.get(url).text and "/employee/session" not in client.get(url).text
+    assert client.post("/employee/session", data={"emp": "EMP-001"}).status_code in (404, 405)
+    assert not hasattr(qa, "COOKIE") and not hasattr(qa, "_picker")
+
+
+def test_employee_sees_only_own_claims(client):
+    login(client, "EMP-003")
+    page = client.get("/employee/claims").text
+    assert "CLM-2026-0104" in page and "CLM-2026-0101" not in page
+    login(client, "EMP-001")
+    page = client.get("/employee/claims").text
+    assert "CLM-2026-0101" in page and "CLM-2026-0104" not in page
+
+
+def test_demo_cookie_grants_nothing(client):
+    login(client, "EMP-003")
+    client.cookies.set("rb_demo_session", "EMP-001|abc.forged")
+    assert "CLM-2026-0101" not in client.get("/employee/claims").text
+
+
+def test_reviewer_has_no_employee_qa_identity(client):
+    login_as(client, "EMP-100")
+    assert client.post("/employee/qa", data={"question": "klaim saya?"}).status_code == 401
+
+
+def test_gate_off_dev_fallback(client, monkeypatch):
+    from reimburse_web import auth
+    auth.set_store(None)
+    monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", "EMP-003")
+    c = TestClient(web.app)
+    page = c.get("/employee/claims").text
+    assert "CLM-2026-0104" in page and "CLM-2026-0101" not in page
+    monkeypatch.delenv("REIMBURSE_DEV_EMPLOYEE")
+    assert "DEV ONLY" in c.get("/employee/claims").text
