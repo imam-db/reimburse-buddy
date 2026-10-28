@@ -91,7 +91,7 @@ def test_flag_off_keeps_existing_claim_page(client, monkeypatch):
     monkeypatch.setenv("EMPLOYEE_QA", "0")
     login(client, "EMP-001")
     page = client.get("/employee/claims/CLM-2026-0101")
-    assert page.status_code == 200 and "Add file" in page.text and "Tanya-jawab" not in page.text
+    assert page.status_code == 200 and "Tambah file" in page.text and "Tanya-jawab" not in page.text
 
 
 def test_signed_out_is_sent_to_login(client):

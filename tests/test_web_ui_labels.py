@@ -142,3 +142,21 @@ def test_finance_page_shows_names_with_id_tooltips(client):
     assert "Rina Wulandari" in markup and "EMP-001" in markup  # ID only in the title attribute
     header = client.get("/admin/claims/CLM-2026-0101").text
     assert 'title="EMP-001"' in header and ">Rina Wulandari<" in header
+
+
+ENGLISH_HEADINGS = ("My claims", "Employee portal", "New claim", "Start a new claim", "Add file",
+                    "Messages from finance")
+
+
+def test_every_ui_label_has_text():
+    keys = [k for k in LABELS if k.startswith("ui_")]
+    assert len(keys) > 50
+    for k in keys:
+        assert isinstance(LABELS[k], str) and LABELS[k].strip(), k
+
+
+def test_employee_pages_use_indonesian_headings(client):
+    for url, markup in _employee_pages(client).items():
+        text = _visible(markup)
+        for old in ENGLISH_HEADINGS:
+            assert old not in text, (url, old)
