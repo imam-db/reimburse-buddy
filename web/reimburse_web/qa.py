@@ -81,6 +81,7 @@ border-radius:14px 14px 14px 2px;padding:8px 12px}
 .qa .hint{color:#556;font-size:14px;margin:4px}
 .qa form.ask{display:flex;gap:8px;margin:8px 0 0}.qa form.ask input[type=text]{flex:1;min-width:0;padding:6px}
 .qa form.quick{margin:8px 0 0}.qa button[disabled]{opacity:.6;cursor:wait}
+.qa .quota{font-size:13px;color:#445;margin:4px 0}.qa .quota.limit{color:#8a4b00;font-weight:600}
 .demo{background:#fff3cd;border:1px dashed #b38600;padding:8px;border-radius:6px}"""
 
 JS = """<script>(function(){var l=document.getElementById('qa-log');if(l)l.scrollTop=l.scrollHeight;
@@ -118,22 +119,38 @@ def _sources(r: dict) -> str:
     return ", ".join(labels) or "-"
 
 
+def _finance_link(cid: str = "") -> str:
+    """The finance contact as a mailto link; the subject names the claim when the box is on a claim page."""
+    c = service().rulebook.finance_contact or {}
+    name, email = c.get("name", "Tim Finance"), c.get("email", "")
+    if not email:
+        return escape(name)
+    subject = "Pertanyaan Q&A" + (f" klaim {cid}" if cid.startswith("CLM-") else "")
+    return f"<a href='mailto:{escape(email)}?subject={quote(subject)}'>{escape(name)}: {escape(email)}</a>"
+
+
 def _qa_box(sess: Session, cid: str) -> str:
     hist = STATE.setdefault("history", {}).get(sess.session_id, [])
     turns = "".join(
         f"<div class='q'>{escape(q)}</div><div class='a{' refused' if r['refused'] else ''}'>{escape(_labelled(r['answer']))}</div>"
         f"<div class='src'>Sumber / Sources: {_sources(r)}</div>" for q, r in hist[-6:])
     log = f"<div class='qa-log' id='qa-log' role='log' aria-live='polite'>{turns or EMPTY_HINT}</div>"
-    quick = "".join(f"<button name='quick' value='{escape(v)}'>{escape(text)}</button> " for v, text in QUICK)
+    left, total = service().remaining_questions(sess), service().config.max_questions
+    quota = f"<p class='quota'>Sisa pertanyaan: {left} dari {total} / Questions left: {left} of {total}</p>"
+    if not left:
+        quota += (f"<p class='quota limit'>Batas pertanyaan untuk sesi ini sudah tercapai. Hubungi "
+                  f"{_finance_link(cid)}.</p>")
+    off = "" if left else " disabled"
+    quick = "".join(f"<button name='quick' value='{escape(v)}'{off}>{escape(text)}</button> " for v, text in QUICK)
     title = "Tanya-jawab / Ask about this claim" if cid else "Tanya-jawab reimburse / Ask about reimbursement"
     return (f"<div class='qa' id='qa'><h2>{title}</h2>"
             f"<p class='note'>Hanya kebijakan dan klaim Anda sendiri. Jawaban tidak mengubah klaim; keputusan akhir ada di finance."
-            f" / Policy and your own claims only; answers never change a claim.</p>{log}"
+            f" / Policy and your own claims only; answers never change a claim.</p>{quota}{log}"
             # Two forms: pressing Enter in the text box must submit the text, not the first quick button.
             f"<form method='post' action='/employee/qa' class='quick'><input type='hidden' name='claim_id' value='{escape(cid)}'>{quick}</form>"
             f"<form method='post' action='/employee/qa' class='ask'><input type='hidden' name='claim_id' value='{escape(cid)}'>"
-            f"<input type='text' name='question' aria-label='Pertanyaan' maxlength='500' placeholder='Tulis pertanyaan / Ask a question'>"
-            f"<button>Tanya / Ask</button></form>{JS}</div>")
+            f"<input type='text' name='question' aria-label='Pertanyaan' maxlength='500' placeholder='Tulis pertanyaan / Ask a question'{off}>"
+            f"<button{off}>Tanya / Ask</button></form>{JS}</div>")
 
 
 def portal_box(request: Request) -> str:

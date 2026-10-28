@@ -268,6 +268,10 @@ class QAService:
     def tool_names(self) -> tuple[str, ...]:
         return READ_TOOLS
 
+    def remaining_questions(self, session: Session) -> int:
+        """Read-only view for the web layer: questions left in this session. Never resets the counter."""
+        return max(0, self.config.max_questions - self._asked.get(session.session_id, 0))
+
     def ask(self, session: Session, question: str, *, context_claim_id: str | None = None) -> dict:
         self.last_toolbox = None
         run = f"qa-{session.session_id}"

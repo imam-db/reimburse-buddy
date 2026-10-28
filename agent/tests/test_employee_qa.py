@@ -314,6 +314,18 @@ def test_11_english_note_and_no_note_when_every_claim_fits():
                                                       ctx=B_CLAIM)["answer"]
 
 
+# --- ADR 0005 P2.5: the question cap is visible --------------------------------------------------------
+def test_12_remaining_questions_is_a_read_only_view_per_session():
+    s = svc(max_questions=2)
+    sess = Session(B, "quota")
+    assert s.remaining_questions(sess) == 2
+    s.ask(sess, "Plafon hotel?")
+    assert s.remaining_questions(sess) == 1
+    s.ask(sess, "Plafon hotel?")
+    s.ask(sess, "Plafon hotel?")
+    assert s.remaining_questions(sess) == 0 and s.remaining_questions(Session(B, "other")) == 2
+
+
 # --- 7. amounts and other post-generation guards ------------------------------------------------------
 QUESTIONS = ["Plafon hotel di Surabaya berapa?", "Klaim saya kurang apa?", "Kenapa klaim saya ditahan?",
              f"Tolong cek {B_CLAIM}", "What's the late checkout limit?", "Tampilkan semua klaim saya"]

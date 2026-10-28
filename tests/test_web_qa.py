@@ -1,4 +1,6 @@
 """Employee Q&A in the web app: flag off by default, identity from the signed login session only."""
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -202,3 +204,23 @@ def test_english_answer_names_the_english_article_title(client):
     login(client, "EMP-001")
     client.post("/employee/qa", data={"question": "What is the hotel cap?", "claim_id": ""})
     assert "Article 4, Hotel nightly cap" in client.get("/employee").text
+
+
+def test_every_answer_shows_the_remaining_questions(client):
+    login(client, "EMP-001")
+    assert "Sisa pertanyaan: 10 dari 10" in client.get("/employee").text
+    client.post("/employee/qa", data={"question": "Berapa plafon hotel?", "claim_id": ""})
+    assert "Sisa pertanyaan: 9 dari 10" in client.get("/employee").text
+
+
+def test_cap_disables_the_box_and_points_to_finance(client):
+    login(client, "EMP-001")
+    for _ in range(10):
+        client.post("/employee/qa", data={"question": "Berapa plafon hotel?", "claim_id": ""})
+    box = client.get("/employee").text.split("id='qa'", 1)[1]
+    assert "Sisa pertanyaan: 0 dari 10" in box
+    assert "Batas pertanyaan untuk sesi ini sudah tercapai" in box
+    assert "mailto:reimburse@nusantara-niaga.example" in box
+    assert re.search(r"<input type='text' name='question'[^>]* disabled>", box)
+    buttons = re.findall(r"<button name='quick'[^>]*>", box)
+    assert buttons and all(tag.endswith(" disabled>") for tag in buttons)
