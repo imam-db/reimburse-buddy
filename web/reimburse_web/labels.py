@@ -95,6 +95,34 @@ LABELS = {
     "accepted": "Diterima",
     "accepted_by_reviewer": "Diterima reviewer",
     "rejected_by_reviewer": "Ditolak reviewer",
+    # demo login (web/reimburse_web/auth.py)
+    "sign_in": "Masuk",
+    "sign_in_as": "Masuk sebagai reviewer",
+    "demo_password": "Kata sandi demo",
+    "demo_limited": "Data sintetis. Demo terbatas.",
+    "continue": "Lanjut",
+    "auth_off": ("Gerbang login mati: DEMO_PASSWORD tidak diatur, jadi semua halaman terbuka. "
+                 "Ini hanya untuk pengembangan lokal."),
+    "auth_bad_password": "Kata sandi demo salah.",
+    "auth_rate_limited": "Terlalu banyak percobaan. Coba lagi dalam satu menit.",
+    # self-approval guard (web/reimburse_web/app.py, plans.py)
+    "self_approval_blocked": "Anda tidak dapat menyetujui permintaan/klaim Anda sendiri.",
+    "self_approval_note": ("Anda tercatat sebagai pemilik klaim ini, jadi tombol persetujuan dimatikan. "
+                           "Minta reviewer lain menyetujuinya."),
+    "self_approval_plan_note": ("Anda tercatat sebagai peminta rencana ini, jadi persetujuan dimatikan. "
+                                "Anda tetap bisa menolak atau meminta rekan lain menyetujuinya."),
+    "self_approval_submitted_note": ("Anda yang mengajukan permintaan ini, jadi tombol Setujui dimatikan."),
+    "submitted_by_note": "Permintaan ini dicatat atas nama pengaju (reviewer yang masuk):",
+    # the approval gate on the investigation page (app.py)
+    "investigation_gate_note": ("Panggilan ini hanya dijalankan jika Anda menekan Setujui. Hanya pencarian "
+                                "baca-saja yang berjalan tanpa bertanya; setiap penulisan atau pesan, "
+                                "termasuk permintaan bukti ke pemilik klaim, menunggu persetujuan Anda di "
+                                "sini. Persetujuan yang tidak dijawab otomatis ditolak."),
+    # daily LLM budget (web/reimburse_web/spend.py)
+    "budget_exhausted": "Batas biaya harian demo tercapai. Coba lagi besok.",
+    "budget_remaining": "Sisa anggaran LLM hari ini",
+    "budget_unconfigured": ("Batas biaya LLM belum diatur, jadi tidak ada panggilan model yang dijalankan. "
+                            "Isi LLM_DAILY_BUDGET_USD dan harga token di environment."),
 }
 
 

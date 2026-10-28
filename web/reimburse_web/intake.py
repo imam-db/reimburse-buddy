@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime, timezone
 from html import escape
 
-from fastapi import APIRouter, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from .agent_bridge import AGENT_DIR
@@ -114,19 +114,49 @@ def _track(run_id: str, g, config) -> None:
 
 
 def start_run(*, request: str, requester: str, documents: list[dict] | None = None,
-              now: datetime | None = None) -> str:
-    """Start one run with a frozen UTC start time; returns the new run id (``req-<short uuid>``)."""
+              now: datetime | None = None, submitted_by: str = "") -> str:
+    """Start one run with a frozen UTC start time; returns the new run id (``req-<short uuid>``).
+
+    `submitted_by` is the signed-in reviewer who filled the form. The reviewer may name anyone as the
+    requester, so without it the same person could submit a request "for" a colleague and then approve it.
+    Stored in request.json and on the plan (web side only: plan_graph.py is untouched). Empty when the
+    demo password gate is off, so local runs and the old tests keep their behaviour."""
     run_id = f"req-{uuid.uuid4().hex[:8]}"
     frozen = now or _utcnow()
     now_iso = R.iso(frozen)
     docs = list(documents or [])
-    plans.store().save_request(run_id, {"request": request, "requester": requester,
-                                        "documents": docs, "created_at": now_iso})
+    saved = {"request": request, "requester": requester, "documents": docs, "created_at": now_iso}
+    if submitted_by:
+        saved["submitted_by"] = submitted_by
+    plans.store().save_request(run_id, saved)
     g = graph()
     config = {"configurable": {"thread_id": run_id}}
     g.invoke(run_input(run_id, request, requester, docs, now_iso), config)
     _track(run_id, g, config)
+    _stamp_submitted_by(run_id)
     return run_id
+
+
+def _stamp_submitted_by(run_id: str) -> None:
+    """Copy request.json's submitted_by onto the plan.
+
+    Called after every resume, because the plan does not exist yet when the run first stops to ask who
+    the request is for: it is staged on the answer, so the stamp has to happen then. No plan at all is
+    fine: plans.submitted_by() falls back to request.json."""
+    try:
+        saved = plans.store().load_request(run_id) or {}
+    except ValueError:
+        return
+    reviewer = str(saved.get("submitted_by") or "")
+    if not reviewer:
+        return
+    try:
+        plan = plans.store().load_plan(run_id)
+    except ValueError:
+        return
+    if plan and plan.get("submitted_by") != reviewer:
+        plan["submitted_by"] = reviewer
+        plans.store().save_plan(plan)
 
 
 def resume_if_live(run_id: str, decision: dict) -> bool:
@@ -151,6 +181,7 @@ def _answer(run_id: str, payload: dict, answer: str) -> bool:
             return False
         live["graph"].invoke(Command(resume={"answer": emp}), live["config"])
         _track(run_id, live["graph"], live["config"])
+    _stamp_submitted_by(run_id)  # the answer is what stages the plan
     return True
 
 
@@ -197,7 +228,7 @@ def render_question(run_id: str, payload: dict, msg: str = "", error: str = "") 
 
 
 @router.get("/admin/intake", response_class=HTMLResponse)
-def intake_page():
+def intake_page(request: Request):
     from . import app as web  # late import: app.py includes this router
     from .plans import directory
 
@@ -209,9 +240,11 @@ def intake_page():
         name = c.name if c else emp
         choices.append(f'<option value="{e(emp)}"{" selected" if emp == default else ""}>'
                        f'{e(name)} ({e(emp)})</option>')
+    who = web.submitter_of(request)
     body = f"""<p class="note">Tulis permintaan seperti yang Anda ucapkan. Isi dokumen (opsional) diperlakukan
 sebagai data, bukan perintah. / Write the request in your own words; optional document content is treated
 as data, never as instructions.</p>
+{web.submitted_by_note(who)}
 <div class="box"><form method="post" action="/admin/intake">
 <label>Permintaan / Request<br><textarea name="request" rows="4" cols="80" required
 placeholder="Tolong kirim notulen ke Pak Budi ya, terus jadwalin follow-up Jumat siang."></textarea></label>
@@ -223,16 +256,19 @@ placeholder="Tolong kirim notulen ke Pak Budi ya, terus jadwalin follow-up Jumat
 
 
 @router.post("/admin/intake")
-def intake_submit(request: str = Form(...), document: str = Form(""), requester: str = Form("EMP-101")):
+def intake_submit(request: Request, request_text: str = Form("", alias="request"),
+                  document: str = Form(""), requester: str = Form("EMP-101")):
+    from . import app as web  # late import: app.py includes this router
     from .plans import directory
 
-    text = (request or "").strip()
+    text = (request_text or "").strip()
     if not text:
         raise HTTPException(400, "Permintaan tidak boleh kosong / request must not be empty")
     if requester not in directory().ids():
         raise HTTPException(400, f"Peminta tidak ada di direktori / unknown requester: {requester}")
     docs = [{"id": "DOC-1", "text": document}] if (document or "").strip() else []
-    run_id = start_run(request=text, requester=requester, documents=docs)
+    run_id = start_run(request=text, requester=requester, documents=docs,
+                       submitted_by=web.submitter_of(request))
     return RedirectResponse(f"/admin/plans/{run_id}", status_code=303)
 
 
@@ -249,7 +285,9 @@ def plan_answer(run_id: str, answer: str = Form("")):
 
 
 @router.post("/admin/intake/rerun/{run_id}")
-def intake_rerun(run_id: str):
+def intake_rerun(run_id: str, request: Request):
+    from . import app as web  # late import: app.py includes this router
+
     try:
         saved = plans.store().load_request(run_id)
     except ValueError:
@@ -257,5 +295,5 @@ def intake_rerun(run_id: str):
     if not saved:
         return RedirectResponse("/admin/plans", status_code=303)
     new_id = start_run(request=saved["request"], requester=saved["requester"],
-                       documents=saved.get("documents") or [])
+                       documents=saved.get("documents") or [], submitted_by=web.submitter_of(request))
     return RedirectResponse(f"/admin/plans/{new_id}", status_code=303)

@@ -121,6 +121,9 @@ def test_pending_form_carries_approval_id_rule_engine_and_honest_text(client, mo
     assert "id=rule-engine" in html and "Rp4.840.000" in html
     assert "id=approved-engine" in html and "Dasar persetujuan" in html  # the basis the approval binds to
     assert "Nothing is written until you click Approve" not in html
+    # An evidence request is gated like every other write: the page must not say otherwise.
+    assert "termasuk permintaan bukti ke pemilik klaim" in html
+    assert "run without asking" not in html and "plain evidence request" not in html
     client.post(f"/admin/investigations/{rid}/cancel")
 
 
@@ -187,3 +190,30 @@ def test_question_form_resumes_the_run_with_decisions(client, monkeypatch, tmp_p
                                                             "reply": "cap it"})
     html = wait_page(client, rid, "id=final")
     assert "Reviewer replied (decisions: IT-3: approve_capped)" in html and "Noted, done." in html
+
+
+def test_approval_is_attributed_to_the_signed_in_reviewer(client, monkeypatch, tmp_path):
+    """The worker never sees the login: the reviewer ID has to travel with the answer, all the way into
+    the audit log, where graph.decide() reads answer["reviewer"]."""
+    log = tmp_path / "audit.jsonl"
+    monkeypatch.setenv("REIMBURSE_AUDIT_LOG", str(log))
+    monkeypatch.setenv("DEMO_PASSWORD", "correct-horse-battery-staple")
+    monkeypatch.setenv("REIMBURSE_DEMO_SESSION_KEY", "test-session-key-not-a-secret")
+    use_script(monkeypatch, tmp_path, [WRITE,
+        {"tool_calls": [{"name": "get_outbox", "args": {}, "id": "o1"}]}, {"content": "status set"}])
+    r = client.post("/login", data={"password": "correct-horse-battery-staple", "reviewer": "EMP-100",
+                                    "next": "/admin"}, follow_redirects=False)
+    assert r.status_code == 303
+
+    rid = start(client)
+    wait_page(client, rid, "id=pending")
+    client.post(f"/admin/investigations/{rid}/resume",
+                data={"approved": "true", "approval_id": pending_id(rid)})
+    html = wait_page(client, rid, "id=final")
+    assert "Reviewer approved" in html
+
+    events = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines() if line.strip()]
+    approvals = [e for e in events if e["event_type"] == "approval"]
+    assert approvals, events
+    assert all(e["actor"] == "human:EMP-100" for e in approvals)
+

@@ -745,5 +745,61 @@
         "receipt": false
       }
     ]
+  },
+  {
+    "id": "CLM-2026-0120",
+    "employee_id": "EMP-101",
+    "status": "submitted",
+    "submitted_at": "2026-10-24",
+    "purpose": "Site review at the Makassar warehouse (fictional)",
+    "trip": {
+      "origin": "Jakarta",
+      "destination": "Makassar",
+      "start_date": "2026-10-22",
+      "end_date": "2026-10-24"
+    },
+    "items": [
+      {
+        "id": "IT-1",
+        "category": "flight",
+        "date": "2026-10-22",
+        "description": "CGK-UPG flight ID 6330",
+        "amount": "1850000",
+        "receipt": true,
+        "boarding_pass": true,
+        "flight_no": "ID 6330",
+        "leg": "outbound",
+        "receipt_no": "ID-TKT-4471"
+      },
+      {
+        "id": "IT-2",
+        "category": "hotel",
+        "date": "2026-10-22",
+        "description": "Hotel Pantai Losari, 2 nights",
+        "amount": "1900000",
+        "nights": 2,
+        "receipt": true,
+        "receipt_no": "HPL-3308"
+      },
+      {
+        "id": "IT-3",
+        "category": "per_diem",
+        "date": "2026-10-22",
+        "description": "Per diem 3 days",
+        "amount": "1050000",
+        "days": 3,
+        "receipt": false
+      },
+      {
+        "id": "IT-4",
+        "category": "taxi",
+        "date": "2026-10-23",
+        "description": "Taxi to the warehouse",
+        "amount": "175000",
+        "receipt": true,
+        "receipt_no": "TX-4471"
+      }
+    ],
+    "batch": "2026-W44"
   }
 ]
