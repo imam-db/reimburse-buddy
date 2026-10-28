@@ -287,6 +287,33 @@ def test_10_unknown_words_still_default_to_indonesian():
     assert E.detect_lang("wkwk") == "id" and E.detect_lang("status") == "id"
 
 
+# --- ADR 0005 P1.3: no silent truncation --------------------------------------------------------------
+def svc_with_claims(emp, total):
+    d = Data()
+    own = [c for c in d.store.claims if c["employee_id"] == emp]
+    for n in range(total - len(own)):
+        extra = copy.deepcopy(own[0])
+        extra["id"] = f"CLM-2026-9{n:03d}"
+        d.store.claims.append(extra)
+    return QAService(d, log=JsonlAuditLog(), render=render, employees=d.store.employees, config=QAConfig())
+
+
+def test_11_extra_claims_are_announced_not_silently_dropped():
+    s = svc_with_claims(B, 4)
+    own = [c["id"] for c in s.data.claims() if c["employee_id"] == B]
+    r = ask(s, B, "Status klaim saya?")
+    assert len(own) == 4 and own[3] not in r["answer"], r
+    assert "1 klaim lain tidak ditampilkan; buka klaimnya untuk detail." in r["answer"], r
+
+
+def test_11_english_note_and_no_note_when_every_claim_fits():
+    r = ask(svc_with_claims(B, 4), B, "What is my claim status?")
+    assert "1 more claim not shown; open a claim for details." in r["answer"], r
+    assert "klaim lain tidak ditampilkan" not in ask(svc(), B, "Status klaim saya?")["answer"]
+    assert "klaim lain tidak ditampilkan" not in ask(svc_with_claims(B, 4), B, "Status klaim ini?",
+                                                      ctx=B_CLAIM)["answer"]
+
+
 # --- 7. amounts and other post-generation guards ------------------------------------------------------
 QUESTIONS = ["Plafon hotel di Surabaya berapa?", "Klaim saya kurang apa?", "Kenapa klaim saya ditahan?",
              f"Tolong cek {B_CLAIM}", "What's the late checkout limit?", "Tampilkan semua klaim saya"]

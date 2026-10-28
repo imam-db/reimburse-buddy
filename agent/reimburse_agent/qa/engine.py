@@ -195,14 +195,20 @@ class OfflineQAModel:
         m = CLAIM_IN_TEXT.search(question)
         cid = m.group(0).upper() if m else context_claim_id
         if CHECK_RE.search(question) and not LIST_RE.search(question):
-            targets = [cid] if cid else [c["claim_id"] for c in json.loads(tools.call("my_claims"))["claims"]][:3]
+            claims = [] if cid else json.loads(tools.call("my_claims"))["claims"]
+            targets = [cid] if cid else [c["claim_id"] for c in claims][:3]
             parts = [self._check(json.loads(tools.call("my_claim_check", {"claim_id": t})), lang) for t in targets]
             if not parts:
                 return say(lang, f"Anda belum punya klaim. Hubungi {contact(rb)} bila perlu.",
                            f"You have no claims yet. Contact {contact(rb)} if needed.")
             if any(p is None for p in parts):
                 return self._not_found(lang, rb)
-            return "\n\n".join(parts) + "\n\n" + final_say(lang)
+            out = "\n\n".join(parts)
+            if not cid and len(claims) > len(targets):
+                n = len(claims) - len(targets)
+                out += "\n\n" + say(lang, f"{n} klaim lain tidak ditampilkan; buka klaimnya untuk detail.",
+                                    f"{n} more claim{'s' if n != 1 else ''} not shown; open a claim for details.")
+            return out + "\n\n" + final_say(lang)
         if LIST_RE.search(question):
             claims = json.loads(tools.call("my_claims"))["claims"]
             rows = "\n".join(f"- {c['claim_id']}: {c['destination']} {c['start_date']}–{c['end_date']} ({c['status']})" for c in claims)
