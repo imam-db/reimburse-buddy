@@ -8,12 +8,13 @@ from reimburse_web import app as web
 
 SAMPLES = Path(__file__).resolve().parents[1] / "web" / "sample_uploads"
 pytestmark = pytest.mark.skipif(shutil.which("tesseract") is None, reason="tesseract not installed")
-TRIP = dict(emp="EMP-001", purpose="Client visit", destination="Surabaya", start_date="2026-10-02", end_date="2026-10-04")
+TRIP = dict(purpose="Client visit", destination="Surabaya", start_date="2026-10-02", end_date="2026-10-04")
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(web, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", "EMP-001")  # gate off: the acting employee comes from the environment
     monkeypatch.delenv("REIMBURSE_EXTRACTOR", raising=False)
     web.reset_all()
     yield TestClient(web.app)

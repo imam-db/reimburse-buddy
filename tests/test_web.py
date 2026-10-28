@@ -9,6 +9,7 @@ HERO = "CLM-2026-0110"
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(web, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", "EMP-004")  # gate off: the acting employee comes from the environment
     web.reset_all()
     yield TestClient(web.app)
     web.reset_all()
@@ -48,12 +49,12 @@ def test_hero_reviewer_flow(client):
 
 
 def test_employee_submit_and_forward(client):
-    r = client.post("/employee/claims", data={"emp": "EMP-004", "purpose": "Vendor visit", "destination": "Bandung",
+    r = client.post("/employee/claims", data={"purpose": "Vendor visit", "destination": "Bandung",
                                               "start_date": "2026-10-20", "end_date": "2026-10-21",
                                               "items": "taxi, 2026-10-20, Station taxi, 150000, no"})
     assert "Submitted+CLM-2026-W001" in str(r.url) and "CLM-2026-W001" in r.text
     assert web.triage_claims(web.store, web.BATCH)["claims"] == 10  # web claims use their own batch
-    r = client.post("/employee/forward", data={"emp": "EMP-004", "subject": "Taxi receipt", "claim_id": "CLM-2026-W001",
+    r = client.post("/employee/forward", data={"subject": "Taxi receipt", "claim_id": "CLM-2026-W001",
                                                "att_type": "receipt", "item_id": "IT-1"},
                     files={"file": ("taxi.png", b"synthetic receipt", "image/png")})
     assert "File diteruskan" in r.text
@@ -63,12 +64,13 @@ def test_employee_submit_and_forward(client):
 
 
 def test_bad_item_line_rejected(client):
-    r = client.post("/employee/claims", data={"emp": "EMP-004", "purpose": "x", "destination": "Bandung",
+    r = client.post("/employee/claims", data={"purpose": "x", "destination": "Bandung",
                                               "start_date": "2026-10-20", "end_date": "2026-10-21", "items": "nonsense"})
     assert r.status_code == 400
 
 
-def test_employee_sees_finance_messages(client):
+def test_employee_sees_finance_messages(client, monkeypatch):
     client.post(f"/admin/claims/{HERO}/message", data={"subject": "Claim CLM-2026-0110: taxi receipt", "body": "Mohon kirim struk (IT-5)."})
-    assert "Mohon kirim struk" in client.get("/employee?emp=EMP-001").text
+    monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", "EMP-001")
+    assert "Mohon kirim struk" in client.get("/employee").text
     assert client.get("/admin/claims/CLM-NOPE").status_code == 404

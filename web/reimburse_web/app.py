@@ -412,9 +412,30 @@ Semua angka dan keputusan tetap di tangan Anda.</p></div>
 
 
 # --- employee side ------------------------------------------------------------
+def require_employee(request: Request) -> str:
+    """The acting employee for a POST under /employee, else 401. Never taken from the form."""
+    emp = auth.current_employee(request)
+    if not emp:
+        raise HTTPException(401, "Silakan masuk dulu / please sign in first")
+    return emp
+
+
+def owned_claim(cid: str, emp: str) -> dict:
+    """The claim if `emp` owns it; someone else's claim is a 404 exactly like a missing one."""
+    try:
+        claim = store.get_claim(cid)
+    except KeyError:
+        raise HTTPException(404, f"Unknown claim {cid}")
+    if claim["employee_id"] != emp:
+        raise HTTPException(404, f"Unknown claim {cid}")
+    return claim
+
+
 @app.get("/employee", response_class=HTMLResponse)
-def employee_page(emp: str = "EMP-001", msg: str = ""):
-    staff = [x for x in store.employees if x.get("role", "staff") != "manager" and not x["id"].startswith("EMP-1")]
+def employee_page(request: Request, msg: str = ""):
+    emp = auth.current_employee(request)
+    if not emp:
+        return page("Employee portal", auth.sign_in_notice())
     me = store.get_employee(emp)
     claims = [c for c in store.claims if c["employee_id"] == emp]
     rows = "".join(
@@ -429,13 +450,11 @@ def employee_page(emp: str = "EMP-001", msg: str = ""):
     fwd_rows = "".join(f"<tr><td>{e(m['date'])}</td><td>{e(m['subject'])}</td>"
                        f"<td>{e(', '.join(a['name'] for a in m.get('attachments', [])))}</td></tr>" for m in fwd)
     body = f"""
-<form method="get" action="/employee"><label>Signed in as (simulated):
-<select name="emp" aria-label="Pilih karyawan" onchange="this.form.submit()">{options([(x['id'], x['name']) for x in staff], emp)}</select></label></form>
 {f'<p class="tag ok">{e(msg)}</p>' if msg else ''}
 <h2>My claims</h2><div class="table-wrap"><table><tr><th>ID</th><th>Purpose</th><th>Trip</th><th class=num>Claimed</th><th>Status</th></tr>{rows}</table></div>
 <h2>Messages from finance</h2>{'<div class="table-wrap"><table><tr><th>Claim</th><th>Subject</th><th>Body</th></tr>' + msgs + '</table></div>' if msgs else '<p class=note>No messages yet.</p>'}
 <div class="box"><h2>New claim</h2><p>Drop all your receipts and boarding passes at once; we draft the items for you.</p>
-<p><a class="btn" href="/employee/new?emp={e(emp)}">Start a new claim</a></p></div>
+<p><a class="btn" href="/employee/new">Start a new claim</a></p></div>
 <h2>Forwarded to the reimburse mailbox</h2><div class="table-wrap"><table><tr><th>Date</th><th>Subject</th><th>Attachments</th></tr>{fwd_rows}</table></div>
 <p class="note">Employee: {e(me['name'])} &middot; {e(me['email'])}</p>"""
     return page("Employee portal", body)
@@ -471,9 +490,9 @@ def parse_amount(text: str) -> Decimal:
 
 
 @app.post("/employee/claims")
-def submit_claim(emp: str = Form(...), purpose: str = Form(...), destination: str = Form(...),
+def submit_claim(request: Request, purpose: str = Form(...), destination: str = Form(...),
                  start_date: str = Form(...), end_date: str = Form(...), items: str = Form(...)):
-    store.get_employee(emp)
+    emp = require_employee(request)
     parsed = []
     for n, line in enumerate([x for x in items.splitlines() if x.strip()], 1):
         m = ITEM_RE.match(line)
@@ -501,13 +520,14 @@ def submit_claim(emp: str = Form(...), purpose: str = Form(...), destination: st
                          "purpose": purpose, "trip": {"origin": "Jakarta", "destination": destination,
                                                       "start_date": start_date, "end_date": end_date},
                          "items": parsed, "batch": WEB_BATCH})
-    return RedirectResponse(f"/employee?emp={emp}&msg=Submitted+{cid}", status_code=303)
+    return RedirectResponse(f"/employee?msg=Submitted+{cid}", status_code=303)
 
 
 @app.post("/employee/forward")
-async def forward_evidence(emp: str = Form(...), subject: str = Form(...), claim_id: str = Form(""),
+async def forward_evidence(request: Request, subject: str = Form(...), claim_id: str = Form(""),
                            att_type: str = Form("receipt"), item_id: str = Form(""), flight: str = Form(""),
                            att_date: str = Form(""), body: str = Form(""), file: UploadFile | None = File(None)):
+    emp = require_employee(request)
     me = store.get_employee(emp)
     mid = f"MSG-W{len([m for m in store.inbox if m['id'].startswith('MSG-W')]) + 1:03d}"
     att = None
@@ -529,7 +549,7 @@ async def forward_evidence(emp: str = Form(...), subject: str = Form(...), claim
     store.inbox.append({"id": mid, "owner_id": emp, "from": me["email"], "date": date.today().isoformat(),
                         "subject": subject, "body": body, "attachments": [att] if att else [],
                         "mailbox": MAILBOX, "forwarded_by": me["email"]})
-    return RedirectResponse(f"/employee?emp={emp}&msg=File+diteruskan", status_code=303)
+    return RedirectResponse("/employee?msg=File+diteruskan", status_code=303)
 
 
 # --- finance admin side --------------------------------------------------------

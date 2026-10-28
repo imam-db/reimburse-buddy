@@ -24,6 +24,7 @@ HERO = "CLM-2026-0110"
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(web, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", "EMP-001")  # gate off: the acting employee comes from the environment
     monkeypatch.delenv("EMPLOYEE_QA", raising=False)
     web.reset_all()
     yield TestClient(web.app)
@@ -60,10 +61,12 @@ def test_status_tag_is_not_colour_only():
     assert ">! Perlu tindakan<" in web.status_tag("needs_action")
 
 
-def test_employee_evidence_status_uses_icons(client):
+def test_employee_evidence_status_uses_icons(client, monkeypatch):
+    monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", web.store.get_claim("CLM-2026-0102")["employee_id"])
     complete = client.get("/employee/claims/CLM-2026-0102").text
     assert "✓ Beres" in complete
 
+    monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", web.store.get_claim(HERO)["employee_id"])
     missing = client.get(f"/employee/claims/{HERO}").text
     assert "! Perlu tindakan:" in missing
     assert "Boarding pass belum ada" in missing
@@ -164,7 +167,7 @@ class _FakeRun:
 
 
 def _employee_draft(client) -> str:
-    r = client.post("/employee/drafts", data={"emp": "EMP-001", "purpose": "Client visit",
+    r = client.post("/employee/drafts", data={"purpose": "Client visit",
                                               "destination": "Surabaya", "start_date": "2026-10-02",
                                               "end_date": "2026-10-04"}, follow_redirects=False)
     assert r.status_code == 303

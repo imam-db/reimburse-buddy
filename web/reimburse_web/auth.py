@@ -154,6 +154,35 @@ def session_of(request) -> Session | None:
     return parse(raw)
 
 
+DEV_EMPLOYEE_ENV = "REIMBURSE_DEV_EMPLOYEE"  # DEV ONLY: acts as this employee when the login gate is off
+
+
+def current_employee(request) -> str | None:
+    """The one source of the acting employee on the employee pages; never read from a query or a form.
+
+    Gate on: the signed session's employee_id (any role acts as its own employee_id). Gate off (dev, tests):
+    REIMBURSE_DEV_EMPLOYEE, stripped, and only when that employee exists in the store. None when nobody acts."""
+    if enabled():
+        sess = session_of(request)
+        return sess.reviewer if sess else None
+    emp = os.environ.get(DEV_EMPLOYEE_ENV, "").strip()
+    if not emp:
+        return None
+    from . import app as web  # lazy: app.py imports this module
+    try:
+        web.store.get_employee(emp)
+    except KeyError:
+        return None
+    return emp
+
+
+def sign_in_notice() -> str:
+    """Shown on an employee page when nobody is acting."""
+    if enabled():
+        return "<p>Silakan <a href='/login'>masuk</a> sebagai karyawan. / Please <a href='/login'>sign in</a> as an employee.</p>"
+    return (f"<p class='demo'><b>DEV ONLY</b>: the login gate is off; set {DEV_EMPLOYEE_ENV}=EMP-xxx to act as an employee.</p>")
+
+
 def reviewer_of(request) -> str:
     """Who is acting: the signed-in employee_id, else FALLBACK_REVIEWER when the gate is off."""
     session = session_of(request)

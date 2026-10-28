@@ -9,7 +9,8 @@ def _file(amount):
             "extract": {"fields": {"amount": {"value": amount}, "date": {"value": None}}}}
 
 
-def test_forward_uses_extracted_amount_and_employee_sees_review():
+def test_forward_uses_extracted_amount_and_employee_sees_review(monkeypatch):
+    monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", "EMP-001")
     web.reset_all()
     try:
         cid = "CLM-2026-0110"

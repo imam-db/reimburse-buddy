@@ -24,7 +24,7 @@ from reimburse_agent.qa import engine as qa_engine  # noqa: E402
 from reimburse_agent.qa.tools import Session  # noqa: E402
 
 router = APIRouter()
-DEV_EMPLOYEE_ENV = "REIMBURSE_DEV_EMPLOYEE"  # DEV ONLY: acts as this employee when the login gate is off
+DEV_EMPLOYEE_ENV = auth.DEV_EMPLOYEE_ENV
 STATE: dict = {}  # service, history per session id
 QUICK = (("Apa yang kurang?", "Apa yang kurang? / What's missing?"), ("Berapa plafon hotel?", "Berapa plafon hotel? / Hotel cap?"))
 
@@ -52,23 +52,20 @@ def service() -> qa_engine.QAService:
 
 
 def session_of(request: Request) -> Session | None:
-    """The signed-in employee, or None. Reviewer and finance sessions have no employee Q&A identity.
+    """The acting employee (auth.current_employee: the login session, or REIMBURSE_DEV_EMPLOYEE with the gate off).
 
-    DEV ONLY: with the login gate off, REIMBURSE_DEV_EMPLOYEE names the employee (one fixed session id).
-    Once the gate is on this fallback is ignored, so it can never override a real login."""
-    if auth.enabled():
-        sess = auth.session_of(request)
-        if sess is None or sess.role != "employee":
-            return None
-        return Session(sess.reviewer, sess.nonce)
-    emp = os.environ.get(DEV_EMPLOYEE_ENV, "").strip()
-    return Session(emp, "dev") if emp else None
+    Q&A stays employee-only: a reviewer or finance session has no Q&A identity."""
+    emp = auth.current_employee(request)
+    if not emp:
+        return None
+    if not auth.enabled():
+        return Session(emp, "dev")
+    sess = auth.session_of(request)
+    return Session(emp, sess.nonce) if sess.role == "employee" else None
 
 
 def _sign_in_notice() -> str:
-    if auth.enabled():
-        return "<p>Silakan <a href='/login'>masuk</a> sebagai karyawan. / Please <a href='/login'>sign in</a> as an employee.</p>"
-    return (f"<p class='demo'><b>DEV ONLY</b>: the login gate is off; set {DEV_EMPLOYEE_ENV}=EMP-xxx to act as an employee.</p>")
+    return auth.sign_in_notice()
 
 
 CSS = """.qa{border:2px solid #3a7bd5;border-radius:10px;padding:12px 16px;margin:16px 0;background:#f6f9ff}
