@@ -207,7 +207,7 @@ uv run --no-dev reimburse-buddy-mcp   # starts the server on stdio (WorkBuddy no
 ```bash
 uv sync && (cd agent && uv sync)
 export DEEPSEEK_API_KEY=...   # only for "Selidiki dengan agent"; never commit it
-export DEMO_PASSWORD='...'    # 12+ characters; without it the demo login is off outside production
+export REIMBURSE_AUTH_DATABASE_URL=...   # app_users table (migration 007); unset outside production = login off
 EMPLOYEE_QA=1 uv run uvicorn --app-dir web reimburse_web.app:app --port 8000
 # open http://127.0.0.1:8000/ (sign in at /login)
 ```
@@ -215,24 +215,38 @@ EMPLOYEE_QA=1 uv run uvicorn --app-dir web reimburse_web.app:app --port 8000
 Without a model key everything except the agent investigation works: triage, claim pages, request
 intake and plan confirmation, and employee Q&A (offline router) need no LLM.
 
-### Demo password
+### Login (email + password)
 
-One shared password closes the whole app. With `DEMO_PASSWORD` set, every route except `/login`,
-`/logout` and `/healthz` needs the signed `rb_auth` cookie: a browser navigation is redirected to the
-form, anything else gets `401`. The form also picks which synthetic reviewer the session acts as
-(`EMP-100` by default, `EMP-101` and `EMP-102` Finance the others), which is what makes a self-approval
-refusable.
+Accounts live in the Postgres table `app_users` (`agent/migrations/007_app_users.sql`): `employee_id`
+(matches `data/employees.json`), lowercase `email`, a scrypt `password_hash`
+(`scrypt$n$r$p$salt$hash`, stdlib `hashlib.scrypt`), `role` (`employee`, `reviewer`, `finance`),
+`is_active`. The app role can only `SELECT` and `UPDATE (last_login_at)`. With the gate on, every route
+except `/login`, `/logout` and `/healthz` needs the signed `rb_auth` cookie: a browser navigation is
+redirected to the form, anything else gets `401`. `reviewer` and `finance` open the admin pages; an
+`employee` is sent to `/employee/claims` and gets `403` on anything else.
 
-- Session: `issued_at|reviewer|nonce` plus an HMAC, 12 hours, `httponly`, `samesite=lax`, `secure` in
-  production, checked on every request.
-- Five wrong passwords per IP per minute; after that the form refuses even the right one. Failures are
-  written to the audit log as `access_denied` (`run_id=auth`, actor `system`, `payload.reason`), one
-  event per IP and minute, without the password or the IP in clear.
+- Session: `issued_at|employee_id|role|nonce` plus an HMAC, 12 hours, `httponly`, `samesite=lax`,
+  `secure` in production, checked on every request. `auth.reviewer_of` returns the employee_id, which is
+  what makes a self-approval refusable.
+- One message for every failure (unknown email, wrong password, inactive account): "Email atau kata
+  sandi salah." An unknown email still runs a hash check against a dummy hash, so timing does not leak.
+- Five failures per IP per minute; after that the form refuses even the right password. Failures are
+  written to the audit log as `access_denied` (`run_id=auth`, actor `system`,
+  `payload.reason=bad_credentials`), one event per IP and minute, without the email, password or IP.
 - `next=` only accepts a local path, so the form cannot be used as an open redirect.
 - `GET /healthz` answers `ok` without touching the audit log, the store or the LLM.
-- Outside production an unset `DEMO_PASSWORD` turns the gate off, so local runs and the test suite
-  behave as before. In production a missing or short password, or an unset
-  `REIMBURSE_DEMO_SESSION_KEY`, stops startup with `auth.AuthConfigError`.
+- Outside production the gate is on only when a user DSN is set (`REIMBURSE_AUTH_DATABASE_URL`, else
+  `REIMBURSE_AUDIT_DATABASE_URL`); otherwise it is off, so local runs and the test suite behave as
+  before. In production a missing DSN, an unreachable database or an unset
+  `REIMBURSE_DEMO_SESSION_KEY` stops startup with `auth.AuthConfigError`.
+
+Create the table and the accounts (owner role, never from the app; the passwords are prompted with
+`getpass`, never passed as arguments):
+
+```bash
+psql "$OWNER_DATABASE_URL" -f agent/migrations/007_app_users.sql
+uv run python -m reimburse_web.seed_users --dsn "$OWNER_DATABASE_URL" --employee EMP-100 --role reviewer
+```
 
 ### Who may approve
 
@@ -331,8 +345,8 @@ Secrets come from the environment (or a git-ignored `.env.local`) and are never 
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `APP_ENV` | unset | `prod` / `production` requires a Postgres audit log, a demo password, a session key and the LLM budget with its prices; refuses JSONL or memory |
-| `DEMO_PASSWORD` | unset | Shared demo password, 12+ characters (secret). Unset outside production means the login gate is off; unset in production aborts startup |
+| `APP_ENV` | unset | `prod` / `production` requires a Postgres audit log, a user database, a session key and the LLM budget with its prices; refuses JSONL or memory |
+| `REIMBURSE_AUTH_DATABASE_URL` | audit DSN | Postgres DSN for `app_users` (secret; app role). Falls back to `REIMBURSE_AUDIT_DATABASE_URL`. Unset outside production means the login gate is off; unset in production aborts startup |
 | `REIMBURSE_DEMO_SESSION_KEY` | random per process | HMAC key for the demo session cookies (`rb_auth`, `rb_demo_session`); required in production, set it in any shared deploy (secret) |
 | `REIMBURSE_AUDIT_DATABASE_URL` | unset | Postgres DSN for the audit log (secret; app role, Neon direct endpoint) |
 | `REIMBURSE_AUDIT_LOG` | unset | JSONL audit log path outside production; unset means in memory |
@@ -376,7 +390,7 @@ Production refuses JSONL and in-memory audit logs. When `APP_ENV` is `prod` or `
 ```bash
 export APP_ENV=prod
 export REIMBURSE_AUDIT_DATABASE_URL='postgresql://user:pass@db.example:5432/reimburse'
-export DEMO_PASSWORD='...'                 # 12+ characters (secret)
+export REIMBURSE_AUTH_DATABASE_URL='...'    # optional: defaults to the audit DSN (secret)
 export REIMBURSE_DEMO_SESSION_KEY='...'    # stable HMAC key (secret)
 export LLM_DAILY_BUDGET_USD=2.00           # cap for the whole deployment, per Asia/Jakarta day
 export LLM_PRICE_INPUT_MISS_PER_MTOK=...   # from the provider's pricing page on the day you deploy
@@ -391,7 +405,7 @@ export LLM_PRICE_OUTPUT_PER_MTOK=...
   `REIMBURSE_AUDIT_LOG` (JSONL) or the in-memory log.
 - The web app checks this in its FastAPI startup hook, so it fails before serving the first request.
   `agent/investigate_worker.py` checks it before running, and `audit.default_log()` enforces it too.
-- Production startup also refuses a missing `DEMO_PASSWORD` (or one shorter than 12 characters), a
+- Production startup also refuses a missing or unreachable user database (`app_users`), a
   missing `REIMBURSE_DEMO_SESSION_KEY` and a missing `LLM_DAILY_BUDGET_USD` or token price
   (`auth.AuthConfigError` / `spend.SpendConfigError`), so a deploy cannot come up with every route open
   or able to spend without a cap.
@@ -443,7 +457,7 @@ HTTP route for this: the web simulation has no admin authentication, so it is CL
 ## Project layout
 
 ```
-web/reimburse_web/      version B web app (FastAPI): app.py, auth.py (demo password), intake.py, plans.py,
+web/reimburse_web/      version B web app (FastAPI): app.py, auth.py + users.py (login), intake.py, plans.py,
                         plan_state.py (plan store + checkpointer backend), qa.py, upload_flow.py,
                         agent_bridge.py (starts the agent worker), spend.py (daily LLM budget),
                         labels.py (Indonesian UI labels)
