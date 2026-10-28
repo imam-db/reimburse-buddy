@@ -201,7 +201,12 @@ def make_pool(dsn: str):
     `prepare_threshold=None` keeps psycopg from creating server-side prepared statements, which is what
     makes a pooler (Neon's `-pooler` endpoint) safe; audit.py and spend.py connect the same way.
     """
-    from psycopg_pool import ConnectionPool
+    try:
+        from psycopg_pool import ConnectionPool
+    except ImportError as exc:
+        raise StoreConfigError(
+            "REIMBURSE_PLAN_BACKEND=postgres needs psycopg-pool: install the root 'web' group "
+            "(uv sync) or `pip install psycopg-pool`.") from exc
 
     return ConnectionPool(dsn, min_size=1, max_size=4, timeout=10.0, open=True,
                           check=ConnectionPool.check_connection,
