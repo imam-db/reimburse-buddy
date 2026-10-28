@@ -18,7 +18,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from . import auth
+from . import auth, plan_state
 from .agent_bridge import AGENT_DIR
 from .labels import label
 
@@ -29,14 +29,15 @@ from reimburse_agent import audit  # noqa: E402
 from reimburse_agent.office import page  # noqa: E402
 from reimburse_agent.office import rules as R  # noqa: E402
 from reimburse_agent.office.directory import Directory  # noqa: E402
-from reimburse_agent.office.store import FilePlanStore  # noqa: E402
+from reimburse_agent.office.store import PlanStore  # noqa: E402
 
 router = APIRouter()
 STATE: dict = {}
 
 
-def store() -> FilePlanStore:
-    return STATE.setdefault("store", FilePlanStore())
+def store() -> PlanStore:
+    """The plan store of this process: a directory by default, Postgres when the backend says so."""
+    return STATE.setdefault("store", plan_state.store())
 
 
 def log() -> audit.AuditLog:
@@ -170,7 +171,7 @@ def plans_index():
 
 
 @router.get("/admin/plans/{run_id}", response_class=HTMLResponse)
-def plan_page(run_id: str, request: Request, msg: str = ""):
+def plan_page(run_id: str, request: Request, msg: str = "", stale: int = 0):
     from . import intake  # late import: intake.py imports this module
 
     question = intake.pending_for(run_id)
@@ -194,7 +195,8 @@ def plan_page(run_id: str, request: Request, msg: str = ""):
     markup = page.render(plan, log(), directory(), R.default_rules(),
                          action_url=f"/admin/plans/{run_id}/decide", msg=msg, allow_approve=block is None,
                          blocked_note=(label("self_approval_submitted_note") if block == "submitted_by"
-                                       else None))
+                                       else None),
+                         stale=bool(stale))
     markup = markup.replace("</head>", f"<style>{web.NAV_CSS}</style></head>", 1)
     return HTMLResponse(markup.replace("<body>", f"<body>{web.nav_html()}", 1))
 
@@ -227,5 +229,9 @@ async def decide(run_id: str, request: Request):
 
     # When this process started the run (request intake), resume it here: approval -> executor -> mock
     # tools. Otherwise the decision map is only stored, for an external driver such as plan_demo.py.
-    intake.resume_if_live(run_id, dict(decision))
+    #
+    # A run the intake started whose thread is gone (a restart without a shared checkpointer) must not be
+    # reported as saved: the plan will never execute. The page says so and offers "Jalankan ulang".
+    if intake.resume_if_live(run_id, dict(decision)) == intake.CANNOT_RESUME:
+        return RedirectResponse(f"/admin/plans/{run_id}?stale=1", status_code=303)
     return RedirectResponse(f"/admin/plans/{run_id}?msg=Keputusan+disimpan+/+decisions+saved", status_code=303)

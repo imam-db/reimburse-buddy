@@ -30,7 +30,7 @@ from reimburse_buddy.models import rupiah
 from reimburse_buddy.rules import check_claim
 from reimburse_buddy.triage import approve_cleared_batch, triage_claims
 
-from . import auth, spend
+from . import auth, plan_state, spend
 from .agent_bridge import NO_KEY_MESSAGE, Investigator, RateLimited, key_configured
 from .intake import router as intake_router
 from .labels import label, person
@@ -49,9 +49,11 @@ UPLOAD_DIR = Path(os.environ.get("REIMBURSE_WEB_UPLOADS", Path(__file__).resolve
 
 # Startup order matters: refuse a production deployment without a Postgres audit log before doing any
 # work, then one without a demo password / session key, then one that cannot cap or charge a model call,
-# then run the one-per-process expiry sweep (agent workers opening the log never sweep).
+# then one whose plan store or checkpoint tables are unusable (REIMBURSE_PLAN_BACKEND=postgres), and
+# finally run the one-per-process expiry sweep (agent workers opening the log never sweep).
 app = FastAPI(title="reimburse-buddy web simulation",
-              on_startup=[startup_config_check, auth.startup_check, spend.startup_check, startup_sweep])
+              on_startup=[startup_config_check, auth.startup_check, spend.startup_check,
+                          plan_state.startup_check, startup_sweep])
 app.include_router(plans_router)
 app.include_router(intake_router)
 app.include_router(qa_router)

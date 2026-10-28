@@ -42,6 +42,10 @@ STATUS_LABELS = {"execution": "Dijalankan", "rejection": "Ditolak", "approval": 
 EXPIRED_REASON_ID = {"not answered before the deadline": "tidak dijawab sebelum batas waktu",
                      "server restarted before an answer": "server dimulai ulang sebelum ada jawaban"}
 EXPIRED_FALLBACK_ID = "tidak dijawab sebelum batas waktu"
+# Shown when a run cannot be resumed at all: the checkpointer has no thread for it, so the open question or
+# the pending approval is gone. Nothing can be approved on this page; the way forward is a new run from the
+# stored request ("Jalankan ulang").
+STALE_TEXT = "Rencana ini tidak bisa dilanjutkan setelah server dimulai ulang. Gunakan Jalankan ulang."
 DAYS_ID = ("Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu")
 MONTHS_ID = ("", "Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des")
 
@@ -93,11 +97,15 @@ def _person(directory: Directory, emp: str) -> str:
 
 
 def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, action_url: str | None = None,
-           msg: str = "", allow_approve: bool = True, blocked_note: str | None = None) -> str:
+           msg: str = "", allow_approve: bool = True, blocked_note: str | None = None,
+           stale: bool = False) -> str:
     """The confirmation page. `allow_approve=False` disables the Approve control (the requester, or the
     reviewer who submitted the request, may not approve it): the radio is rendered disabled so the form
     cannot submit "approve", and a note explains why (`blocked_note` overrides the default wording).
-    Reject stays available. Presentation only: the gate in plan_graph still decides."""
+    Reject stays available. Presentation only: the gate in plan_graph still decides.
+
+    `stale=True` means the run cannot be resumed at all (no thread in the checkpointer after a restart): the
+    page says so, drops the decision form and offers "Jalankan ulang" instead."""
     log_notices_shown(plan, log)
     events = log.list(plan["run_id"])
     run = e(plan["run_id"])
@@ -131,6 +139,13 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
                    " / No action can be approved anymore; start a new plan from the Plans page.</p>"
                    f"<form method='post' action='/admin/intake/rerun/{run}'>"
                    "<button class='btn' type='submit' id='rerun'>Jalankan ulang</button></form></div>")
+    if stale:
+        out.append("<div class='expired' id='plan-stale'><b>Rencana ini tidak bisa dilanjutkan</b>"
+                   f"<p>{e(STALE_TEXT)}</p>"
+                   "<p>Tidak ada tindakan yang bisa disetujui di halaman ini. / Nothing can be approved on "
+                   "this page.</p>"
+                   f"<form method='post' action='/admin/intake/rerun/{run}'>"
+                   "<button class='btn' type='submit' id='rerun'>Jalankan ulang</button></form></div>")
     if refused:
         errors = "".join(f"<li>{e(x)}</li>" for x in plan["staging_errors"])
         out.append("<div class='expired' id='plan-refused'><b>Rencana tidak dibuat / Plan not staged</b>"
@@ -154,7 +169,7 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
     by_action: dict[str, list[dict]] = {}
     for a in plan.get("assumptions", []):
         by_action.setdefault(a.get("action_id", ""), []).append(a)
-    form = action_url is not None and not expired and not refused
+    form = action_url is not None and not expired and not refused and not stale
     if form:
         out.append(f"<form method=post action='{e(action_url)}'><input type=hidden name=plan_id value='{e(plan['plan_id'])}'>")
     for i, a in enumerate([] if refused else plan["actions"], 1):
