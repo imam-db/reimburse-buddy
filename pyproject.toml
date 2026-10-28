@@ -35,3 +35,4 @@ packages = ["src/reimburse_buddy"]
 testpaths = ["tests"]
 pythonpath = ["web"]
 asyncio_mode = "auto"
+markers = ["postgres: plan state and checkpoints against a real Postgres (needs DATABASE_URL; skipped otherwise)"]
