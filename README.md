@@ -65,20 +65,22 @@ Source: [docs/agent-how-it-works.excalidraw](docs/agent-how-it-works.excalidraw)
 
 ### What the evaluation shows so far (synthetic data, small n, no LLM runs in this round)
 
-Retrieval was the bottleneck. With the whole mailbox in hand the no-LLM baseline passes all 19 hard cases (0 unsafe, 0 false approvals) and 4/5 on each large set; with BM25 ranking only it passes 17/19 (cases 11 and 12 need the paraphrase) and 1/5 and 2/5. What the LLM adds is so far untested and is measured on the reasoning track.
+Retrieval was the bottleneck. With the whole mailbox in hand the no-LLM baseline passes all 19 hard cases (0 unsafe, 0 false approvals) and 5/5 on each large set; with BM25 ranking only it passes 17/19 (cases 11 and 12 need the paraphrase) and 2/5 and 3/5. What the LLM adds is so far untested and is measured on the reasoning track.
 
-| suite (baseline, 1 run, $0) | ranked (BM25+embedding) | BM25 only | whole mailbox, unranked (control) |
+| suite (baseline, $0) | ranked (BM25+embedding), 5 runs | BM25 only, 1 run | whole mailbox, unranked (control), 1 run |
 |---|---|---|---|
-| hard, 19 cases | 19/19 | 17/19 (11, 12 fail) | 19/19 |
-| large set A (tuning), 5 | 2/5 | 1/5 | 4/5 |
-| large set B (held out), 5 | 2/5 | 2/5 | 4/5 |
-| reasoning track, 11 | 8/11 (1 false approval) | 8/11 | 8/11 (1 false approval) |
+| hard, 19 cases | 93/95 (18 cases 5/5, case 13 3/5) | 17/19 (11, 12 fail) | 19/19 |
+| large set A (tuning), 5 | 14/25 (A-slang_reply 4/5, A-reschedule_later and A-quoted 0/5) | 2/5 | 5/5 |
+| large set B (held out), 5 | 10/25 (B-slang_reply, B-reschedule_later, B-quoted 0/5) | 3/5 | 5/5 |
+| reasoning track, 11 | 50/55 (R1x 0/5, one false approval per run) | 10/11 (R1c) | 10/11 (R1x, 1 false approval) |
 
-Run 2026-10-27 on this branch, all three columns (`agent/eval/results/*-20261027T23*.json`; the eval sources are unchanged since `cc430d2`). Against the 25 Oct run the large sets lose 1 case per column and the reasoning track loses 1 case while halving its false approvals; the hard set goes from 17/19 to 19/19 because two scoring bugs were fixed (see `docs/regression-hard-eval.md`). The large-set and reasoning drop is not from this branch — the same command at `27b2934` gives the same 4/5 on large set A — it comes from the gate changes merged in between (every evidence request waits for the reviewer, gate and executor split apart), which is exactly why the baseline is re-run whenever a gate changes.
+Run 2026-10-28 on this branch (`agent/eval/results/*-20261028T0*.json`). The ranked column is five runs per case, not one: case 13 passes 3 times in 5, so a single run reports 19/19 or 18/19 depending on the draw, and the same case is what makes `test_ranked_baseline_on_heuristic_hard_cases[13-True]` fail now and then. The BM25 and whole-mailbox columns are single runs.
+
+Against the 25 Oct run the hard set goes from 17/19 to 19/19 (two scoring bugs, `docs/regression-hard-eval.md`), and large A, large B and the reasoning track each had one case that only failed because the scripted reviewer declined the evidence request that delivers the case's receipt. Those four cases now get a reviewer that grants a document request, and in whole-mailbox mode the two large sets are back to 5/5 and the reasoning track to 10/11. In ranked mode the receipts in those cases are not retrievable (the reply is "wkwk maap telat": no shared term with the item), so they depend on the graph's post-ask hold, which fires 4 times in 5 on set A and never on set B. That is a retrieval/hold limit, not a gate failure, and it is not fixed here.
 
 - The whole-mailbox control passes everything because every synthetic receipt and schedule change carries structured fields (`claim_id`, `item_id`, `meeting_update`) and the rule engine keeps only what matches. On these fixtures the loss comes from the top-5 cut, not from understanding. Real mail has no such tags.
 - Large sets (`agent/eval/large_fixtures.py`): 46-68 messages per employee over Aug-Oct 2026, hand-written paraphrases combined by a seeded RNG; set A and set B share no paraphrase. Needed message recall@5 / MRR (baseline query): set A lexical 0.2/0.2, ranked 0.2/0.12; set B lexical 0.4/0.12, ranked 0.2/0.15 (`agent/eval/retrieval_metrics.py`). Every large mailbox is flagged `possibly_incomplete` (the 36 probes reach 33-47 of 46-68 messages).
-- Reasoning track (`agent/eval/reasoning_fixtures.py`, labels in `fixtures/reasoning/labels.json`, to be reviewed by Imam): re-run after the PR #30 fix (meeting updates are applied by message date). The baseline no longer falsely approves R1 in either mode, but it still approves R1x (moved, then cancelled in free text) when it reads the whole mailbox: the cancellation is prose only, so the tag-based engine still sees a live move. R3 and R3c fail in both modes, R1c only under BM25 (its paraphrase is not lexically retrievable).
+- Reasoning track (`agent/eval/reasoning_fixtures.py`, labels in `fixtures/reasoning/labels.json`, to be reviewed by Imam): the PR #30 fix (meeting updates applied by message date) cleared R1, so the false approvals drop from two to one. The one left is R1x (moved, then cancelled in free text): the cancellation is prose only, `meeting_update` cannot express it, so the tag-based engine still sees a live move to 15:00-16:30 and approves the 16:00 checkout. Under BM25 R1x passes, but for the wrong reason — the cancellation message is not retrieved at all, so the agent routes it to the reviewer; that is luck, not understanding. R1c fails only under BM25 (its paraphrase is not lexically retrievable).
 - Results: `agent/eval/results/{hard,large_a,large_b,reasoning}-baseline*.json` and `retrieval-*.json`; each records a SHA-256 of the fixtures.
 
 ### Prepared, not yet run: model screening and an optional judge
