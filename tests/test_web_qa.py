@@ -158,3 +158,28 @@ def test_empty_state_hint_disappears_after_a_question(client):
     assert "Belum ada pertanyaan" in before and "No questions yet" in before
     client.post("/employee/qa", data={"question": "Berapa plafon hotel?", "claim_id": "CLM-2026-0101"})
     assert "Belum ada pertanyaan" not in client.get("/employee/claims/CLM-2026-0101").text
+
+
+def test_box_on_employee_portal(client):
+    login(client, "EMP-001")
+    html = client.get("/employee").text
+    assert "id='qa'" in html and "Ask about reimbursement" in html and "claim_id' value=''" in html
+    assert html.index("id='qa'") > html.index("CLM-2026-0101")
+
+
+def test_portal_box_absent_with_flag_off(client, monkeypatch):
+    monkeypatch.setenv("EMPLOYEE_QA", "0")
+    login(client, "EMP-001")
+    assert "id='qa'" not in client.get("/employee").text
+
+
+def test_portal_box_needs_session(client):
+    assert "id='qa'" not in client.get("/employee").text
+
+
+def test_ask_without_claim_lands_on_portal(client):
+    login(client, "EMP-001")
+    r = client.post("/employee/qa", data={"question": "Berapa plafon hotel?", "claim_id": ""}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/employee#qa"
+    r = client.get("/employee")
+    assert "POL-4" in r.text and "Belum ada pertanyaan" not in r.text

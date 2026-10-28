@@ -106,7 +106,8 @@ def _qa_box(sess: Session, cid: str) -> str:
         f"<div class='src'>Sumber / Sources: {escape(', '.join(r['sources']) or '-')}</div>" for q, r in hist[-6:])
     log = f"<div class='qa-log' id='qa-log' role='log' aria-live='polite'>{turns or EMPTY_HINT}</div>"
     quick = "".join(f"<button name='quick' value='{escape(v)}'>{escape(text)}</button> " for v, text in QUICK)
-    return (f"<div class='qa' id='qa'><h2>Tanya-jawab / Ask about this claim</h2>"
+    title = "Tanya-jawab / Ask about this claim" if cid else "Tanya-jawab reimburse / Ask about reimbursement"
+    return (f"<div class='qa' id='qa'><h2>{title}</h2>"
             f"<p class='note'>Hanya kebijakan dan klaim Anda sendiri. Jawaban tidak mengubah klaim; keputusan akhir ada di finance."
             f" / Policy and your own claims only; answers never change a claim.</p>{log}"
             # Two forms: pressing Enter in the text box must submit the text, not the first quick button.
@@ -114,6 +115,14 @@ def _qa_box(sess: Session, cid: str) -> str:
             f"<form method='post' action='/employee/qa' class='ask'><input type='hidden' name='claim_id' value='{escape(cid)}'>"
             f"<input type='text' name='question' aria-label='Pertanyaan' maxlength='500' placeholder='Tulis pertanyaan / Ask a question'>"
             f"<button>Tanya / Ask</button></form>{JS}</div>")
+
+
+def portal_box(request: Request) -> str:
+    """The Q&A box for the /employee portal (policy questions need no claim). "" with the flag off or no employee session."""
+    if not qa_engine.enabled():
+        return ""
+    sess = session_of(request)
+    return f"<style>{CSS}</style>{_qa_box(sess, '')}" if sess else ""
 
 
 @router.get("/employee/claims")
