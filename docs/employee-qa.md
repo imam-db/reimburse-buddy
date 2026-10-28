@@ -12,10 +12,10 @@ The feature is read-only: it never changes a claim and never promises an outcome
 | `REIMBURSE_QA_MAX_QUESTIONS` | 10 | Questions per session. After the cap the reply is a fixed "limit reached" message. |
 | `REIMBURSE_QA_MAX_TOKENS` | 300 | Per-answer cap. Passed to the model as `max_tokens`, and output is cut after generation. |
 | `REIMBURSE_QA_MODEL` | falls back to `REIMBURSE_AGENT_MODEL` | Set a cheap model here for the optional `LLMQAModel` adapter (`qa/llm.py`). Tests and the web demo use the offline router. |
-| `REIMBURSE_DEMO_SESSION_KEY` | random per process | HMAC key for the demo session cookie. |
+| `REIMBURSE_DEMO_SESSION_KEY` | random per process | HMAC key for the login session cookie. |
 
 ## Identity and permissions
-- The employee comes from the signed demo session cookie (`rb_demo_session`), set with the demo picker. It is never read from the message text.
+- The employee comes from the signed login session (`rb_auth`, role `employee`); there is no identity picker. With the login gate off (dev/tests, no user store) `REIMBURSE_DEV_EMPLOYEE=EMP-xxx` names the employee, a dev-only fallback ignored once the gate is on. It is never read from the message text.
 - No tool takes `employee_id`. Undeclared arguments are dropped and recorded.
 - If an employee asks about someone else's claim, `my_claim` returns the same bytes as for a claim that does not exist. The page `/employee/claims/{id}` returns 404 in both cases.
 - `my_claim_check` replaces the sensitive findings `duplicate_suspected`, `receipt_amount_mismatch` and `multiple_receipts` with "Sedang ditinjau finance" / "Under finance review". It also leaves out approvable and pending totals.

@@ -347,7 +347,7 @@ Secrets come from the environment (or a git-ignored `.env.local`) and are never 
 |---|---|---|
 | `APP_ENV` | unset | `prod` / `production` requires a Postgres audit log, a user database, a session key and the LLM budget with its prices; refuses JSONL or memory |
 | `REIMBURSE_AUTH_DATABASE_URL` | audit DSN | Postgres DSN for `app_users` (secret; app role). Falls back to `REIMBURSE_AUDIT_DATABASE_URL`. Unset outside production means the login gate is off; unset in production aborts startup |
-| `REIMBURSE_DEMO_SESSION_KEY` | random per process | HMAC key for the demo session cookies (`rb_auth`, `rb_demo_session`); required in production, set it in any shared deploy (secret) |
+| `REIMBURSE_DEMO_SESSION_KEY` | random per process | HMAC key for the login session cookie (`rb_auth`); required in production, set it in any shared deploy (secret) |
 | `REIMBURSE_AUDIT_DATABASE_URL` | unset | Postgres DSN for the audit log (secret; app role, Neon direct endpoint) |
 | `REIMBURSE_AUDIT_LOG` | unset | JSONL audit log path outside production; unset means in memory |
 | `DEEPSEEK_API_KEY` or `REIMBURSE_AGENT_API_KEY` | unset | Model key for the claim agent (secret) |

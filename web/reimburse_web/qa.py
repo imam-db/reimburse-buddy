@@ -1,30 +1,30 @@
 """Employee Q&A on the employee claim page (EMPLOYEE_QA=1; off by default).
 
-Identity comes from a signed DEMO session cookie set by the demo employee picker (there is no real login in
-this simulation). The question form carries only the question and the claim the page shows; it never
+Identity comes from the signed login session (auth.session_of, role "employee"); there is no picker and no way
+to switch identity. With the login gate off (dev and tests with no user store) the employee comes from the
+REIMBURSE_DEV_EMPLOYEE env var, a development-only fallback that is never read once the gate is on. The question form carries only the question and the claim the page shows; it never
 carries an employee ID, and the Q&A tools take the employee from the session. With the flag off, the box is
 not rendered and POST /employee/qa answers 404.
 """
 
 from __future__ import annotations
 
-import hmac
+import os
 import re
-import secrets
 from html import escape
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from . import plans  # puts agent/ on sys.path and owns the shared audit log
-from .auth import sign as _sign  # one HMAC key for both demo cookies (REIMBURSE_DEMO_SESSION_KEY)
+from . import auth
 from .labels import label
 
 from reimburse_agent.qa import engine as qa_engine  # noqa: E402
 from reimburse_agent.qa.tools import Session  # noqa: E402
 
 router = APIRouter()
-COOKIE = "rb_demo_session"
+DEV_EMPLOYEE_ENV = "REIMBURSE_DEV_EMPLOYEE"  # DEV ONLY: acts as this employee when the login gate is off
 STATE: dict = {}  # service, history per session id
 QUICK = (("Apa yang kurang?", "Apa yang kurang? / What's missing?"), ("Berapa plafon hotel?", "Berapa plafon hotel? / Hotel cap?"))
 
@@ -52,33 +52,23 @@ def service() -> qa_engine.QAService:
 
 
 def session_of(request: Request) -> Session | None:
-    raw = request.cookies.get(COOKIE, "")
-    value, _, sig = raw.rpartition(".")
-    if not value or not hmac.compare_digest(_sign(value), raw):
-        return None
-    emp, _, sid = value.partition("|")
-    return Session(emp, sid) if emp and sid else None
+    """The signed-in employee, or None. Reviewer and finance sessions have no employee Q&A identity.
+
+    DEV ONLY: with the login gate off, REIMBURSE_DEV_EMPLOYEE names the employee (one fixed session id).
+    Once the gate is on this fallback is ignored, so it can never override a real login."""
+    if auth.enabled():
+        sess = auth.session_of(request)
+        if sess is None or sess.role != "employee":
+            return None
+        return Session(sess.reviewer, sess.nonce)
+    emp = os.environ.get(DEV_EMPLOYEE_ENV, "").strip()
+    return Session(emp, "dev") if emp else None
 
 
-def _staff():
-    return [x for x in _web().store.employees if not x["id"].startswith("EMP-1")]
-
-
-def _picker(current: str | None, back: str) -> str:
-    opts = "".join(f"<option value='{escape(x['id'])}'{' selected' if x['id'] == current else ''}>{escape(x['name'])}</option>"
-                   for x in _staff())
-    return (f"<form method='post' action='/employee/session' class='demo'><b>DEMO session</b> (no real login; simulation "
-            f"only): <select name='emp' aria-label='Pilih karyawan demo'>{opts}</select><input type='hidden' name='back' value='{escape(back)}'>"
-            f"<button>Masuk sebagai / Sign in as</button></form>")
-
-
-@router.post("/employee/session")
-def set_session(emp: str = Form(...), back: str = Form("/employee/claims")):
-    if emp not in {x["id"] for x in _staff()}:
-        raise HTTPException(400, "unknown demo employee")
-    r = RedirectResponse(back if back.startswith("/employee") else "/employee/claims", status_code=303)
-    r.set_cookie(COOKIE, _sign(f"{emp}|{secrets.token_hex(8)}"), httponly=True, samesite="lax")
-    return r
+def _sign_in_notice() -> str:
+    if auth.enabled():
+        return "<p>Silakan <a href='/login'>masuk</a> sebagai karyawan. / Please <a href='/login'>sign in</a> as an employee.</p>"
+    return (f"<p class='demo'><b>DEV ONLY</b>: the login gate is off; set {DEV_EMPLOYEE_ENV}=EMP-xxx to act as an employee.</p>")
 
 
 CSS = """.qa{border:2px solid #3a7bd5;border-radius:10px;padding:12px 16px;margin:16px 0;background:#f6f9ff}
@@ -112,24 +102,24 @@ def my_claims_page(request: Request):
     sess = session_of(request)
     web = _web()
     if not sess:
-        return web.page("Klaim saya / My claims", _picker(None, "/employee/claims"))
+        return web.page("Klaim saya / My claims", _sign_in_notice())
     rows = "".join(f"<li><a href='/employee/claims/{escape(c['id'])}'>{escape(c['id'])}</a> {escape(c['trip']['destination'])}"
                    f" {escape(c['trip']['start_date'])}</li>" for c in web.store.claims if c["employee_id"] == sess.employee_id)
-    return web.page("Klaim saya / My claims", _picker(sess.employee_id, "/employee/claims") + f"<ul>{rows}</ul>")
+    return web.page("Klaim saya / My claims", f"<ul>{rows}</ul>")
 
 
 def claim_page_parts(request: Request | None, cid: str, owner: str) -> tuple[str, str] | HTMLResponse:
     """Hook for the existing employee claim page (upload_flow). With the flag off, returns ("", "") and changes nothing.
-    With it on, the page needs a demo session, and someone else's claim is a 404 exactly like a missing one."""
+    With it on, the page needs a signed-in employee, and someone else's claim is a 404 exactly like a missing one."""
     if not qa_engine.enabled():
         return "", ""
     web = _web()
     sess = session_of(request) if request is not None else None
     if not sess:
-        return web.page("Klaim / Claim", _picker(None, f"/employee/claims/{cid}"))
+        return web.page("Klaim / Claim", _sign_in_notice())
     if owner != sess.employee_id:
         raise HTTPException(404, f"Unknown claim {cid}")
-    return f"<style>{CSS}</style>{_picker(sess.employee_id, f'/employee/claims/{cid}')}", _qa_box(sess, cid)
+    return f"<style>{CSS}</style>", _qa_box(sess, cid)
 
 
 @router.post("/employee/qa")
@@ -139,7 +129,7 @@ def ask(request: Request, question: str = Form(""), quick: str = Form(""), claim
         raise HTTPException(404, "Not found")
     sess = session_of(request)
     if not sess:
-        raise HTTPException(401, "Pilih sesi demo dulu / pick a demo session first")
+        raise HTTPException(401, "Silakan masuk dulu / please sign in first")
     target = f"/employee/claims/{claim_id}" if claim_id.startswith("CLM-") else "/employee/claims"
     if not question:
         return RedirectResponse(target + "#qa", status_code=303)

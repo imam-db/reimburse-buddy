@@ -15,6 +15,7 @@ TEST_ACCOUNTS = {  # employee_id -> (email, role)
     "EMP-101": ("hendra.saputra@nusantara-niaga.example", "reviewer"),
     "EMP-102": ("rani.kusuma@nusantara-niaga.example", "finance"),
     "EMP-001": ("rina.wulandari@nusantara-niaga.example", "employee"),
+    "EMP-003": ("sari.kusumawati@nusantara-niaga.example", "employee"),
 }
 _HASH: dict[str, str] = {}
 
