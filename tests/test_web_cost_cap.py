@@ -21,7 +21,7 @@ from reimburse_web import plans, spend
 from reimburse_web.agent_bridge import Investigator
 
 from reimburse_agent import audit as A
-from reimburse_agent.office.store import PlanStore
+from reimburse_agent.office.store import FilePlanStore
 
 HERO = "CLM-2026-0110"
 FINAL = {"type": "final", "note": "done", "tokens": {"input": 1_000_000, "output": 100_000}}
@@ -55,7 +55,7 @@ def client(ledger_file, tmp_path, monkeypatch):
     configure(monkeypatch)
     web.reset_all()
     plans.STATE.clear()
-    plans.STATE["store"] = PlanStore(tmp_path / "plans")
+    plans.STATE["store"] = FilePlanStore(tmp_path / "plans")
     plans.STATE["log"] = A.JsonlAuditLog(tmp_path / "audit.jsonl")
     yield TestClient(web.app)
     web.reset_all()
@@ -252,6 +252,9 @@ def prod(ledger_file, monkeypatch):
     monkeypatch.setenv("REIMBURSE_AUDIT_DATABASE_URL", "postgresql://user@db.example:5432/reimburse")
     monkeypatch.setenv("DEMO_PASSWORD", "correct-horse-battery-staple")
     monkeypatch.setenv("REIMBURSE_DEMO_SESSION_KEY", "test-session-key-not-a-secret")
+    # Production also defaults the plan state to Postgres (web/reimburse_web/plan_state.py). These tests are
+    # about the daily cap, so the plan store stays on disk.
+    monkeypatch.setenv("REIMBURSE_PLAN_BACKEND", "file")
     _fake_postgres(monkeypatch)
 
     class FakePostgresSpend(spend.JsonlSpendLedger):

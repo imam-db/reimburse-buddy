@@ -18,7 +18,7 @@ from langgraph.types import Command
 
 from reimburse_agent.audit import default_log
 from reimburse_agent.office.directory import Directory
-from reimburse_agent.office.store import PlanStore
+from reimburse_agent.office.store import FilePlanStore
 from reimburse_agent.office.tools import MockOffice
 from reimburse_agent.plan_graph import build_plan_graph, pending, run_input
 
@@ -37,7 +37,7 @@ def main() -> None:
     ap.add_argument("--wait", type=int, default=600, help="seconds to wait for decisions on the page")
     ap.add_argument("--no-note", action="store_true", help="do not attach the sample meeting note")
     a = ap.parse_args()
-    store, d = PlanStore(), Directory.load()
+    store, d = FilePlanStore(), Directory.load()
     office = MockOffice(d, store.root / a.run_id / "mock_office.json")
     g = build_plan_graph(log=default_log(), directory=d, office=office, store=store)
     cfg = {"configurable": {"thread_id": a.run_id}}

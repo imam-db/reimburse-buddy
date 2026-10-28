@@ -41,9 +41,9 @@ def pending_plan(tmp_path):
     from reimburse_agent.audit import JsonlAuditLog
     from reimburse_agent.office import plan as P
     from reimburse_agent.office import rules as R
-    from reimburse_agent.office.store import PlanStore
+    from reimburse_agent.office.store import FilePlanStore
 
-    plans.STATE.update(store=PlanStore(tmp_path), log=JsonlAuditLog())
+    plans.STATE.update(store=FilePlanStore(tmp_path), log=JsonlAuditLog())
     intents = P.read_request("Tolong kirim notulen ke Pak Budi ya, terus jadwalin follow-up Jumat siang.",
                              [{"id": "DOC-1", "text": "Rapat mingguan."}])
     plan, _ = P.build_plan(run_id="w1", version=1, request="req", requester="EMP-101",

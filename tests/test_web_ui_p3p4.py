@@ -18,10 +18,10 @@ HERO = "CLM-2026-0110"
 @pytest.fixture
 def client(tmp_path):
     from reimburse_agent.audit import JsonlAuditLog
-    from reimburse_agent.office.store import PlanStore
+    from reimburse_agent.office.store import FilePlanStore
 
     web.reset_all()
-    plans.STATE.update(store=PlanStore(tmp_path), log=JsonlAuditLog())
+    plans.STATE.update(store=FilePlanStore(tmp_path), log=JsonlAuditLog())
     yield TestClient(web.app)
     plans.STATE.clear()
 

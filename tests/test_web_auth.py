@@ -16,7 +16,7 @@ from reimburse_web import app as web
 from reimburse_web import auth, plans
 
 from reimburse_agent import audit as A
-from reimburse_agent.office.store import PlanStore
+from reimburse_agent.office.store import FilePlanStore
 
 PW = "correct-horse-battery-staple"
 PUBLIC = {"/login", "/logout", "/healthz"}
@@ -32,7 +32,7 @@ def client(tmp_path, monkeypatch):
         monkeypatch.delenv(name, raising=False)
     web.reset_all()
     plans.STATE.clear()
-    plans.STATE["store"] = PlanStore(tmp_path / "plans")
+    plans.STATE["store"] = FilePlanStore(tmp_path / "plans")
     plans.STATE["log"] = A.JsonlAuditLog(tmp_path / "audit.jsonl")
     auth.reset_attempts()
     yield TestClient(web.app)
@@ -176,7 +176,7 @@ def test_gate_is_off_without_the_password(tmp_path, monkeypatch):
     monkeypatch.delenv("APP_ENV", raising=False)
     web.reset_all()
     plans.STATE.clear()
-    plans.STATE["store"] = PlanStore(tmp_path / "plans")
+    plans.STATE["store"] = FilePlanStore(tmp_path / "plans")
     plans.STATE["log"] = A.JsonlAuditLog()
     c = TestClient(web.app)
     assert c.get("/admin").status_code == 200
@@ -204,6 +204,10 @@ def _fake_postgres(monkeypatch):
 def prod(monkeypatch):
     monkeypatch.setenv("APP_ENV", "prod")
     monkeypatch.setenv("REIMBURSE_AUDIT_DATABASE_URL", "postgresql://user@db.example:5432/reimburse")
+    # Production also defaults the plan state to Postgres (web/reimburse_web/plan_state.py). These tests are
+    # about the login and audit gates, so the plan store stays on disk here; the plan-state startup check
+    # has its own tests in test_web_plan_state.py.
+    monkeypatch.setenv("REIMBURSE_PLAN_BACKEND", "file")
     _fake_postgres(monkeypatch)
     yield monkeypatch
     plans.STATE.clear()

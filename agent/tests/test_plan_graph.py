@@ -9,7 +9,7 @@ from reimburse_agent.audit import JsonlAuditLog, unmatched_executions
 from reimburse_agent.office import plan as P
 from reimburse_agent.office import rules as R
 from reimburse_agent.office.directory import Directory
-from reimburse_agent.office.store import PlanStore
+from reimburse_agent.office.store import FilePlanStore
 from reimburse_agent.office.tools import MockOffice
 from reimburse_agent.plan_graph import build_plan_graph, pending, run_input
 
@@ -34,7 +34,7 @@ class Clock:
 @pytest.fixture
 def env(tmp_path):
     log, office = JsonlAuditLog(), MockOffice(D)
-    store = PlanStore(tmp_path)
+    store = FilePlanStore(tmp_path)
     clock = Clock()
     g = build_plan_graph(log=log, directory=D, office=office, store=store, clock=clock)
     return g, log, office, store, clock

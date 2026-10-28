@@ -29,14 +29,14 @@ from reimburse_agent import audit  # noqa: E402
 from reimburse_agent.office import page  # noqa: E402
 from reimburse_agent.office import rules as R  # noqa: E402
 from reimburse_agent.office.directory import Directory  # noqa: E402
-from reimburse_agent.office.store import PlanStore  # noqa: E402
+from reimburse_agent.office.store import FilePlanStore  # noqa: E402
 
 router = APIRouter()
 STATE: dict = {}
 
 
-def store() -> PlanStore:
-    return STATE.setdefault("store", PlanStore())
+def store() -> FilePlanStore:
+    return STATE.setdefault("store", FilePlanStore())
 
 
 def log() -> audit.AuditLog:

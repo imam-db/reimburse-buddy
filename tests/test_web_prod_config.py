@@ -12,18 +12,19 @@ from reimburse_web import app as web
 from reimburse_web import plans
 
 from reimburse_agent import audit as A
-from reimburse_agent.office.store import PlanStore
+from reimburse_agent.office.store import FilePlanStore
 
 
 @pytest.fixture(autouse=True)
 def isolated(tmp_path, monkeypatch):
     web.reset_all()
     plans.STATE.clear()
-    plans.STATE["store"] = PlanStore(tmp_path / "plans")
+    plans.STATE["store"] = FilePlanStore(tmp_path / "plans")
     monkeypatch.setattr(plans, "_SWEPT", False)
     monkeypatch.setattr(A, "_PROD_LOG", None)
     monkeypatch.setattr(A, "_DEFAULT", None)
-    for name in ("APP_ENV", "REIMBURSE_AUDIT_LOG", "REIMBURSE_AUDIT_DATABASE_URL"):
+    for name in ("APP_ENV", "REIMBURSE_AUDIT_LOG", "REIMBURSE_AUDIT_DATABASE_URL", "REIMBURSE_PLAN_BACKEND",
+                 "REIMBURSE_STATE_DATABASE_URL"):
         monkeypatch.delenv(name, raising=False)
     yield
     plans.STATE.clear()
@@ -83,6 +84,9 @@ def test_startup_accepts_postgres_in_prod(monkeypatch):
 
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("REIMBURSE_AUDIT_DATABASE_URL", dsn)
+    # Production also defaults the plan state to Postgres; this test is about the audit gate, so the plan
+    # store stays on disk (test_web_plan_state.py covers the plan-state startup check).
+    monkeypatch.setenv("REIMBURSE_PLAN_BACKEND", "file")
     # Production also requires the demo password gate (web/reimburse_web/auth.py) and the daily LLM
     # budget with its prices (web/reimburse_web/spend.py); without them startup stops with
     # AuthConfigError / SpendConfigError, which tests/test_web_auth.py and test_web_cost_cap.py cover.
