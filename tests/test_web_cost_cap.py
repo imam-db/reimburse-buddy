@@ -11,6 +11,7 @@ investigate_worker.py prints.
 import contextlib
 import json
 import sys
+import time
 from decimal import Decimal
 
 import pytest
@@ -197,6 +198,31 @@ def test_a_run_crossing_midnight_settles_on_the_day_it_reserved(client, monkeypa
                                                                  ("settle", "2026-10-26")]
     assert spend.committed("2026-10-26") == Decimal("0.2")  # settled, not the 0.10 reservation
     assert spend.committed("2026-10-27") == Decimal(0)
+
+
+def test_done_is_seen_only_after_the_settle_row_is_written(client, monkeypatch, ledger_file):
+    """Regression: `done` used to turn true before the settle was written, so a waiter (or the page) could
+    read a ledger that still held only the reservation. The settle must land before the run reports done."""
+    configure(monkeypatch)
+    monkeypatch.setattr(spend, "today", lambda now=None: "2026-10-26")
+    real_settle = spend.settle
+
+    def slow_settle(*args, **kwargs):
+        time.sleep(0.5)
+        return real_settle(*args, **kwargs)
+
+    monkeypatch.setattr(spend, "settle", slow_settle)
+    inv = Investigator(max_per_min=10, fake_script="x")
+    fast = f"import json;print(json.dumps({FINAL!r}))"
+    monkeypatch.setattr(inv, "command", lambda claim_id: [sys.executable, "-c", fast])
+    monkeypatch.setattr(web, "INVESTIGATOR", inv)
+    r = client.post(f"/admin/claims/{HERO}/investigate", follow_redirects=False)
+    run = inv.runs[r.headers["location"].rsplit("/", 1)[1]]
+
+    run.wait(30)
+
+    assert run.done
+    assert [x["kind"] for x in rows(ledger_file)] == ["reserve", "settle"]
 
 
 def test_the_investigate_button_refuses_at_the_cap_and_logs_it(client, monkeypatch, ledger_file):

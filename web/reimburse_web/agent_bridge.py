@@ -94,10 +94,12 @@ class Run:
                 ev = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if ev.get("type") == "final" or (ev.get("type") == "error" and ev.get("code") == "token_limit"):
+                # Charge before the event is published: `done` (read by wait() and the page) must never be
+                # true while the ledger still holds only the reservation.
+                self._settle(ev.get("tokens"))
             with self.lock:
                 self.events.append(ev)
-            if ev.get("type") == "final" or (ev.get("type") == "error" and ev.get("code") == "token_limit"):
-                self._settle(ev.get("tokens"))
         self.proc.wait()
         self._log.close()
         with self.lock:
