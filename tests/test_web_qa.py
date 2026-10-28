@@ -183,3 +183,22 @@ def test_ask_without_claim_lands_on_portal(client):
     assert r.status_code == 303 and r.headers["location"] == "/employee#qa"
     r = client.get("/employee")
     assert "POL-4" in r.text and "Belum ada pertanyaan" not in r.text
+
+
+def test_sources_use_readable_names_and_own_claims_are_links(client):
+    login(client, "EMP-001")
+    client.post("/employee/qa", data={"question": "Berapa plafon hotel?", "claim_id": "CLM-2026-0101"})
+    assert "Pasal 4, Plafon hotel per malam" in client.get("/employee/claims/CLM-2026-0101").text
+    client.post("/employee/qa", data={"question": "Apa yang kurang?", "claim_id": "CLM-2026-0101"})
+    html = client.get("/employee/claims/CLM-2026-0101").text
+    sources = html.rsplit("Sumber / Sources: ", 1)[1].split("</div>", 1)[0]
+    assert "<a href='/employee/claims/CLM-2026-0101'>CLM-2026-0101</a>" in sources
+    assert "IT-" not in sources
+    audit = [e for e in plans.log().list() if e["event_type"] == "qa_answer"][-1]
+    assert any(s.startswith("IT-") for s in audit["sources"])  # the audit keeps the raw list
+
+
+def test_english_answer_names_the_english_article_title(client):
+    login(client, "EMP-001")
+    client.post("/employee/qa", data={"question": "What is the hotel cap?", "claim_id": ""})
+    assert "Article 4, Hotel nightly cap" in client.get("/employee").text

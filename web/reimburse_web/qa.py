@@ -99,11 +99,30 @@ def _labelled(text: str) -> str:
     return re.sub(r"\b[a-z]+(?:_[a-z]+)+\b", lambda m: label(m.group(0)), text or "")
 
 
+def _source_label(src: str, lang: str) -> str | None:
+    """A source an employee can read: policy article by name, own claim as a link. Item IDs stay in the text."""
+    if src.startswith("POL-"):
+        art = next((a for a in service().rulebook.articles if a["id"] == src), None)
+        if art is None:
+            return None
+        title = art["title_en"] if lang == "en" else art["title_id"]
+        head = "Article" if lang == "en" else "Pasal"
+        return f"{head} {escape(art['number'])}, {escape(title)}"
+    if src.startswith("CLM-"):
+        return f"<a href='/employee/claims/{escape(src)}'>{escape(src)}</a>"
+    return None  # IT-n: the answer text already names the item
+
+
+def _sources(r: dict) -> str:
+    labels = [x for x in (_source_label(s, r["lang"]) for s in r["sources"]) if x]
+    return ", ".join(labels) or "-"
+
+
 def _qa_box(sess: Session, cid: str) -> str:
     hist = STATE.setdefault("history", {}).get(sess.session_id, [])
     turns = "".join(
         f"<div class='q'>{escape(q)}</div><div class='a{' refused' if r['refused'] else ''}'>{escape(_labelled(r['answer']))}</div>"
-        f"<div class='src'>Sumber / Sources: {escape(', '.join(r['sources']) or '-')}</div>" for q, r in hist[-6:])
+        f"<div class='src'>Sumber / Sources: {_sources(r)}</div>" for q, r in hist[-6:])
     log = f"<div class='qa-log' id='qa-log' role='log' aria-live='polite'>{turns or EMPTY_HINT}</div>"
     quick = "".join(f"<button name='quick' value='{escape(v)}'>{escape(text)}</button> " for v, text in QUICK)
     title = "Tanya-jawab / Ask about this claim" if cid else "Tanya-jawab reimburse / Ask about reimbursement"
