@@ -10,8 +10,7 @@ merge diputuskan Imam.
 | 0 | `seed_users.py --all` / `--dry-run` / `--same-password`, peran diturunkan dari `employees.json`; tes | 0004 | Haiku |
 | 1 | Identitas karyawan dari sesi (`current_employee`), cek pemilik klaim/draft/upload, hapus `emp` dari query dan form; tes akses silang | 0002 | Sonnet |
 | 2 | Satu portal `/employee`; `/employee/claims` dialihkan; link "← Klaim saya" dirapikan | 0002 | Sonnet |
-| 3 | Nav per peran (karyawan / manager / finance), nama + Keluar, catatan data sintetis di footer | 0001 | Sonnet |
-| 4 | Hak akses per peran di `auth.may_open` / `home_for`; reset hanya finance dan tidak di production; skenario self-approval di README ditulis ulang | 0001 | Sonnet |
+| 3+4 | Digabung, karena nav harus mengikuti hak akses. Nav per peran (karyawan / manager / finance), nama + peran + Keluar, catatan data sintetis di footer. Hak akses per peran di `auth.may_open` / `home_for`. `/manager` baca-saja (daftar permintaan, tanpa tombol). Reset hanya finance dan tidak di production. Skenario self-approval di README ditulis ulang. | 0001 | Sonnet |
 | 5 | Teks halaman karyawan ke `labels.py` (Indonesia dulu); tes nav dan pengalihan | 0001, 0002 | Haiku |
 | 6 | Halaman `/manager`: jawab permintaan persetujuan tim sendiri, dicatat ke audit, tampil di halaman klaim finance | 0003 | Claude |
 
