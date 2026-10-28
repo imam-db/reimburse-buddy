@@ -24,7 +24,7 @@ from reimburse_web import auth, intake, plans
 from reimburse_web.agent_bridge import Run
 
 from reimburse_agent import audit as A
-from reimburse_agent.office.store import PlanStore
+from reimburse_agent.office.store import FilePlanStore
 
 PW = "correct-horse-battery-staple"
 REQ = "Tolong kirim notulen ke Pak Budi ya, terus jadwalin follow-up Jumat siang."
@@ -51,7 +51,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(intake, "_utcnow", lambda: clock["now"])
     web.reset_all()
     plans.STATE.clear()
-    plans.STATE["store"] = PlanStore(tmp_path / "plans")
+    plans.STATE["store"] = FilePlanStore(tmp_path / "plans")
     plans.STATE["log"] = A.JsonlAuditLog(tmp_path / "audit.jsonl")
     intake.reset()
     auth.reset_attempts()

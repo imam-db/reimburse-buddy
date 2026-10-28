@@ -19,7 +19,7 @@ from reimburse_agent.mcp_client import mcp_tools
 from reimburse_agent.office import plan as P
 from reimburse_agent.office import rules as R
 from reimburse_agent.office.directory import Directory
-from reimburse_agent.office.store import PlanStore
+from reimburse_agent.office.store import FilePlanStore
 from reimburse_agent.office.tools import MockOffice
 from reimburse_agent.plan_graph import build_plan_graph, pending, run_input
 
@@ -60,7 +60,7 @@ def test_validate_action_refuses_a_body_with_the_marker():
 
 def test_plan_graph_stages_clean_email_bodies_and_keeps_the_notice(tmp_path):
     log = JsonlAuditLog()
-    store = PlanStore(tmp_path)
+    store = FilePlanStore(tmp_path)
     g = build_plan_graph(log=log, directory=D, office=MockOffice(D), store=store)
     cfg = {"configurable": {"thread_id": "wm1"}}
     g.invoke(run_input("wm1", REQ, "EMP-101", [NOTE], "2026-10-26T02:00:00Z"), cfg)

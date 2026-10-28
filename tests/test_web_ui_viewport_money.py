@@ -19,11 +19,11 @@ VIEWPORT = '<meta name="viewport" content="width=device-width, initial-scale=1">
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     from reimburse_agent.audit import JsonlAuditLog
-    from reimburse_agent.office.store import PlanStore
+    from reimburse_agent.office.store import FilePlanStore
 
     monkeypatch.setattr(web, "UPLOAD_DIR", tmp_path)
     web.reset_all()
-    plans.STATE.update(store=PlanStore(tmp_path / "plans"), log=JsonlAuditLog())
+    plans.STATE.update(store=FilePlanStore(tmp_path / "plans"), log=JsonlAuditLog())
     yield TestClient(web.app)
     plans.STATE.clear()
     web.reset_all()
