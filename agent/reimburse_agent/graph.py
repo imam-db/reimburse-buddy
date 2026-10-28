@@ -923,8 +923,19 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         if run_claim:
             new = [i for i in parse_instructions(text, items, len(msgs) - 1)
                    if GRAPH_TOOL_FOR[i["kind"]] in by_name]
-            if new:
-                out["instructions"] = [*state.get("instructions", []), *new]
+            # Key = (kind, item, normalised quote): the same sentence asking for the same thing is one
+            # instruction, however many times it was queued (this turn or still pending from an earlier one).
+            # Wording is part of the key so two different instructions are never merged; an instruction already
+            # declined and repeated later is not pending any more, so declined_sigs (not this) stops its re-proposal.
+            have = [*state.get("instructions", [])]
+            seen = {(i["kind"], i.get("item"), " ".join(i["quote"].lower().split())) for i in have}
+            for i in new:
+                k = (i["kind"], i.get("item"), " ".join(i["quote"].lower().split()))
+                if k not in seen:
+                    seen.add(k)
+                    have.append(i)
+            if len(have) > len(state.get("instructions", [])):
+                out["instructions"] = have
         if run_claim and len(msgs) > 1:
             dec, skipped, quotes = ({}, [], {}) if state.get("decisions_source") else parse_reviewer_turn(text, items)
             if dec:
@@ -1644,6 +1655,7 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         props = list(state.get("graph_proposals", []))
         count = state.get("gated_count", 0)
         decided = []  # phase 1: (instruction, tool, args, tcid, approved, answer); nothing runs here
+        this_pass = set()  # call signatures already put to the reviewer in this pass
         for ins in pend:
             name, call_args = await build_action(ins, fresh, args)
             if name is None:
@@ -1651,9 +1663,13 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
                 continue
             if already_proposed({**state, "writes": writes, "declined_sigs": sigs}, name, call_args, ins.get("at", 0)):
                 continue
+            psig = call_signature({"name": name, "args": call_args})
+            if psig in this_pass:
+                continue  # identical call already proposed in this pass: one instruction, one prompt
             if count >= max_gated:
                 notes.append(f"Not proposed: {name} (limit of {max_gated} approval requests reached).")
                 continue
+            this_pass.add(psig)
             count += 1
             tcid = f"graph-{name}-{len(props) + len(decided)}"
             engine = await engine_for(name, call_args)
