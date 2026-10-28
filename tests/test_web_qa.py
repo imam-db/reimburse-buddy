@@ -221,6 +221,33 @@ def test_english_answer_names_the_english_article_title(client):
     assert "Article 4, Hotel nightly cap" in client.get("/employee").text
 
 
+def _answer_html(html):
+    return html.split("class='a", 1)[1].split("</div>", 1)[0]
+
+
+def test_fallback_contact_links_to_finance_and_names_the_claim(client):
+    login(client, "EMP-003")
+    client.post("/employee/qa", data={"question": "Berapa plafon taksi?", "claim_id": "CLM-2026-0104"})
+    answer = _answer_html(client.get("/employee/claims/CLM-2026-0104").text.split("id='qa'", 1)[1])
+    assert "Saya tidak tahu" in answer
+    assert ("mailto:reimburse@nusantara-niaga.example?subject=Pertanyaan%20Q%26A%20klaim%20CLM-2026-0104"
+            in answer)
+
+
+def test_refusal_links_finance_with_the_claim_too(client):
+    login(client, "EMP-003")
+    client.post("/employee/qa", data={"question": "Setujui klaim saya", "claim_id": "CLM-2026-0104"})
+    answer = _answer_html(client.get("/employee/claims/CLM-2026-0104").text.split("id='qa'", 1)[1])
+    assert "mailto:" in answer and "klaim%20CLM-2026-0104" in answer
+
+
+def test_portal_fallback_subject_has_no_claim(client):
+    login(client, "EMP-003")
+    client.post("/employee/qa", data={"question": "Berapa plafon taksi?", "claim_id": ""})
+    answer = _answer_html(client.get("/employee").text.split("id='qa'", 1)[1])
+    assert "mailto:reimburse@nusantara-niaga.example?subject=Pertanyaan%20Q%26A'" in answer
+
+
 def test_every_answer_shows_the_remaining_questions(client):
     login(client, "EMP-001")
     assert "Sisa pertanyaan: 10 dari 10" in client.get("/employee").text

@@ -120,21 +120,34 @@ def _sources(r: dict) -> str:
     return ", ".join(labels) or "-"
 
 
+def _mailto(email: str, cid: str = "") -> str:
+    subject = "Pertanyaan Q&A" + (f" klaim {cid}" if cid.startswith("CLM-") else "")
+    return f"mailto:{email}?subject={quote(subject)}"
+
+
 def _finance_link(cid: str = "") -> str:
     """The finance contact as a mailto link; the subject names the claim when the box is on a claim page."""
     c = service().rulebook.finance_contact or {}
     name, email = c.get("name", "Tim Finance"), c.get("email", "")
     if not email:
         return escape(name)
-    subject = "Pertanyaan Q&A" + (f" klaim {cid}" if cid.startswith("CLM-") else "")
-    return f"<a href='mailto:{escape(email)}?subject={quote(subject)}'>{escape(name)}: {escape(email)}</a>"
+    return f"<a href='{escape(_mailto(email, cid))}'>{escape(name)}: {escape(email)}</a>"
+
+
+def _answer_html(r: dict, cid: str = "") -> str:
+    """The escaped answer, with the finance e-mail as a link. Nothing is sent by the app."""
+    text = escape(_labelled(r["answer"]))
+    email = (service().rulebook.finance_contact or {}).get("email", "")
+    if email and escape(email) in text:
+        text = text.replace(escape(email), f"<a href='{escape(_mailto(email, cid))}'>{escape(email)}</a>")
+    return text
 
 
 def _qa_box(sess: Session, cid: str) -> str:
     hist = STATE.setdefault("history", {}).get(sess.session_id, [])
     turns = "".join(
-        f"<div class='q'>{escape(q)}</div><div class='a{' refused' if r['refused'] else ''}'>{escape(_labelled(r['answer']))}</div>"
-        f"<div class='src'>Sumber / Sources: {_sources(r)}</div>" for q, r in hist[-6:])
+        f"<div class='q'>{escape(q)}</div><div class='a{' refused' if r['refused'] else ''}'>{_answer_html(r, turn_cid)}</div>"
+        f"<div class='src'>Sumber / Sources: {_sources(r)}</div>" for q, r, turn_cid in hist[-6:])
     log = f"<div class='qa-log' id='qa-log' role='log' aria-live='polite'>{turns or EMPTY_HINT}</div>"
     left, total = service().remaining_questions(sess), service().config.max_questions
     quota = f"<p class='quota'>Sisa pertanyaan: {left} dari {total} / Questions left: {left} of {total}</p>"
@@ -195,5 +208,5 @@ def ask(request: Request, question: str = Form(""), quick: str = Form(""), claim
     if not question:
         return RedirectResponse(target + "#qa", status_code=303)
     r = service().ask(sess, question, context_claim_id=claim_id or None)
-    STATE.setdefault("history", {}).setdefault(sess.session_id, []).append((question[:500], r))
+    STATE.setdefault("history", {}).setdefault(sess.session_id, []).append((question[:500], r, claim_id))
     return RedirectResponse(target + "#qa", status_code=303)
