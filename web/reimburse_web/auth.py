@@ -2,8 +2,8 @@
 
 Every route except `/login`, `/logout` and `/healthz` needs the signed session cookie. The cookie is
 `issued_at|employee_id|role|nonce` plus an HMAC, 12 hours, checked on every request; the role comes from
-the user's row at login time. Reviewer and finance roles reach the admin pages; an employee is sent to
-`/employee`.
+the user's row at login time. Each role has its own area (employee `/employee`, manager `/manager`, finance `/` and `/admin`); a
+wrong-role navigation is sent to the role's landing page (docs/adr/0001-three-roles.md).
 
 The gate is always on in production. Elsewhere it is on when a user store is installed (tests, local dev) or
 a user DSN is configured, and off otherwise, so a plain local run and the rest of the test suite behave as
@@ -189,30 +189,44 @@ def reviewer_of(request) -> str:
     return session.reviewer if session else FALLBACK_REVIEWER
 
 
-def is_reviewer_role(role: str | None) -> bool:
-    return role in users.REVIEWER_ROLES
-
-
 def home_for(role: str | None) -> str:
     """Where a role lands after login."""
-    return "/" if is_reviewer_role(role) else "/employee"
+    if users.is_finance(role):
+        return "/admin"
+    return "/manager" if users.is_manager(role) else "/employee"
+
+
+def _under(path: str, base: str) -> bool:
+    return path == base or path.startswith(base + "/")
 
 
 def may_open(role: str | None, path: str) -> bool:
-    """Reviewer and finance may open everything; an employee only the employee pages."""
-    return is_reviewer_role(role) or path == "/employee" or path.startswith("/employee/")
+    """Employee: /employee. Manager: /manager. Finance: / and /admin. Nothing else."""
+    if users.is_finance(role):
+        return path == "/" or _under(path, "/admin")
+    if users.is_manager(role):
+        return _under(path, "/manager")
+    if role == "employee":
+        return _under(path, "/employee")
+    return False
 
 
 # --- who is signed in, for the nav ---------------------------------------------------------------------
-_CURRENT: ContextVar[str | None] = ContextVar("rb_auth_reviewer", default=None)
+_CURRENT: ContextVar[tuple[str, str] | None] = ContextVar("rb_auth_session", default=None)
 
 
-def current_reviewer() -> str | None:
+def current_session() -> tuple[str, str] | None:
+    """(employee_id, role) of the signed-in person for this request, else None."""
     return _CURRENT.get()
 
 
-def set_current(reviewer: str | None):
-    return _CURRENT.set(reviewer)
+def current_reviewer() -> str | None:
+    cur = _CURRENT.get()
+    return cur[0] if cur else None
+
+
+def set_current(employee_id: str | None, role: str = ""):
+    return _CURRENT.set((employee_id, role) if employee_id else None)
 
 
 def reset_current(token) -> None:

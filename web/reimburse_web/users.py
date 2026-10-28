@@ -19,7 +19,16 @@ SCRYPT_N, SCRYPT_R, SCRYPT_P = 2 ** 14, 8, 1
 SALT_BYTES = 16
 KEY_BYTES = 32
 ROLES = ("employee", "reviewer", "finance")
-REVIEWER_ROLES = frozenset({"reviewer", "finance"})
+ROLE_LABELS = {"employee": "Karyawan", "reviewer": "Manager", "finance": "Finance"}  # DB value -> shown as
+
+
+def is_manager(role: str | None) -> bool:
+    """The DB value stays `reviewer`; it means Manager (docs/adr/0001-three-roles.md)."""
+    return role == "reviewer"
+
+
+def is_finance(role: str | None) -> bool:
+    return role == "finance"
 
 
 def _derive(password: str, salt: bytes, n: int, r: int, p: int, dklen: int = KEY_BYTES) -> bytes:

@@ -123,8 +123,8 @@ def test_demo_cookie_grants_nothing(client):
 
 
 def test_reviewer_has_no_employee_qa_identity(client):
-    login_as(client, "EMP-100")
-    assert client.post("/employee/qa", data={"question": "klaim saya?"}).status_code == 401
+    login_as(client, "EMP-100")  # a manager: /employee/* is closed to the role
+    assert client.post("/employee/qa", data={"question": "klaim saya?"}).status_code == 403
 
 
 def test_gate_off_dev_fallback(client, monkeypatch):

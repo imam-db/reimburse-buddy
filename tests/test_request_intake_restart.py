@@ -29,7 +29,7 @@ STALE = "tidak bisa dilanjutkan"
 
 
 def _isolate(monkeypatch, tmp_path):
-    install_test_users()
+    install_test_users({"EMP-100": "finance"})  # EMP-100 is a manager by default
     monkeypatch.setenv("REIMBURSE_DEMO_SESSION_KEY", "test-session-key-not-a-secret")
     monkeypatch.setenv("REIMBURSE_AUDIT_LOG", str(tmp_path / "audit.jsonl"))
     monkeypatch.setenv("REIMBURSE_PLAN_STORE", str(tmp_path / "plans"))

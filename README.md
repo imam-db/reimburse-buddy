@@ -181,7 +181,7 @@ evidence as an audit trail.
 | 2a | `CLM-2026-0102` | Jakarta hotel over cap. Agent finds signed memo `MEMO-2026-041`, approved. |
 | 2b | `CLM-2026-0103` | Medan hotel over cap, no memo. Agent asks the reviewer; capped amount approved. |
 | 3 | `CLM-2026-0104` | Late check-out fee. Calendar shows a contract signing until 15:30, so the fee is justified. A post-trip dinner is rejected and a suspected duplicate taxi goes to the reviewer. |
-| Self-approval | batch `2026-W44` | One claim, `CLM-2026-0120`, owned by `EMP-101` (Makassar hotel over cap). Signed in as `EMP-101` the approve controls are hidden and the server refuses; signed in as `EMP-102` they work. A separate batch, so the `2026-W43` triage numbers above stay 10 / 7 / 3. |
+| Self-approval | batch `2026-W44` | One claim, `CLM-2026-0120`, owned by `EMP-101` (Makassar hotel over cap). EMP-101 is a manager by default and cannot open finance pages, so this scene needs EMP-101 seeded as finance (`seed_users --employee EMP-101 --role finance`); then, signed in as `EMP-101` the approve controls are hidden and the server refuses; signed in as `EMP-102` they work. A separate batch, so the `2026-W43` triage numbers above stay 10 / 7 / 3. |
 
 Run them without WorkBuddy:
 
@@ -222,8 +222,11 @@ Accounts live in the Postgres table `app_users` (`agent/migrations/007_app_users
 (`scrypt$n$r$p$salt$hash`, stdlib `hashlib.scrypt`), `role` (`employee`, `reviewer`, `finance`),
 `is_active`. The app role can only `SELECT` and `UPDATE (last_login_at)`. With the gate on, every route
 except `/login`, `/logout` and `/healthz` needs the signed `rb_auth` cookie: a browser navigation is
-redirected to the form, anything else gets `401`. `reviewer` and `finance` open the admin pages; an
-`employee` is sent to `/employee` and gets `403` on anything else.
+redirected to the form, anything else gets `401`. Three roles
+([ADR 0001](docs/adr/0001-three-roles.md)): `employee` (Karyawan) opens `/employee/*` and lands on
+`/employee`; `reviewer` (shown as Manager) opens `/manager/*` and lands on `/manager`; `finance` opens
+`/` and `/admin/*` and lands on `/admin`. A wrong-role navigation is redirected to the role's landing page,
+any other method gets `403`. `POST /admin/reset` is refused (`403`) when `APP_ENV` is `prod`/`production`.
 
 - Session: `issued_at|employee_id|role|nonce` plus an HMAC, 12 hours, `httponly`, `samesite=lax`,
   `secure` in production, checked on every request. `auth.reviewer_of` returns the employee_id, which is
@@ -262,7 +265,9 @@ uv --directory web run python -m reimburse_web.seed_users --all --dry-run
 
 ### Who may approve
 
-The reviewer picked at login is the actor on every decision. Nobody may approve their own work:
+The finance user signed in is the actor on every decision. Nobody may approve their own work. The scenes
+below need the demo people seeded as `finance` (for example `seed_users --employee EMP-101 --role finance`
+and the same for `EMP-100`); by default `EMP-100` and `EMP-101` are managers and `EMP-102` is finance:
 
 - A plan whose `requester` is the reviewer cannot be approved (`POST /admin/plans/<run_id>/decide`);
   the approve radio is disabled on the confirmation page.

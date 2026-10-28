@@ -45,6 +45,6 @@ def test_masking_uses_qa_source_of_truth():
 
 
 def test_admin_page_still_shows_finding(client):
-    login_as(client, "EMP-100")
+    login_as(client, "EMP-102")
     text = _visible(client.get(f"/admin/claims/{DUP_CLAIM}").text)
     assert "duplikat" in text

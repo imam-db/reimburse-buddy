@@ -141,8 +141,9 @@ def test_gate_on_ignores_dev_employee(env):
     assert anon.post("/employee/claims", data=NEW_CLAIM).status_code == 401
 
 
-def test_reviewer_session_acts_as_its_own_employee_id(env):
+def test_manager_session_has_no_employee_pages(env):
     c = client_for("EMP-100")
+    assert c.get("/employee", follow_redirects=False).status_code == 303
     r = c.post("/employee/claims", data=NEW_CLAIM, follow_redirects=False)
-    assert r.status_code == 303
-    assert web.store.get_claim("CLM-2026-W001")["employee_id"] == "EMP-100"
+    assert r.status_code == 403
+    assert not any(x["id"] == "CLM-2026-W001" for x in web.store.claims)

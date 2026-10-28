@@ -40,7 +40,7 @@ def test_landing_page_explains_roles_and_links_the_demo_claim(client):
     assert '<a href="/">Beranda</a>' in html
     assert '<a class="btn" href="/admin">Lihat triage finance</a>' in html
     assert f'<a class="btn" href="/admin/claims/{HERO}">Buka klaim contoh (Rina, Surabaya)</a>' in html
-    assert f'<a class="btn" href="/employee/claims/{HERO}">Coba tanya sebagai karyawan</a>' in html
+    assert "Coba tanya sebagai karyawan" not in html  # finance cannot open employee pages
     assert '<form method="post" action="/admin/reset">' in html
     assert "Reset demo" in html
     assert "Data sintetis. Tidak ada email atau pesan sungguhan yang dikirim." in html
