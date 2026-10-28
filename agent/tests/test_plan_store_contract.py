@@ -1,9 +1,13 @@
 """PlanStore and MockOffice contract: the file backend must behave like the Postgres one.
 
 Both are parametrized the same way as test_audit_contract.py: the postgres variant runs only with
-`-m postgres` and DATABASE_URL set (the app role), and is skipped otherwise. Rows are written under a unique
-run id and never removed — migration 006 gives reimburse_app SELECT, INSERT and UPDATE only, and a test that
-needed DELETE would be testing a privilege the app does not have.
+`-m postgres` and DATABASE_URL set (the app role), and is skipped otherwise. It also needs psycopg-pool,
+which lives in the root web group, so run it from the repo root::
+
+    DATABASE_URL=... PYTHONPATH=agent uv run pytest -m postgres agent/tests/test_plan_store_contract.py
+
+Rows are written under a unique run id and never removed — migration 006 gives reimburse_app SELECT, INSERT
+and UPDATE only, and a test that needed DELETE would be testing a privilege the app does not have.
 """
 
 import os
@@ -20,6 +24,8 @@ def _dsn():
     dsn = os.environ.get("DATABASE_URL")
     if not dsn:
         pytest.skip("DATABASE_URL not set")
+    # The postgres backend needs the pool; the agent venv only has psycopg unless the web group is installed.
+    pytest.importorskip("psycopg_pool", reason="psycopg-pool is not installed in this environment")
     return dsn
 
 

@@ -182,7 +182,7 @@ def test_a_pending_approval_is_listed_after_a_restart(pg):
     c = pg
     login(c, "EMP-100")
     run_id = submit(c, "Kirim notulen ke Bu Sari ya, terus jadwalin follow-up Kamis pagi.")
-    assert answer(c, run_id).status_code == 303
+    assert plans.store().load_plan(run_id)["actions"]  # one clear recipient: staged at once
     restart()
     login(c, "EMP-102")
     page = c.get("/admin/plans")
