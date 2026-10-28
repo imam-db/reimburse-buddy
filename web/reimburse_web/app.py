@@ -206,7 +206,7 @@ def _pending_nav() -> str:
         n = pending_count()
     except Exception:
         return ""
-    return (f'<a href="/admin/plans" id="nav-pending">Menunggu persetujuan '
+    return (f'<a href="/admin/plans" id="nav-pending">{e(label("ui_nav_pending"))} '
             f'<span class="badge" id="pending-badge">{n}</span></a>')
 
 
@@ -220,21 +220,22 @@ def nav_html() -> str:
     """The nav for the signed-in role (docs/adr/0001-three-roles.md); the full dev nav when nobody is signed in."""
     cur = auth.current_session()
     if not cur:
-        return (f'<nav><b>reimburse-buddy</b> &middot; <a href="/">Beranda</a>\n'
-                f'<a href="/employee">Employee</a> <a href="/admin">Finance admin</a> '
-                f'<a href="/admin/intake">Permintaan baru</a>{_pending_nav()}{_budget_nav()}</nav>')
+        return (f'<nav><b>reimburse-buddy</b> &middot; <a href="/">{e(label("ui_nav_home"))}</a>\n'
+                f'<a href="/employee">{e(label("ui_nav_employee"))}</a> <a href="/admin">{e(label("ui_nav_finance_admin"))}</a> '
+                f'<a href="/admin/intake">{e(label("ui_nav_intake"))}</a>{_pending_nav()}{_budget_nav()}</nav>')
     emp, role = cur
     if users.is_finance(role):
-        links = (f'<a href="/admin">Triage</a> <a href="/admin/intake">Permintaan baru</a>{_pending_nav()}'
-                 f'{_budget_nav()}')
+        links = (f'<a href="/admin">{e(label("ui_nav_triage"))}</a> '
+                 f'<a href="/admin/intake">{e(label("ui_nav_intake"))}</a>{_pending_nav()}{_budget_nav()}')
     elif users.is_manager(role):
-        links = '<a href="/manager">Persetujuan</a>'
+        links = f'<a href="/manager">{e(label("ui_nav_approvals"))}</a>'
     else:
-        links = '<a href="/employee">Klaim saya</a> <a href="/employee/new">Ajukan klaim</a>'
-    account = (f'<span class="note" id="signed-in">Masuk sebagai <b>{e(auth.reviewer_name(emp))}</b> '
+        links = (f'<a href="/employee">{e(label("ui_nav_my_claims"))}</a> '
+                 f'<a href="/employee/new">{e(label("ui_nav_submit_claim"))}</a>')
+    account = (f'<span class="note" id="signed-in">{e(label("ui_nav_signed_in"))} <b>{e(auth.reviewer_name(emp))}</b> '
                f'({e(users.ROLE_LABELS.get(role, role))})</span>'
                f'<form method="post" action="/logout" style="display:inline">'
-               f'<button type="submit" id="logout">Keluar</button></form>')
+               f'<button type="submit" id="logout">{e(label("ui_nav_sign_out"))}</button></form>')
     return f'<nav><b>reimburse-buddy</b> &middot; {links}{account}</nav>'
 
 
@@ -450,11 +451,19 @@ def owned_claim(cid: str, emp: str) -> dict:
     return claim
 
 
+def flash_text(msg: str) -> str:
+    """Text for a flash message the redirects carry (?msg=...). Unknown text is shown as it was sent."""
+    for english, code in (("Submitted", "ui_flash_submitted"), ("File added", "ui_flash_file_added")):
+        if msg == english or msg.startswith(english + " "):
+            return label(code) + msg[len(english):]
+    return msg
+
+
 @app.get("/employee", response_class=HTMLResponse)
 def employee_page(request: Request, msg: str = ""):
     emp = auth.current_employee(request)
     if not emp:
-        return page("Employee portal", auth.sign_in_notice())
+        return page(label("ui_portal_title"), auth.sign_in_notice())
     me = store.get_employee(emp)
     claims = [c for c in store.claims if c["employee_id"] == emp]
     rows = "".join(
@@ -469,14 +478,14 @@ def employee_page(request: Request, msg: str = ""):
     fwd_rows = "".join(f"<tr><td>{e(m['date'])}</td><td>{e(m['subject'])}</td>"
                        f"<td>{e(', '.join(a['name'] for a in m.get('attachments', [])))}</td></tr>" for m in fwd)
     body = f"""
-{f'<p class="tag ok">{e(msg)}</p>' if msg else ''}
-<h2>My claims</h2><div class="table-wrap"><table><tr><th>ID</th><th>Purpose</th><th>Trip</th><th class=num>Claimed</th><th>Status</th></tr>{rows}</table></div>
-<h2>Messages from finance</h2>{'<div class="table-wrap"><table><tr><th>Claim</th><th>Subject</th><th>Body</th></tr>' + msgs + '</table></div>' if msgs else '<p class=note>No messages yet.</p>'}
-<div class="box"><h2>New claim</h2><p>Drop all your receipts and boarding passes at once; we draft the items for you.</p>
-<p><a class="btn" href="/employee/new">Start a new claim</a></p></div>
-<h2>Forwarded to the reimburse mailbox</h2><div class="table-wrap"><table><tr><th>Date</th><th>Subject</th><th>Attachments</th></tr>{fwd_rows}</table></div>
-<p class="note">Employee: {e(me['name'])} &middot; {e(me['email'])}</p>"""
-    return page("Employee portal", body)
+{f'<p class="tag ok">{e(flash_text(msg))}</p>' if msg else ''}
+<h2>{e(label('ui_my_claims'))}</h2><div class="table-wrap"><table><tr><th>{e(label('ui_col_id'))}</th><th>{e(label('ui_col_purpose'))}</th><th>{e(label('ui_col_trip'))}</th><th class=num>{e(label('ui_col_claimed'))}</th><th>{e(label('ui_col_status'))}</th></tr>{rows}</table></div>
+<h2>{e(label('ui_messages_from_finance'))}</h2>{'<div class="table-wrap"><table><tr><th>' + e(label('ui_col_claim')) + '</th><th>' + e(label('ui_col_subject')) + '</th><th>' + e(label('ui_col_body')) + '</th></tr>' + msgs + '</table></div>' if msgs else '<p class=note>' + e(label('ui_no_messages')) + '</p>'}
+<div class="box"><h2>{e(label('ui_new_claim'))}</h2><p>{e(label('ui_new_claim_hint'))}</p>
+<p><a class="btn" href="/employee/new">{e(label('ui_start_new_claim'))}</a></p></div>
+<h2>{e(label('ui_forwarded_mailbox'))}</h2><div class="table-wrap"><table><tr><th>{e(label('ui_col_date'))}</th><th>{e(label('ui_col_subject'))}</th><th>{e(label('ui_col_attachments'))}</th></tr>{fwd_rows}</table></div>
+<p class="note">{e(label('ui_employee_footer'))} {e(me['name'])} &middot; {e(me['email'])}</p>"""
+    return page(label("ui_portal_title"), body)
 
 
 ITEM_RE = re.compile(r"^\s*(\w+)\s*,\s*(\d{4}-\d{2}-\d{2})\s*,\s*([^,]+?)\s*,\s*([^,]+?)\s*,\s*(yes|no)"

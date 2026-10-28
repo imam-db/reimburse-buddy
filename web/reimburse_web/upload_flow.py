@@ -110,22 +110,22 @@ i.addEventListener('change',show);
 def new_claim(request: Request):
     emp = auth.current_employee(request)
     if not emp:
-        return core.page("New claim", auth.sign_in_notice())
+        return core.page(label("ui_new_claim"), auth.sign_in_notice())
     me = core.store.get_employee(emp)
-    body = f"""<p><a href="/employee">&larr; My claims</a> &middot; {e(me['name'])}</p>
+    body = f"""<p><a href="/employee">&larr; {e(label('ui_my_claims'))}</a> &middot; {e(me['name'])}</p>
 <form method="post" action="/employee/drafts" enctype="multipart/form-data">
-<div class="box"><h2>1. Trip</h2><label>Purpose <input name="purpose" size="40" required></label>
-<label>Destination <input name="destination" value="Surabaya" required></label>
-<br><label>Dates <input type="date" name="start_date" required></label> &rarr;
-<label>End date <input type="date" name="end_date" required></label></div>
-<div class="box"><h2>2. Drop your receipts and boarding passes</h2>
-<label id="drop" class="drop">Drag photos or PDFs here, or click to choose (up to {MAX_FILES} files, 5 MB each)
+<div class="box"><h2>{e(label('ui_step_trip'))}</h2><label>{e(label('ui_field_purpose'))} <input name="purpose" size="40" required></label>
+<label>{e(label('ui_field_destination'))} <input name="destination" value="Surabaya" required></label>
+<br><label>{e(label('ui_field_dates'))} <input type="date" name="start_date" required></label> &rarr;
+<label>{e(label('ui_field_end_date'))} <input type="date" name="end_date" required></label></div>
+<div class="box"><h2>{e(label('ui_step_drop'))}</h2>
+<label id="drop" class="drop">{e(label('ui_drop_hint').format(max=MAX_FILES))}
 <input id="files" class="visually-hidden" type="file" name="files" multiple accept=".pdf,.png,.jpg,.jpeg"></label>
-<p><button type="button" id="pick-files">Pilih file</button></p>
+<p><button type="button" id="pick-files">{e(label('ui_pick_files'))}</button></p>
 <div id="picked" class="note"></div>
-<p class="note">Extraction: {e(get_extractor().name)}. You can check and fix every field on the next screen.</p>
-<button type="submit">Read files</button></div></form>{DROP_JS}"""
-    return core.page("New claim", body)
+<p class="note">{e(label('ui_extraction_note').format(engine=get_extractor().name))}</p>
+<button type="submit">{e(label('ui_read_files'))}</button></div></form>{DROP_JS}"""
+    return core.page(label("ui_new_claim"), body)
 
 
 @router.post("/employee/drafts")
@@ -166,12 +166,12 @@ def _badge(f: dict) -> str:
         return f"<span class='tag warn' title='{e(src)}'>{e(label(src))}</span>"
     if src in EXTRACTED:
         cls = "low" if f["confidence"] < LOW_CONFIDENCE else "ok"
-        return f"<span class='tag {cls}' title='{e(src)}'>extracted ({e(label(src))} {f['confidence']:.2f})</span>"
+        return f"<span class='tag {cls}' title='{e(src)}'>{e(label('extracted'))} ({e(label(src))} {f['confidence']:.2f})</span>"
     return ""
 
 
 def _err(f: dict) -> str:
-    return f"<div class=err>Could not read this file: {e(f['error'])}</div>" if f["error"] else ""
+    return f"<div class=err>{e(label('ui_could_not_read'))} {e(f['error'])}</div>" if f["error"] else ""
 
 
 def _input(card: dict, k: str, allowed_cats: list[str]) -> str:
@@ -180,7 +180,7 @@ def _input(card: dict, k: str, allowed_cats: list[str]) -> str:
     low = " class='low'" if f["source"] in EXTRACTED and f["confidence"] < LOW_CONFIDENCE and v else ""
     name = f"c_{card['id']}_{k}"
     if k == "category":
-        ctl = f"<select name='{name}'{low}>{core.options([('', 'choose...')] + [(c, label(c)) for c in allowed_cats], v)}</select>"
+        ctl = f"<select name='{name}'{low}>{core.options([('', label('ui_choose'))] + [(c, label(c)) for c in allowed_cats], v)}</select>"
     elif k == "date":
         ctl = f"<input type='date' name='{name}' value='{e(v)}'{low}>"
     elif k == "amount":
@@ -190,14 +190,14 @@ def _input(card: dict, k: str, allowed_cats: list[str]) -> str:
         ctl = f"<input name='{name}' value='{e(v)}' size=3{low}>"
     else:
         ctl = f"<input name='{name}' value='{e(v)}' size=22{low}>"
-    return f"<label>{e(k.replace('_', ' '))} {_badge(f)}<br>{ctl}</label>"
+    return f"<label>{e(label('ui_field_' + k))} {_badge(f)}<br>{ctl}</label>"
 
 
 @router.get("/employee/drafts/{did}", response_class=HTMLResponse)
 def draft_page(did: str, request: Request):
     emp = auth.current_employee(request)
     if not emp:
-        return core.page("Draft", auth.sign_in_notice())
+        return core.page(label("ui_draft"), auth.sign_in_notice())
     d = get_draft(did, emp)
     h = d["header"]
     allowed = [c for c in core.store.policy["allowed_categories"] if c not in ("late_checkout",)]
@@ -209,26 +209,25 @@ def draft_page(did: str, request: Request):
                (["nights"] if cat == "hotel" else [])
         files = ""
         for f in c["files"]:
-            mv = (f"<select name='move_{f['id']}' aria-label='Pindahkan berkas ke kartu lain'>{core.options([('', 'move to...')] + others(c['id']))}</select>"
-                  f"<button name=action value='move:{f['id']}'>Move</button>") if len(d["cards"]) > 1 else ""
+            mv = (f"<select name='move_{f['id']}' aria-label='Pindahkan berkas ke kartu lain'>{core.options([('', label('ui_move_to'))] + others(c['id']))}</select>"
+                  f"<button name=action value='move:{f['id']}'>{e(label('ui_move'))}</button>") if len(d["cards"]) > 1 else ""
             files += (f"<li>{e(f['name'])} <select name='f_{f['id']}_doc_type' aria-label='Jenis dokumen untuk {e(f['name'])}'>{core.options([(t, label(t)) for t in DOC_TYPES], f['doc_type'])}</select>"
                       f" {_badge({'source': f['doc_type_source'], 'confidence': f['extract']['fields']['doc_type']['confidence']})}"
                       f"{_err(f)} {mv}</li>")
-        merge = (f"<select name='merge_{c['id']}' aria-label='Gabungkan kartu ke kartu lain'>{core.options([('', 'merge into...')] + others(c['id']))}</select>"
-                 f"<button name=action value='merge:{c['id']}'>Merge</button>") if len(d["cards"]) > 1 else ""
-        split = f"<button name=action value='split:{c['id']}'>Split</button>" if len(c["files"]) > 1 else ""
+        merge = (f"<select name='merge_{c['id']}' aria-label='Gabungkan kartu ke kartu lain'>{core.options([('', label('ui_merge_into'))] + others(c['id']))}</select>"
+                 f"<button name=action value='merge:{c['id']}'>{e(label('ui_merge'))}</button>") if len(d["cards"]) > 1 else ""
+        split = f"<button name=action value='split:{c['id']}'>{e(label('ui_split'))}</button>" if len(c["files"]) > 1 else ""
         errs = "".join(f"<div class=err>{e(x)}</div>" for x in c["errors"])
-        cards_html += (f"<div class=card><b>Card {n + 1}</b>{errs}{''.join(_input(c, k, allowed) for k in keys)}"
-                       f"<div class=note>Files</div><ul>{files or '<li class=note>No file: add one after submitting.</li>'}</ul>"
-                       f"{merge} {split} <button name=action value='delete:{c['id']}'>Delete</button></div>")
+        cards_html += (f"<div class=card><b>{e(label('ui_card'))} {n + 1}</b>{errs}{''.join(_input(c, k, allowed) for k in keys)}"
+                       f"<div class=note>{e(label('ui_col_files'))}</div><ul>{files or '<li class=note>' + e(label('ui_no_file_yet')) + '</li>'}</ul>"
+                       f"{merge} {split} <button name=action value='delete:{c['id']}'>{e(label('ui_delete'))}</button></div>")
     errs = "".join(f"<p class=err>{e(x)}</p>" for x in d["errors"])
     body = f"""<p>{e(h['purpose'])} &middot; {e(h['destination'])} {e(h['start_date'])} &rarr; {e(h['end_date'])}</p>
-<p class="note">3. Check the drafted items. Yellow fields were read with low confidence. Anything you type or change is
-marked {e(label('self_declared'))} for the reviewer.</p>{errs}
+<p class="note">{e(label('ui_check_note').format(flag=label('self_declared')))}</p>{errs}
 <form method="post" action="/employee/drafts/{e(did)}"><div class="cards">{cards_html}</div>
-<p><button name=action value="save">Save changes</button> <button name=action value="add">Add an item without a file</button>
-<button name=action value="submit" style="font-weight:bold">Submit claim</button></p></form>"""
-    return core.page("Check your items", body)
+<p><button name=action value="save">{e(label('ui_save_changes'))}</button> <button name=action value="add">{e(label('ui_add_item'))}</button>
+<button name=action value="submit" style="font-weight:bold">{e(label('ui_submit_claim'))}</button></p></form>"""
+    return core.page(label("ui_check_title"), body)
 
 
 def _apply_edits(d: dict, form) -> None:
@@ -264,18 +263,18 @@ def _validate(d: dict) -> bool:
         c["errors"] = []
         f = {k: v["value"] for k, v in c["fields"].items()}
         if f["category"] not in allowed:
-            c["errors"].append("Choose a category.")
+            c["errors"].append(label("ui_err_category"))
         if not f["date"] or not (h["start_date"] <= str(f["date"]) <= h["end_date"]):
-            c["errors"].append("Date must fall within the trip.")
+            c["errors"].append(label("ui_err_date"))
         if not isinstance(f["amount"], int) or f["amount"] <= 0:
-            c["errors"].append("Amount must be whole Rupiah, e.g. 1.350.000.")
+            c["errors"].append(label("ui_err_amount"))
         if f["category"] == "flight" and not f["flight_no"]:
-            c["errors"].append("Flight number is required for flights.")
+            c["errors"].append(label("ui_err_flight_no"))
         if f["category"] == "hotel" and not str(f["nights"] or "").isdigit():
-            c["errors"].append("Number of nights is required for hotels.")
+            c["errors"].append(label("ui_err_nights"))
         ok = ok and not c["errors"]
     if not d["cards"]:
-        d["errors"] = ["Add at least one item."]
+        d["errors"] = [label("ui_err_no_item")]
         return False
     d["errors"] = []
     return ok
@@ -453,7 +452,7 @@ def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: i
     from . import qa as qa_web  # Employee Q&A hook; a no-op unless EMPLOYEE_QA is on
     emp = auth.current_employee(request)
     if not emp:
-        return core.page("Klaim / Claim", auth.sign_in_notice())
+        return core.page(label("ui_claim"), auth.sign_in_notice())
     claim = core.owned_claim(cid, emp)
     parts = qa_web.claim_page_parts(request, cid, claim["employee_id"])
     if isinstance(parts, HTMLResponse):
@@ -477,22 +476,22 @@ def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: i
         if res.status.value == "rejected":
             status, cls = "✕ " + label("rejected"), "bad"
         elif missing:
-            status, cls = "! Perlu tindakan: " + ", ".join(missing), "warn"
+            status, cls = "! " + label("ui_needs_action") + ": " + ", ".join(missing), "warn"
         else:
-            status, cls = "✓ Beres", "ok"
+            status, cls = "✓ " + label("ui_status_done"), "ok"
         add = (f"<form method=post action='/employee/claims/{e(cid)}/items/{e(it['id'])}/files' enctype='multipart/form-data'>"
                f"<input type=file name=file aria-label='Berkas bukti untuk {e(it['id'])}' accept='.pdf,.png,.jpg,.jpeg' required> "
-               "<button>Add file</button></form>")
+               f"<button>{e(label('ui_add_file'))}</button></form>")
         rows += (f"<tr><td>{e(label(it['category']))}<div class=note>{e(it['description'])}</div></td><td>{e(it['date'])}</td>"
-                 f"<td class=num>{e(rupiah(res.claimed))}</td><td>{e(', '.join(have)) or '<span class=note>none</span>'}</td>"
+                 f"<td class=num>{e(rupiah(res.claimed))}</td><td>{e(', '.join(have)) or '<span class=note>' + e(label('none')) + '</span>'}</td>"
                  f"<td><span class='tag {cls}'>{e(status)}</span></td><td>{add}</td></tr>")
-    body = f"""<p><a href="/employee">&larr; My claims</a></p>
-{f'<p class="tag ok">{e(msg)}: files were forwarded to {e(core.MAILBOX)} and linked to their items.</p>' if msg else ''}
+    body = f"""<p><a href="/employee">&larr; {e(label('ui_my_claims'))}</a></p>
+{f'<p class="tag ok">{e(label("ui_forwarded_note").format(flash=core.flash_text(msg), mailbox=core.MAILBOX))}</p>' if msg else ''}
 <p>{e(claim['purpose'])} &middot; {e(claim['trip']['destination'])} {e(claim['trip']['start_date'])} &rarr;
 {e(claim['trip']['end_date'])} &middot; status {core.status_tag(claim['status'])}</p>
-<div class="table-wrap"><table><tr><th>Item</th><th>Date</th><th class=num>Claimed</th><th>Files</th><th>Evidence</th><th></th></tr>{rows}</table></div>
-<p class="note">Finance reviews every claim. Amounts shown are what you claimed; finance decides what is approved.</p>"""
-    return core.page(f"Claim {cid}", qa_top + body + qa_box)
+<div class="table-wrap"><table><tr><th>{e(label('ui_col_item'))}</th><th>{e(label('ui_col_date'))}</th><th class=num>{e(label('ui_col_claimed'))}</th><th>{e(label('ui_col_files'))}</th><th>{e(label('ui_col_evidence'))}</th><th></th></tr>{rows}</table></div>
+<p class="note">{e(label('ui_finance_note'))}</p>"""
+    return core.page(f"{label('ui_claim')} {cid}", qa_top + body + qa_box)
 
 
 @router.post("/employee/claims/{cid}/items/{iid}/files")

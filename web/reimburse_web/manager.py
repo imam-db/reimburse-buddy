@@ -9,7 +9,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from . import auth
-from .labels import person
+from .labels import label, person
 
 router = APIRouter()
 
@@ -25,7 +25,7 @@ def manager_home(request: Request):
     e = web.e
     me = auth.current_employee(request)
     if not me:
-        return web.page("Persetujuan", auth.sign_in_notice())
+        return web.page(label("ui_nav_approvals"), auth.sign_in_notice())
     mine = [r for r in web.store.approval_requests if r["manager_id"] == me]
     rows = ""
     for r in mine:
@@ -34,7 +34,8 @@ def manager_home(request: Request):
                  f"<td>{e(person(web.store, claim['employee_id']))}</td>"
                  f"<td>{e(r['item_id'])}</td><td>{e(r.get('reason', ''))}</td>"
                  f"<td>{e(r['status'])}</td></tr>")
-    body = ("<div class=\"table-wrap\"><table><tr><th>Klaim</th><th>Karyawan</th><th>Item</th><th>Alasan</th>"
-            f"<th>Status</th></tr>{rows}</table></div>" if rows
-            else "<p>Belum ada permintaan persetujuan.</p>")
-    return web.page("Persetujuan", body)
+    body = (f"<div class=\"table-wrap\"><table><tr><th>{e(label('ui_col_claim'))}</th>"
+            f"<th>{e(label('ui_col_employee'))}</th><th>{e(label('ui_col_item'))}</th>"
+            f"<th>{e(label('ui_col_reason'))}</th><th>{e(label('ui_col_status'))}</th></tr>{rows}</table></div>" if rows
+            else f"<p>{e(label('ui_no_approval_requests'))}</p>")
+    return web.page(label("ui_nav_approvals"), body)

@@ -58,7 +58,7 @@ def test_drop_makes_cards_and_pairs_flight_files(client):
     assert cards[3]["amount"] is None  # unreadable -> empty card for manual input
     assert d["cards"][0]["fields"]["amount"]["source"] == "ocr"
     page = client.get(f"/employee/drafts/{d['id']}").text
-    assert "extracted (OCR" in page and "Could not read this file" in page
+    assert "Terekstrak (OCR" in page and "Berkas tidak bisa dibaca" in page
 
 
 def test_edits_are_self_declared_and_submit_forwards_files(client):
@@ -85,7 +85,7 @@ def test_edits_are_self_declared_and_submit_forwards_files(client):
     assert fwd[2]["attachments"][0]["evidence_status"] == "needs_review"
     assert fwd[2]["attachments"][0]["review_reason"] == "unreadable_file"
     page = client.get(r.headers["location"]).text
-    assert "forwarded to" in page and "Add file" in page
+    assert "berkas diteruskan ke" in page and "Tambah file" in page
     admin = client.get(f"/admin/claims/{cid}").text
     assert "amount: self_declared" in admin and "amount: ocr" in admin
     # Triage of the W43 batch is unaffected.
@@ -111,7 +111,7 @@ def test_submit_validation_and_card_actions(client):
     a, b = (c["id"] for c in d["cards"])
     # meal is dated 20 Oct, outside the 2-4 Oct trip
     client.post(f"/employee/drafts/{d['id']}", data=dict(form_of(d), action="submit"))
-    assert d["id"] in web.DRAFTS and "Date must fall within the trip." in d["cards"][1]["errors"]
+    assert d["id"] in web.DRAFTS and "Tanggal harus berada dalam rentang perjalanan." in d["cards"][1]["errors"]
     client.post(f"/employee/drafts/{d['id']}", data=dict(form_of(d), action=f"merge:{b}", **{f"merge_{b}": a}))
     assert len(d["cards"]) == 1 and len(d["cards"][0]["files"]) == 2
     client.post(f"/employee/drafts/{d['id']}", data=dict(form_of(d), action=f"split:{a}"))
@@ -125,7 +125,7 @@ def test_flight_needs_flight_no(client):
     form = form_of(d)
     form[f"c_{d['cards'][0]['id']}_flight_no"] = ""
     client.post(f"/employee/drafts/{d['id']}", data=dict(form, action="submit"))
-    assert "Flight number is required for flights." in d["cards"][0]["errors"]
+    assert "Nomor penerbangan wajib diisi untuk penerbangan." in d["cards"][0]["errors"]
 
 
 def submitted_with_unreadable(client):
