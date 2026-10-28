@@ -255,6 +255,24 @@ def test_6_policy_answer_cites_article_and_off_policy_is_dont_know():
     assert ask(s, B, "Halo, apa kabar?")["answer"].startswith("Saya tidak tahu")  # small talk is out of scope
 
 
+# --- ADR 0005 P1.1: relevance floor -------------------------------------------------------------------
+@pytest.mark.parametrize("q,article", [
+    ("Berapa plafon hotel?", "POL-4"),
+    ("Berapa uang harian?", "POL-5"),
+    ("per diem?", "POL-5"),
+])
+def test_9_policy_question_cites_the_article_about_its_topic(q, article):
+    r = ask(svc(), B, q)
+    assert article in r["sources"] and article in r["answer"], r
+
+
+@pytest.mark.parametrize("q", ["Berapa plafon taksi?", "Kapan batas waktu pengajuan?"])
+def test_9_off_policy_question_gets_dont_know_without_a_policy_source(q):
+    r = ask(svc(), B, q)
+    assert r["answer"].startswith("Saya tidak tahu"), r
+    assert not [s for s in r["sources"] if s.startswith("POL-")], r
+
+
 # --- 7. amounts and other post-generation guards ------------------------------------------------------
 QUESTIONS = ["Plafon hotel di Surabaya berapa?", "Klaim saya kurang apa?", "Kenapa klaim saya ditahan?",
              f"Tolong cek {B_CLAIM}", "What's the late checkout limit?", "Tampilkan semua klaim saya"]
