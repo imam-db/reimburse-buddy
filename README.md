@@ -292,6 +292,39 @@ One cap for the whole deployment, not one per claim, on a ledger of its own (`we
 - Not metered yet: the optional `LLMQAModel` (Q&A with a real key) and the Jev judge. Both are off by
   default and the demo runs the offline Q&A router and no judge, so the demo cannot spend there.
 
+### Plan state after a restart
+
+A request that is waiting — on a "who" question, or on the reviewer's approval — has to survive a deploy.
+Two things hold it: the plan store (request, plan versions, decisions, mock office rows) and the plan
+graph's checkpointer (the open interrupt). `REIMBURSE_PLAN_BACKEND` chooses where they live.
+
+- `file` (default outside production): `REIMBURSE_PLAN_STORE` (JSON files) and langgraph's `MemorySaver`.
+  A restart loses every open question and every pending approval; that is what the demo has always done.
+- `postgres` (default in production): `agent/migrations/006_plan_state.sql` plus the checkpoint tables
+  langgraph creates. One pool serves the store, the checkpointer and the mock office, so a suspended Neon
+  endpoint costs one reconnect: `check=ConnectionPool.check_connection` replaces a dead socket when it is
+  taken from the pool, and `prepare_threshold=None` keeps the connection safe behind a pooler.
+
+Both backends implement one `PlanStore` protocol (`agent/reimburse_agent/office/store.py`), and both mock
+offices are idempotent per `action_id` (`INSERT ... ON CONFLICT DO NOTHING` in Postgres), so a resumed run
+that replays an approved action finds the row it already wrote instead of sending a second email.
+
+`/decide` and `/answer` never fail silently. When the run cannot be resumed — the intake started it but the
+checkpointer has no thread for it, which is what a restart on the file backend looks like — the page says
+"Rencana ini tidak bisa dilanjutkan setelah server dimulai ulang. Gunakan Jalankan ulang." with a
+**Jalankan ulang** button, and nothing is executed. A decision for a plan an external driver owns
+(`agent/plan_demo.py`) is still only stored, as before.
+
+Two limits of this step: the expiry sweep still treats `store().runs()` as live (see
+`plans.startup_sweep`), so a run whose plan survived but whose thread did not is not expired — it shows the
+message above instead; and the checkpoint tables belong to langgraph, so `checkpoint_setup` has to run once
+per database (below).
+
+**Backup**: the plan tables are now the only copy of a pending request. Back them up with the rest of the
+database (`plan_requests`, `plan_versions`, `plan_decisions`, `mock_office_rows` and the `checkpoint*`
+tables, or Neon's point-in-time restore). The audit log remains the record of what was approved and
+executed; the plan tables are what lets a half-finished request be finished.
+
 ### Environment variables
 
 Secrets come from the environment (or a git-ignored `.env.local`) and are never committed.
@@ -314,7 +347,9 @@ Secrets come from the environment (or a git-ignored `.env.local`) and are never 
 | `REIMBURSE_LLM_SPEND_LEDGER` | `<plan store>/llm_spend.jsonl` | Dev/test spend ledger; production uses the Postgres table from migration 005 |
 | `REIMBURSE_APPROVAL_DEADLINE_MIN` | 30 | Minutes before an unanswered staged action of a dead run is expired |
 | `EMPLOYEE_QA` | off | Employee Q&A box and `POST /employee/qa` (see [docs/employee-qa.md](docs/employee-qa.md)) |
-| `REIMBURSE_PLAN_STORE` | `agent/.plans` | Where plans, requests and per-run mock office state are stored |
+| `REIMBURSE_PLAN_STORE` | `agent/.plans` | Where plans, requests and per-run mock office state are stored (file backend) |
+| `REIMBURSE_PLAN_BACKEND` | `postgres` in production, `file` otherwise | Where plan state and the graph checkpointer live: `file` (JSON + `MemorySaver`) or `postgres` (migration 006 + the checkpoint tables) |
+| `REIMBURSE_STATE_DATABASE_URL` | `REIMBURSE_AUDIT_DATABASE_URL` | Postgres DSN for plan state and checkpoints (secret; app role). One database can serve audit, spend and plan state |
 | `REIMBURSE_OFFICE_CONTACTS` / `REIMBURSE_OFFICE_RULES` | bundled synthetic files | Contact directory and operating rules for request intake |
 | `REIMBURSE_EXTRACTOR` | `ocr` | Upload extraction: `ocr`, `dual`, `rapidocr` or `vision` (see [File extraction](#file-extraction)) |
 | `REIMBURSE_WEB_UPLOADS` | `web/uploads` | Where uploaded files are kept |
@@ -360,8 +395,27 @@ export LLM_PRICE_OUTPUT_PER_MTOK=...
   missing `REIMBURSE_DEMO_SESSION_KEY` and a missing `LLM_DAILY_BUDGET_USD` or token price
   (`auth.AuthConfigError` / `spend.SpendConfigError`), so a deploy cannot come up with every route open
   or able to spend without a cap.
-- Apply migrations `001`-`005` before the first request: `005_llm_spend.sql` adds the spend ledger the
-  daily cap reads and writes.
+- The plan state is checked last, right before the expiry sweep: with `REIMBURSE_PLAN_BACKEND=postgres`
+  (the production default) a missing DSN, an unreachable database or a missing table aborts startup with
+  `store.StoreConfigError` naming what to run. There is no fallback to the file store, which would lose
+  exactly the state this backend keeps.
+- Apply migrations `001`-`006` before the first request: `005_llm_spend.sql` adds the spend ledger the
+  daily cap reads and writes, `006_plan_state.sql` the plan state (`plan_requests`, `plan_versions`,
+  `plan_decisions`, `mock_office_rows`; `reimburse_app` gets SELECT, INSERT and UPDATE, never DELETE).
+  Apply them in numeric order: `002`-`004` each rewrite the `audit_events.event_type` constraint, so a
+  later one applied first would silently narrow it.
+- Then create the plan-graph checkpoint tables once per database, as the **owner** role (langgraph owns
+  their shape, so this is not a migration). It prints PASS/FAIL per step, masks the DSN, and grants
+  `reimburse_app` SELECT, INSERT, UPDATE and DELETE on the `checkpoint*` tables only — the audit log and
+  the spend ledger stay append-only:
+
+  ```bash
+  cd agent
+  NEON_OWNER_DSN='postgresql://owner:...@ep-...neon.tech/neondb' \
+    uv run python -m reimburse_agent.office.checkpoint_setup
+  ```
+
+  `checkpoint_setup` is safe to re-run: `PostgresSaver.setup()` skips the migrations it already applied.
 - Outside production (`APP_ENV` unset or any other value), behaviour is unchanged: JSONL via
   `REIMBURSE_AUDIT_LOG`, otherwise a fresh in-memory log.
 
@@ -390,13 +444,15 @@ HTTP route for this: the web simulation has no admin authentication, so it is CL
 
 ```
 web/reimburse_web/      version B web app (FastAPI): app.py, auth.py (demo password), intake.py, plans.py,
-                        qa.py, upload_flow.py, agent_bridge.py (starts the agent worker), spend.py (daily
-                        LLM budget), labels.py (Indonesian UI labels)
+                        plan_state.py (plan store + checkpointer backend), qa.py, upload_flow.py,
+                        agent_bridge.py (starts the agent worker), spend.py (daily LLM budget),
+                        labels.py (Indonesian UI labels)
 agent/
-  reimburse_agent/      graph.py (claim agent), plan_graph.py, office/ (plan, directory, rules, mock tools),
-                        audit.py, injection.py, qa/, retrieval.py, audit_selftest.py
+  reimburse_agent/      graph.py (claim agent), plan_graph.py, office/ (plan, directory, rules, mock tools,
+                        store.py (file + Postgres plan store), checkpoint_setup.py), audit.py, injection.py,
+                        qa/, retrieval.py, audit_selftest.py
   investigate_worker.py agent subprocess used by the web app
-  migrations/           Postgres schemas: audit log (001-004) and the LLM spend ledger (005)
+  migrations/           Postgres schemas: audit log (001-004), LLM spend ledger (005), plan state (006)
   eval/                 synthetic eval suites and results
 docs/                   architecture and flow diagrams, request intake, employee Q&A, UI notes
 src/reimburse_buddy/
