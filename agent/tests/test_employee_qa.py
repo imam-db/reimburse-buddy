@@ -273,6 +273,20 @@ def test_9_off_policy_question_gets_dont_know_without_a_policy_source(q):
     assert not [s for s in r["sources"] if s.startswith("POL-")], r
 
 
+# --- ADR 0005 P1.2: shared words do not make a question bilingual --------------------------------------
+@pytest.mark.parametrize("q,lang,marker", [
+    ("Status klaim saya?", "id", "Keputusan akhir ada di finance."),
+    ("What is my claim status?", "en", "Finance makes the final decision."),
+])
+def test_10_shared_words_do_not_force_a_mixed_reply(q, lang, marker):
+    r = ask(svc(), B, q, ctx=B_CLAIM)
+    assert r["lang"] == lang and marker in r["answer"] and "(EN)" not in r["answer"], r
+
+
+def test_10_unknown_words_still_default_to_indonesian():
+    assert E.detect_lang("wkwk") == "id" and E.detect_lang("status") == "id"
+
+
 # --- 7. amounts and other post-generation guards ------------------------------------------------------
 QUESTIONS = ["Plafon hotel di Surabaya berapa?", "Klaim saya kurang apa?", "Kenapa klaim saya ditahan?",
              f"Tolong cek {B_CLAIM}", "What's the late checkout limit?", "Tampilkan semua klaim saya"]

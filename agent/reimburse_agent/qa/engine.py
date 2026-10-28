@@ -58,10 +58,15 @@ EN_WORDS = frozenset("""what what's whats my is the how much why who else this m
 night claim claims missing cap policy status held hold need does do can rate allowance which""".split())
 
 
+# A word in both lists (e.g. "status") says nothing about the language; counting it made Indonesian questions
+# look mixed and doubled every answer with the English text.
+SHARED_WORDS = ID_WORDS & EN_WORDS
+
+
 def detect_lang(text: str) -> str:
     words = re.findall(r"[a-z']+", (text or "").lower())
-    i = sum(w in ID_WORDS for w in words)
-    e = sum(w in EN_WORDS for w in words)
+    i = sum(w in ID_WORDS and w not in SHARED_WORDS for w in words)
+    e = sum(w in EN_WORDS and w not in SHARED_WORDS for w in words)
     if i and e:
         return "mixed"
     return "en" if e > i else "id"
