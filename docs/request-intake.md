@@ -155,9 +155,17 @@ Run the suites with:
 
 ```sh
 uv run --offline pytest -q                     # web, rule engine, intake (the Postgres tests skip)
-DATABASE_URL=<app-role DSN> uv run --offline pytest -q -m postgres   # plan state + checkpoints
 cd agent && uv run --offline pytest -q
 ```
 
-`tests/test_request_intake_restart.py` and `agent/tests/test_plan_store_contract.py` are the two that need a
-real database; everything else runs on the file backend.
+The two tests that need a real database run with `DATABASE_URL` set to the app role (after migration 006 and
+`checkpoint_setup`); without it they skip:
+
+```sh
+DATABASE_URL=<app-role DSN> uv run --offline pytest -q -m postgres
+PYTHONPATH=agent DATABASE_URL=<app-role DSN> uv run --offline pytest -q -m postgres \
+  agent/tests/test_plan_store_contract.py
+```
+
+The contract test runs from the repo root because the postgres backend needs `psycopg-pool`, which the root
+`web` group installs; the agent environment only has `psycopg`.
