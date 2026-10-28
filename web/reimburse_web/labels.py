@@ -217,6 +217,23 @@ LABELS = {
     "ui_forwarded_note": "{flash}: berkas diteruskan ke {mailbox} dan ditautkan ke itemnya.",
     # manager area (manager.py)
     "ui_no_approval_requests": "Belum ada permintaan persetujuan.",
+    # manager approval requests (docs/adr/0003-manager-approval-requests.md)
+    "ui_req_pending": "Menunggu jawaban atasan",
+    "ui_req_approved": "Disetujui atasan",
+    "ui_req_rejected": "Ditolak atasan",
+    "ui_req_approve": "Setujui",
+    "ui_req_reject": "Tolak",
+    "ui_req_note": "Catatan (opsional)",
+    "ui_req_explain": ("Jawaban Anda dicatat di jejak audit dan menjadi masukan untuk finance. "
+                       "Keputusan akhir klaim tetap di tangan finance."),
+    "ui_req_already_answered": "Permintaan ini sudah dijawab.",
+    "ui_req_not_saved": "Jawaban belum tersimpan karena jejak audit tidak tersedia. Coba lagi nanti.",
+    "ui_req_ask_manager": "Minta persetujuan atasan",
+    "ui_req_reason": "Alasan untuk atasan",
+    "ui_req_manager": "Atasan",
+    "ui_req_no_manager": "Karyawan ini tidak punya atasan di direktori, jadi permintaan tidak bisa dikirim.",
+    "ui_req_open_exists": "Masih ada permintaan yang menunggu jawaban atasan untuk item ini.",
+    "ui_req_sent": "Permintaan persetujuan dikirim ke atasan",
 }
 
 

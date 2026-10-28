@@ -228,6 +228,14 @@ redirected to the form, anything else gets `401`. Three roles
 `/` and `/admin/*` and lands on `/admin`. A wrong-role navigation is redirected to the role's landing page,
 any other method gets `403`. `POST /admin/reset` is refused (`403`) when `APP_ENV` is `prod`/`production`.
 
+Manager approvals ([ADR 0003](docs/adr/0003-manager-approval-requests.md)): on a finance claim page,
+"Minta persetujuan atasan" sends one item to the claimant's own manager (one open request per item). The
+manager answers once on `/manager` (Setujui / Tolak plus a note); another manager gets `404` and the owner
+of the claim is refused. The answer is logged as `approval` / `rejection` (run `approval_request:<id>`,
+actor `human:<manager>`) before the request changes, and an audit failure changes nothing (`503`). Finance
+sees the answer next to the item. It is input only: the rule engine, the claim status and the item
+decisions stay with finance.
+
 - Session: `issued_at|employee_id|role|nonce` plus an HMAC, 12 hours, `httponly`, `samesite=lax`,
   `secure` in production, checked on every request. `auth.reviewer_of` returns the employee_id, which is
   what makes a self-approval refusable.

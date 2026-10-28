@@ -32,6 +32,7 @@ from reimburse_buddy.triage import approve_cleared_batch, triage_claims
 from . import auth, plan_state, spend, users
 from .agent_bridge import NO_KEY_MESSAGE, Investigator, RateLimited, key_configured
 from .intake import router as intake_router
+from . import manager
 from .manager import router as manager_router
 from .labels import label, person
 from .plans import router as plans_router, startup_config_check, startup_sweep
@@ -653,6 +654,20 @@ def reset():
     return RedirectResponse("/admin?msg=Demo+data+reset", status_code=303)
 
 
+def manager_cell(cid: str, item_id: str, owner: str) -> str:
+    """The manager's answers for one item, and the form to ask when nothing is pending (docs/adr/0003)."""
+    reqs = [r for r in manager.requests_for(cid) if r["item_id"] == item_id]
+    out = "".join(
+        f"<div class=note id='req-{e(r['id'])}'>{e(label('ui_req_manager'))} {e(person(store, r['manager_id']))}: "
+        f"<b>{e(manager.status_text(r))}</b>{(' &middot; ' + e(r['note'])) if r.get('note') else ''}</div>"
+        for r in reqs)
+    if any(r["status"] == "pending" for r in reqs) or not store.get_employee(owner).get("manager_id"):
+        return out
+    return out + (f"<form method=post action='/admin/claims/{e(cid)}/items/{e(item_id)}/manager'>"
+                  f"<input name=reason maxlength=500 aria-label='{e(label('ui_req_reason'))}' "
+                  f"placeholder='{e(label('ui_req_reason'))}'> <button>{e(label('ui_req_ask_manager'))}</button></form>")
+
+
 @app.get("/admin/claims/{cid}", response_class=HTMLResponse)
 def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
     try:
@@ -705,6 +720,7 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
                        f"<button name=verdict value=reject>Reject evidence</button></form>") + dec
         if self_blocked:  # UX only: the server refuses these requests anyway
             dec = f"<div class=note id='self-approval'>{e(label('self_approval_note'))}</div>"
+        dec += manager_cell(cid, it.item_id, emp)
         item_rows += (f"<tr id='item-{e(it.item_id)}'><td>{e(it.item_id)}</td>"
                       f"<td>{e(label(it.category))}<div class=note>{e(src['description'])}</div></td>"
                       f"<td class=num>{e(rupiah(it.claimed))}</td><td class=num>{e(rupiah(it.approvable))}</td>"
@@ -887,6 +903,25 @@ def message(cid: str, subject: str = Form(...), body: str = Form(...)):
     claim = store.get_claim(cid)
     res = store.send_message(claim["employee_id"], body, subject, cid)
     return RedirectResponse(f"/admin/claims/{cid}?msg=Sent+{res['message_id']}+replies+{res['replies_received']}", status_code=303)
+
+
+@app.post("/admin/claims/{cid}/items/{iid}/manager")
+def ask_manager(cid: str, iid: str, reason: str = Form("")):
+    """Finance asks the claimant's own manager about one item. One open request per item; the answer is input
+    for finance, never a decision (docs/adr/0003-manager-approval-requests.md)."""
+    try:
+        claim = store.get_claim(cid)
+    except KeyError:
+        raise HTTPException(404, f"Unknown claim {cid}")
+    if iid not in {i["id"] for i in claim["items"]}:
+        raise HTTPException(404, f"Unknown item {iid}")
+    boss = store.get_employee(claim["employee_id"]).get("manager_id")
+    if not boss:
+        return back_to_claim(cid, label("ui_req_no_manager"))
+    if any(r["item_id"] == iid and r["status"] == "pending" for r in manager.requests_for(cid)):
+        return back_to_claim(cid, label("ui_req_open_exists"))
+    req = store.request_approval(boss, cid, iid, reason.strip()[:500])
+    return back_to_claim(cid, f"{label('ui_req_sent')} ({req['id']})")
 
 
 @app.post("/admin/claims/{cid}/status")

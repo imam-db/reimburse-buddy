@@ -293,13 +293,16 @@ def test_nav_has_exactly_the_links_of_the_role(client, emp):
 def test_manager_lists_only_the_requests_addressed_to_them(client):
     c1 = next(c for c in web.store.claims if web.store.get_employee(c["employee_id"])["manager_id"] == "EMP-100")
     c2 = next(c for c in web.store.claims if web.store.get_employee(c["employee_id"])["manager_id"] == "EMP-101")
-    web.store.request_approval("EMP-100", c1["id"], c1["items"][0]["id"], reason="alasan-satu")
-    web.store.request_approval("EMP-101", c2["id"], c2["items"][0]["id"], reason="alasan-dua")
+    r1 = web.store.request_approval("EMP-100", c1["id"], c1["items"][0]["id"], reason="alasan-satu")
+    r2 = web.store.request_approval("EMP-101", c2["id"], c2["items"][0]["id"], reason="alasan-dua")
     login_as(client, "EMP-100")
     html = client.get("/manager").text
     assert c1["id"] in html and "alasan-satu" in html
     assert c2["id"] not in html and "alasan-dua" not in html
-    assert "<form" not in html.split("</nav>")[1] and "<button" not in html.split("</nav>")[1]
+    # Only the manager's own pending request gets an answer form (docs/adr/0003-manager-approval-requests.md).
+    body = html.split("</nav>")[1]
+    assert body.count("<form") == 1 and f"/manager/requests/{r1['id']}" in body
+    assert f"/manager/requests/{r2['id']}" not in body
     login_as(client, "EMP-101")
     assert "alasan-dua" in client.get("/manager").text
 
