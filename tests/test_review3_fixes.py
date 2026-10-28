@@ -46,13 +46,14 @@ def test_empty_flight_number_never_matches():
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(web, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", "EMP-004")  # gate off: the acting employee comes from the environment
     web.reset_all()
     yield TestClient(web.app)
     web.reset_all()
 
 
 def submit(client, items):
-    return client.post("/employee/claims", data={"emp": "EMP-004", "purpose": "p", "destination": "Bandung",
+    return client.post("/employee/claims", data={"purpose": "p", "destination": "Bandung",
                                                  "start_date": "2026-10-20", "end_date": "2026-10-21", "items": items})
 
 
@@ -84,7 +85,7 @@ def test_web_status_limited_by_engine(client):
 
 def test_web_upload_limits(client):
     submit(client, "taxi, 2026-10-20, Taxi, 150000, no")
-    base = {"emp": "EMP-004", "subject": "r", "claim_id": "CLM-2026-W001", "att_type": "receipt", "item_id": "IT-1"}
+    base = {"subject": "r", "claim_id": "CLM-2026-W001", "att_type": "receipt", "item_id": "IT-1"}
     assert client.post("/employee/forward", data=base, files={"file": ("x.exe", b"MZ", "application/octet-stream")}).status_code == 400
     big = b"0" * (web.MAX_UPLOAD_BYTES + 1)
     assert client.post("/employee/forward", data=base, files={"file": ("r.pdf", big, "application/pdf")}).status_code == 413

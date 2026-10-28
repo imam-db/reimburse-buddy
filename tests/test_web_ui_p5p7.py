@@ -24,6 +24,7 @@ HERO = "CLM-2026-0110"
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(web, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", "EMP-001")  # gate off: the acting employee comes from the environment
     monkeypatch.delenv("EMPLOYEE_QA", raising=False)
     web.reset_all()
     yield TestClient(web.app)
@@ -39,7 +40,7 @@ def test_landing_page_explains_roles_and_links_the_demo_claim(client):
     assert '<a href="/">Beranda</a>' in html
     assert '<a class="btn" href="/admin">Lihat triage finance</a>' in html
     assert f'<a class="btn" href="/admin/claims/{HERO}">Buka klaim contoh (Rina, Surabaya)</a>' in html
-    assert f'<a class="btn" href="/employee/claims/{HERO}">Coba tanya sebagai karyawan</a>' in html
+    assert "Coba tanya sebagai karyawan" not in html  # finance cannot open employee pages
     assert '<form method="post" action="/admin/reset">' in html
     assert "Reset demo" in html
     assert "Data sintetis. Tidak ada email atau pesan sungguhan yang dikirim." in html
@@ -60,10 +61,12 @@ def test_status_tag_is_not_colour_only():
     assert ">! Perlu tindakan<" in web.status_tag("needs_action")
 
 
-def test_employee_evidence_status_uses_icons(client):
+def test_employee_evidence_status_uses_icons(client, monkeypatch):
+    monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", web.store.get_claim("CLM-2026-0102")["employee_id"])
     complete = client.get("/employee/claims/CLM-2026-0102").text
     assert "✓ Beres" in complete
 
+    monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", web.store.get_claim(HERO)["employee_id"])
     missing = client.get(f"/employee/claims/{HERO}").text
     assert "! Perlu tindakan:" in missing
     assert "Boarding pass belum ada" in missing
@@ -164,7 +167,7 @@ class _FakeRun:
 
 
 def _employee_draft(client) -> str:
-    r = client.post("/employee/drafts", data={"emp": "EMP-001", "purpose": "Client visit",
+    r = client.post("/employee/drafts", data={"purpose": "Client visit",
                                               "destination": "Surabaya", "start_date": "2026-10-02",
                                               "end_date": "2026-10-04"}, follow_redirects=False)
     assert r.status_code == 303
@@ -180,7 +183,6 @@ def test_every_form_control_on_the_pages_has_a_label(client):
             f"/admin/claims/{HERO}": client.get(f"/admin/claims/{HERO}").text,
             "/admin/investigations/fake-run": client.get("/admin/investigations/fake-run").text,
             "/employee": client.get("/employee").text,
-            "/employee/claims": client.get("/employee/claims").text,
             f"/employee/claims/{HERO}": client.get(f"/employee/claims/{HERO}").text,
             "/employee/new": client.get("/employee/new").text,
             f"/employee/drafts/{did}": client.get(f"/employee/drafts/{did}").text,

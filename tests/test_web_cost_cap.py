@@ -320,7 +320,7 @@ def test_prod_without_a_price_fails_startup(prod):
 def test_prod_with_budget_and_prices_serves_the_app(prod):
     configure(prod)
     with TestClient(web.app, base_url="https://testserver") as c:
-        assert login_as(c, "EMP-100", next_path="/").status_code == 303
+        assert login_as(c, "EMP-102", next_path="/").status_code == 303
         assert c.get("/").status_code == 200
         assert "Sisa anggaran LLM hari ini: $1.00" in c.get("/").text
 
@@ -434,7 +434,7 @@ def test_an_unreachable_ledger_refuses_the_run_instead_of_a_500(prod, monkeypatc
 
     # https, because in production the session cookie is Secure and TestClient would not send it otherwise
     with TestClient(web.app, base_url="https://testserver") as c:
-        login_as(c, "EMP-100")  # production needs the gate
+        login_as(c, "EMP-102")  # production needs the gate
         r = c.post(f"/admin/claims/{HERO}/investigate", follow_redirects=False)
     assert r.status_code == 200  # not a 500
     assert "id=ledger-unavailable" in r.text and "tidak ada run yang dijalankan" in r.text

@@ -20,7 +20,8 @@ from reimburse_agent import audit as A
 from reimburse_agent.office.store import FilePlanStore
 
 PUBLIC = {"/login", "/logout", "/healthz"}
-REVIEWER_EMAIL = TEST_ACCOUNTS["EMP-100"][0]
+REVIEWER_EMAIL = TEST_ACCOUNTS["EMP-100"][0]  # a manager
+FINANCE_EMAIL = TEST_ACCOUNTS["EMP-102"][0]
 GENERIC_ERROR = "Email atau kata sandi salah."
 
 
@@ -131,14 +132,14 @@ def test_wrong_password_unknown_email_and_inactive_account_get_the_same_message(
     assert client.get("/admin", follow_redirects=False).status_code == 303
 
 
-def test_correct_login_reaches_admin_and_nav_names_the_reviewer(client, store):
-    r = post_login(client, email="  " + REVIEWER_EMAIL.upper() + " ")  # strip + lowercase
+def test_correct_login_reaches_admin_and_nav_names_the_user(client, store):
+    r = post_login(client, email="  " + FINANCE_EMAIL.upper() + " ")  # strip + lowercase
     assert r.status_code == 303 and r.headers["location"] == "/admin"
     assert auth.COOKIE in r.cookies
-    assert store.logins == [1]  # touch_login ran for EMP-100's row
+    assert store.logins == [3]  # touch_login ran for EMP-102's row
     page = client.get("/admin")
     assert page.status_code == 200
-    assert "Masuk sebagai" in page.text and "Dewi Anggraini" in page.text
+    assert "Masuk sebagai" in page.text and "Rani Kusuma" in page.text and "Finance" in page.text
     assert 'action="/logout"' in page.text
 
 
@@ -189,10 +190,10 @@ def test_a_user_store_outage_is_a_503_page_not_a_crash(client, store, monkeypatc
 
 def test_open_redirect_next_is_ignored(client):
     for bad in ("//evil.example/x", "https://evil.example", "/\\evil", "javascript:alert(1)"):
-        r = post_login(client, next_path=bad)
-        assert r.headers["location"] == "/", bad
+        r = post_login(client, email=FINANCE_EMAIL, next_path=bad)
+        assert r.headers["location"] == "/admin", bad  # finance's landing page
     assert client.get("/login?next=//evil.example").text.count('value="//evil.example"') == 0
-    r = post_login(client, next_path="/admin/plans")
+    r = post_login(client, email=FINANCE_EMAIL, next_path="/admin/plans")
     assert r.headers["location"] == "/admin/plans"
 
 
@@ -220,21 +221,104 @@ def test_expired_and_forged_cookies_are_refused(client):
 # --- roles --------------------------------------------------------------------------------
 def test_employee_role_is_sent_to_their_claims_and_cannot_open_reviewer_pages(client):
     r = login_as(client, "EMP-001", next_path="/admin")
-    assert r.status_code == 303 and r.headers["location"] == "/employee/claims"
+    assert r.status_code == 303 and r.headers["location"] == "/employee"
     for path in ("/admin", "/admin/plans", "/admin/intake", "/admin/claims/CLM-2026-0103", "/"):
         r = client.get(path, follow_redirects=False)
-        assert r.status_code == 303 and r.headers["location"] == "/employee/claims", path
+        assert r.status_code == 303 and r.headers["location"] == "/employee", path
     for path in ("/admin/reset", "/admin/batch/approve", "/admin/plans/req-x/decide"):
         assert client.post(path, data={}, follow_redirects=False).status_code == 403, path
-    assert client.get("/employee/claims", follow_redirects=False).status_code == 200
+    assert client.get("/employee", follow_redirects=False).status_code == 200
 
 
-@pytest.mark.parametrize("emp", ["EMP-100", "EMP-101", "EMP-102"])
-def test_reviewer_and_finance_roles_open_the_admin_pages(client, emp):
-    assert login_as(client, emp).headers["location"] == "/admin"
+def test_finance_opens_the_admin_pages(client):
+    assert login_as(client, "EMP-102").headers["location"] == "/admin"
     assert client.get("/admin").status_code == 200
     assert client.get("/admin/plans").status_code == 200
-    assert auth.reviewer_of(client) == emp  # the self-approval checks still see the employee_id
+    assert client.get("/").status_code == 200
+    assert auth.reviewer_of(client) == "EMP-102"  # the self-approval checks still see the employee_id
+
+
+LANDING = {"EMP-001": "/employee", "EMP-100": "/manager", "EMP-102": "/admin"}
+AREAS = {"/employee": "EMP-001", "/manager": "EMP-100", "/admin": "EMP-102"}  # area -> the role that owns it
+POSTS = {"/employee": "/employee/claims", "/manager": "/manager", "/admin": "/admin/batch/approve"}
+
+
+@pytest.mark.parametrize("emp", sorted(LANDING))
+def test_each_role_lands_on_its_page_after_login(client, emp):
+    assert login_as(client, emp, next_path="/login-ignored").headers["location"] == LANDING[emp]
+    assert login_as(client, emp, next_path=LANDING[emp]).headers["location"] == LANDING[emp]
+    assert client.get(LANDING[emp], follow_redirects=False).status_code == 200
+    for other in AREAS:  # a next the role may not open falls back to its landing page
+        if other != LANDING[emp]:
+            assert login_as(client, emp, next_path=other).headers["location"] == LANDING[emp]
+
+
+@pytest.mark.parametrize("emp", sorted(LANDING))
+def test_wrong_role_is_redirected_on_get_and_refused_on_post(client, emp):
+    login_as(client, emp)
+    for area, owner in AREAS.items():
+        if owner == emp:
+            continue
+        r = client.get(area, follow_redirects=False)
+        assert r.status_code == 303 and r.headers["location"] == LANDING[emp], (emp, area)
+        assert client.post(POSTS[area], data={}, follow_redirects=False).status_code == 403, (emp, area)
+    if emp != "EMP-102":  # `/` belongs to finance
+        assert client.get("/", follow_redirects=False).headers["location"] == LANDING[emp]
+
+
+NAV_LINKS = {
+    "EMP-001": {"/employee", "/employee/new"},
+    "EMP-100": {"/manager"},
+    "EMP-102": {"/admin", "/admin/intake", "/admin/plans"},
+}
+
+
+@pytest.mark.parametrize("emp", sorted(NAV_LINKS))
+def test_nav_has_exactly_the_links_of_the_role(client, emp):
+    login_as(client, emp)
+    html = client.get(LANDING[emp]).text
+    nav = html[html.index("<nav>"):html.index("</nav>")]
+    hrefs = set(re.findall(r'href="([^"]+)"', nav))
+    expected = set(NAV_LINKS[emp])
+    if emp == "EMP-102":
+        expected = {"/admin", "/admin/intake"} | (hrefs & {"/admin/plans"})  # plans link only with pending plans
+    assert hrefs == expected
+    assert 'id="signed-in"' in nav and 'id="logout"' in nav
+    label = {"EMP-001": "Karyawan", "EMP-100": "Manager", "EMP-102": "Finance"}[emp]
+    assert f"({label})" in nav
+    assert "Synthetic data. Simulation only." not in nav
+    assert 'id="footer-note"' in html and "Synthetic data. Simulation only." in html
+
+
+def test_manager_lists_only_the_requests_addressed_to_them(client):
+    c1 = next(c for c in web.store.claims if web.store.get_employee(c["employee_id"])["manager_id"] == "EMP-100")
+    c2 = next(c for c in web.store.claims if web.store.get_employee(c["employee_id"])["manager_id"] == "EMP-101")
+    web.store.request_approval("EMP-100", c1["id"], c1["items"][0]["id"], reason="alasan-satu")
+    web.store.request_approval("EMP-101", c2["id"], c2["items"][0]["id"], reason="alasan-dua")
+    login_as(client, "EMP-100")
+    html = client.get("/manager").text
+    assert c1["id"] in html and "alasan-satu" in html
+    assert c2["id"] not in html and "alasan-dua" not in html
+    assert "<form" not in html.split("</nav>")[1] and "<button" not in html.split("</nav>")[1]
+    login_as(client, "EMP-101")
+    assert "alasan-dua" in client.get("/manager").text
+
+
+def test_manager_with_nothing_addressed_to_them_sees_the_empty_notice(client):
+    login_as(client, "EMP-100")
+    assert "Belum ada permintaan persetujuan." in client.get("/manager").text
+
+
+def test_reset_is_refused_in_production_and_its_buttons_are_hidden(client, monkeypatch):
+    login_as(client, "EMP-102")
+    assert 'action="/admin/reset"' in client.get("/").text
+    assert 'action="/admin/reset"' in client.get("/admin").text
+    monkeypatch.setenv("APP_ENV", "production")
+    c = TestClient(web.app, base_url="https://testserver")
+    login_as(c, "EMP-102")
+    assert 'action="/admin/reset"' not in c.get("/").text
+    assert 'action="/admin/reset"' not in c.get("/admin").text
+    assert c.post("/admin/reset", follow_redirects=False).status_code == 403
 
 
 # --- gate off -----------------------------------------------------------------------------
@@ -405,3 +489,19 @@ def test_prod_with_everything_set_serves_the_app(prod, store):
         assert login_as(c, "EMP-100").status_code == 303
         assert c.get("/").status_code == 200
         assert "secure" in login_as(c, "EMP-100").headers["set-cookie"].lower()
+
+
+def test_employee_login_lands_on_portal_and_old_claims_url_redirects(client):
+    r = login_as(client, "EMP-001")
+    assert r.status_code == 303 and r.headers["location"] == "/employee"
+    r = client.get("/employee/claims", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/employee"
+    r = client.get("/employee/claims?msg=File+added", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/employee?msg=File%20added"
+
+
+def test_portal_lists_only_own_claims_with_links(client):
+    login_as(client, "EMP-003")
+    page = client.get("/employee").text
+    assert "href='/employee/claims/CLM-2026-0104'" in page
+    assert "CLM-2026-0101" not in page

@@ -32,6 +32,7 @@ from reimburse_buddy.triage import approve_cleared_batch, triage_claims
 from . import auth, plan_state, spend, users
 from .agent_bridge import NO_KEY_MESSAGE, Investigator, RateLimited, key_configured
 from .intake import router as intake_router
+from .manager import router as manager_router
 from .labels import label, person
 from .plans import router as plans_router, startup_config_check, startup_sweep
 from .qa import router as qa_router
@@ -55,6 +56,7 @@ app = FastAPI(title="reimburse-buddy web simulation",
                           plan_state.startup_check, startup_sweep])
 app.include_router(plans_router)
 app.include_router(intake_router)
+app.include_router(manager_router)
 app.include_router(qa_router)
 store = DataStore()
 # Reviewer working state per claim: evidence IDs attached so far and item decisions.
@@ -77,8 +79,8 @@ async def require_demo_login(request: Request, call_next):
     """Close every route except /login, /logout and /healthz when the login gate is on.
 
     A browser navigation (GET/HEAD) is redirected to the form; anything else gets 401, so a script
-    cannot post its way in. A signed-in employee may only open the employee pages (navigations are sent
-    to /employee/claims, anything else gets 403). With no user store or DSN outside production the gate
+    cannot post its way in. Each role may only open its own area (employee, manager, finance); a wrong-role
+    navigation is sent to the role's landing page, anything else gets 403. With no user store or DSN outside production the gate
     is off and every request passes through untouched."""
     if not auth.enabled() or request.url.path in auth.PUBLIC_PATHS:
         return await call_next(request)
@@ -91,7 +93,7 @@ async def require_demo_login(request: Request, call_next):
         if request.method in ("GET", "HEAD"):
             return RedirectResponse(auth.home_for(session.role), status_code=303)
         return JSONResponse({"detail": "Akses ditolak. / Access denied."}, status_code=403)
-    token = auth.set_current(session.reviewer)
+    token = auth.set_current(session.reviewer, session.role)
     try:
         return await call_next(request)
     finally:
@@ -215,16 +217,25 @@ NAV_CSS = ("nav{margin-bottom:12px}nav a{margin-right:14px}nav .note{margin-left
 
 
 def nav_html() -> str:
-    reviewer = auth.current_reviewer()
-    account = ""
-    if reviewer:
-        account = (f'<span class="note" id="signed-in">Masuk sebagai <b>{e(auth.reviewer_name(reviewer))}</b></span>'
-                   f'<form method="post" action="/logout" style="display:inline">'
-                   f'<button type="submit" id="logout">Keluar</button></form>')
-    return (f'<nav><b>reimburse-buddy</b> &middot; <a href="/">Beranda</a>\n'
-            f'<a href="/employee">Employee</a> <a href="/admin">Finance admin</a> '
-            f'<a href="/admin/intake">Permintaan baru</a>{_pending_nav()}{account}{_budget_nav()}'
-            f'<span class="note">Synthetic data. Simulation only.</span></nav>')
+    """The nav for the signed-in role (docs/adr/0001-three-roles.md); the full dev nav when nobody is signed in."""
+    cur = auth.current_session()
+    if not cur:
+        return (f'<nav><b>reimburse-buddy</b> &middot; <a href="/">Beranda</a>\n'
+                f'<a href="/employee">Employee</a> <a href="/admin">Finance admin</a> '
+                f'<a href="/admin/intake">Permintaan baru</a>{_pending_nav()}{_budget_nav()}</nav>')
+    emp, role = cur
+    if users.is_finance(role):
+        links = (f'<a href="/admin">Triage</a> <a href="/admin/intake">Permintaan baru</a>{_pending_nav()}'
+                 f'{_budget_nav()}')
+    elif users.is_manager(role):
+        links = '<a href="/manager">Persetujuan</a>'
+    else:
+        links = '<a href="/employee">Klaim saya</a> <a href="/employee/new">Ajukan klaim</a>'
+    account = (f'<span class="note" id="signed-in">Masuk sebagai <b>{e(auth.reviewer_name(emp))}</b> '
+               f'({e(users.ROLE_LABELS.get(role, role))})</span>'
+               f'<form method="post" action="/logout" style="display:inline">'
+               f'<button type="submit" id="logout">Keluar</button></form>')
+    return f'<nav><b>reimburse-buddy</b> &middot; {links}{account}</nav>'
 
 
 def _budget_nav() -> str:
@@ -238,11 +249,19 @@ def _budget_nav() -> str:
     return f'<span class="note" id="llm-budget">{e(label("budget_remaining"))}: ${left:.2f}</span> '
 
 
+def reset_form(text: str) -> str:
+    """The demo reset button; never rendered in production."""
+    if auth.is_production():
+        return ""
+    return f'<form method="post" action="/admin/reset"><button type="submit">{e(text)}</button></form>'
+
+
 def page(title: str, body: str, status_code: int = 200) -> HTMLResponse:
     return HTMLResponse(f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>{escape(title)}</title>
 <style>{CSS}</style></head><body>{nav_html()}
-<h1>{escape(title)}</h1>{body}</body></html>""", status_code=status_code)
+<h1>{escape(title)}</h1>{body}
+<p class="note" id="footer-note">Synthetic data. Simulation only.</p></body></html>""", status_code=status_code)
 
 
 def e(x) -> str:
@@ -354,7 +373,7 @@ def login_submit(request: Request, email: str = Form(""), password: str = Form("
         auth.audit_denied("bad_credentials", ip=ip)  # reason only: never the email, password or IP
         return login_card(target, label("auth_bad_credentials"), email, 401)
     auth.clear_failures(ip)
-    if not auth.may_open(user.role, target) or (target == "/" and not auth.is_reviewer_role(user.role)):
+    if target == "/" or not auth.may_open(user.role, target):  # "/" is the form's default: no preference
         target = auth.home_for(user.role)
     r = RedirectResponse(target, status_code=303)
     r.set_cookie(auth.COOKIE, auth.new_cookie_value(user.employee_id, user.role), max_age=auth.TTL_SECONDS,
@@ -405,16 +424,37 @@ Semua angka dan keputusan tetap di tangan Anda.</p></div>
 <div class="box"><h2>Panduan singkat</h2>
 <p><a class="btn" href="/admin">Lihat triage finance</a>
 <a class="btn" href="/admin/claims/{e(cid)}">Buka klaim contoh ({e(first_name)}, Surabaya)</a>
-<a class="btn" href="/employee/claims/{e(cid)}">Coba tanya sebagai karyawan</a></p>
-<form method="post" action="/admin/reset"><button type="submit">Reset demo</button></form></div>
+</p>
+{reset_form("Reset demo")}</div>
 <p class="note">Data sintetis. Tidak ada email atau pesan sungguhan yang dikirim.</p>"""
     return page("Selamat datang di reimburse-buddy", body)
 
 
 # --- employee side ------------------------------------------------------------
+def require_employee(request: Request) -> str:
+    """The acting employee for a POST under /employee, else 401. Never taken from the form."""
+    emp = auth.current_employee(request)
+    if not emp:
+        raise HTTPException(401, "Silakan masuk dulu / please sign in first")
+    return emp
+
+
+def owned_claim(cid: str, emp: str) -> dict:
+    """The claim if `emp` owns it; someone else's claim is a 404 exactly like a missing one."""
+    try:
+        claim = store.get_claim(cid)
+    except KeyError:
+        raise HTTPException(404, f"Unknown claim {cid}")
+    if claim["employee_id"] != emp:
+        raise HTTPException(404, f"Unknown claim {cid}")
+    return claim
+
+
 @app.get("/employee", response_class=HTMLResponse)
-def employee_page(emp: str = "EMP-001", msg: str = ""):
-    staff = [x for x in store.employees if x.get("role", "staff") != "manager" and not x["id"].startswith("EMP-1")]
+def employee_page(request: Request, msg: str = ""):
+    emp = auth.current_employee(request)
+    if not emp:
+        return page("Employee portal", auth.sign_in_notice())
     me = store.get_employee(emp)
     claims = [c for c in store.claims if c["employee_id"] == emp]
     rows = "".join(
@@ -429,13 +469,11 @@ def employee_page(emp: str = "EMP-001", msg: str = ""):
     fwd_rows = "".join(f"<tr><td>{e(m['date'])}</td><td>{e(m['subject'])}</td>"
                        f"<td>{e(', '.join(a['name'] for a in m.get('attachments', [])))}</td></tr>" for m in fwd)
     body = f"""
-<form method="get" action="/employee"><label>Signed in as (simulated):
-<select name="emp" aria-label="Pilih karyawan" onchange="this.form.submit()">{options([(x['id'], x['name']) for x in staff], emp)}</select></label></form>
 {f'<p class="tag ok">{e(msg)}</p>' if msg else ''}
 <h2>My claims</h2><div class="table-wrap"><table><tr><th>ID</th><th>Purpose</th><th>Trip</th><th class=num>Claimed</th><th>Status</th></tr>{rows}</table></div>
 <h2>Messages from finance</h2>{'<div class="table-wrap"><table><tr><th>Claim</th><th>Subject</th><th>Body</th></tr>' + msgs + '</table></div>' if msgs else '<p class=note>No messages yet.</p>'}
 <div class="box"><h2>New claim</h2><p>Drop all your receipts and boarding passes at once; we draft the items for you.</p>
-<p><a class="btn" href="/employee/new?emp={e(emp)}">Start a new claim</a></p></div>
+<p><a class="btn" href="/employee/new">Start a new claim</a></p></div>
 <h2>Forwarded to the reimburse mailbox</h2><div class="table-wrap"><table><tr><th>Date</th><th>Subject</th><th>Attachments</th></tr>{fwd_rows}</table></div>
 <p class="note">Employee: {e(me['name'])} &middot; {e(me['email'])}</p>"""
     return page("Employee portal", body)
@@ -471,9 +509,9 @@ def parse_amount(text: str) -> Decimal:
 
 
 @app.post("/employee/claims")
-def submit_claim(emp: str = Form(...), purpose: str = Form(...), destination: str = Form(...),
+def submit_claim(request: Request, purpose: str = Form(...), destination: str = Form(...),
                  start_date: str = Form(...), end_date: str = Form(...), items: str = Form(...)):
-    store.get_employee(emp)
+    emp = require_employee(request)
     parsed = []
     for n, line in enumerate([x for x in items.splitlines() if x.strip()], 1):
         m = ITEM_RE.match(line)
@@ -501,13 +539,16 @@ def submit_claim(emp: str = Form(...), purpose: str = Form(...), destination: st
                          "purpose": purpose, "trip": {"origin": "Jakarta", "destination": destination,
                                                       "start_date": start_date, "end_date": end_date},
                          "items": parsed, "batch": WEB_BATCH})
-    return RedirectResponse(f"/employee?emp={emp}&msg=Submitted+{cid}", status_code=303)
+    return RedirectResponse(f"/employee?msg=Submitted+{cid}", status_code=303)
 
 
 @app.post("/employee/forward")
-async def forward_evidence(emp: str = Form(...), subject: str = Form(...), claim_id: str = Form(""),
+async def forward_evidence(request: Request, subject: str = Form(...), claim_id: str = Form(""),
                            att_type: str = Form("receipt"), item_id: str = Form(""), flight: str = Form(""),
                            att_date: str = Form(""), body: str = Form(""), file: UploadFile | None = File(None)):
+    emp = require_employee(request)
+    if claim_id:  # a receipt may only be linked to the sender's own claim
+        owned_claim(claim_id, emp)
     me = store.get_employee(emp)
     mid = f"MSG-W{len([m for m in store.inbox if m['id'].startswith('MSG-W')]) + 1:03d}"
     att = None
@@ -529,7 +570,7 @@ async def forward_evidence(emp: str = Form(...), subject: str = Form(...), claim
     store.inbox.append({"id": mid, "owner_id": emp, "from": me["email"], "date": date.today().isoformat(),
                         "subject": subject, "body": body, "attachments": [att] if att else [],
                         "mailbox": MAILBOX, "forwarded_by": me["email"]})
-    return RedirectResponse(f"/employee?emp={emp}&msg=File+diteruskan", status_code=303)
+    return RedirectResponse("/employee?msg=File+diteruskan", status_code=303)
 
 
 # --- finance admin side --------------------------------------------------------
@@ -565,7 +606,7 @@ def admin(batch: str = BATCH, msg: str = ""):
 <button type="submit">Approve cleared batch</button></form>''' if cleared else ''}
 <h3>Exceptions</h3><div class="table-wrap"><table><tr><th>Claim</th><th>Employee</th><th class=num>Uang tertahan</th><th>Yang kurang</th><th>Rejected items</th><th></th></tr>{exc}</table></div></div>
 <h2>All claims</h2><div class="table-wrap"><table><tr><th>Claim</th><th>Employee</th><th>Batch</th><th>Status</th></tr>{others}</table></div>
-<form method="post" action="/admin/reset"><button type="submit">Reset demo data</button></form>"""
+{reset_form("Reset demo data")}"""
     return page("Finance admin: triage", body)
 
 
@@ -596,6 +637,9 @@ def batch_approve(request: Request, batch: str = Form(...), claim_ids: list[str]
 
 @app.post("/admin/reset")
 def reset():
+    if auth.is_production():
+        return JSONResponse({"detail": "Reset demo tidak tersedia di produksi. / Demo reset is disabled in production."},
+                            status_code=403)
     reset_all()
     return RedirectResponse("/admin?msg=Demo+data+reset", status_code=303)
 

@@ -41,7 +41,8 @@ def _own_claim() -> dict:
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    install_test_users()
+    # The scene needs several people who may approve; by default EMP-100 and EMP-101 are managers.
+    install_test_users({"EMP-100": "finance", "EMP-101": "finance"})
     monkeypatch.setenv("REIMBURSE_DEMO_SESSION_KEY", "test-session-key-not-a-secret")
     monkeypatch.setenv("REIMBURSE_PLAN_STORE", str(tmp_path / "plans"))
     monkeypatch.setenv("REIMBURSE_AUDIT_LOG", str(tmp_path / "audit.jsonl"))

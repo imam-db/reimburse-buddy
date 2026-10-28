@@ -24,6 +24,7 @@ from reimburse_buddy.models import rupiah
 from reimburse_buddy.rules import check_claim
 
 from . import app as core
+from . import auth
 from . import plans  # noqa: F401  # puts agent/ on sys.path
 from .labels import label
 from reimburse_agent.qa.tools import UNDER_REVIEW, is_sensitive_item  # noqa: E402  # same masking as Q&A
@@ -85,9 +86,10 @@ async def _save_and_extract(upload: UploadFile, prefix: str) -> dict:
     return _file_entry(stored, safe, get_extractor().extract(path), hashlib.sha256(data).hexdigest())
 
 
-def get_draft(did: str) -> dict:
+def get_draft(did: str, emp: str) -> dict:
+    """The draft if `emp` owns it; someone else's draft is a 404 exactly like a missing one."""
     d = core.DRAFTS.get(did)
-    if not d:
+    if not d or d.get("emp") != emp:
         raise HTTPException(404, f"Unknown draft {did}")
     return d
 
@@ -105,10 +107,13 @@ i.addEventListener('change',show);
 
 
 @router.get("/employee/new", response_class=HTMLResponse)
-def new_claim(emp: str = "EMP-001"):
+def new_claim(request: Request):
+    emp = auth.current_employee(request)
+    if not emp:
+        return core.page("New claim", auth.sign_in_notice())
     me = core.store.get_employee(emp)
-    body = f"""<p><a href="/employee?emp={e(emp)}">&larr; My claims</a> &middot; {e(me['name'])}</p>
-<form method="post" action="/employee/drafts" enctype="multipart/form-data"><input type="hidden" name="emp" value="{e(emp)}">
+    body = f"""<p><a href="/employee">&larr; My claims</a> &middot; {e(me['name'])}</p>
+<form method="post" action="/employee/drafts" enctype="multipart/form-data">
 <div class="box"><h2>1. Trip</h2><label>Purpose <input name="purpose" size="40" required></label>
 <label>Destination <input name="destination" value="Surabaya" required></label>
 <br><label>Dates <input type="date" name="start_date" required></label> &rarr;
@@ -124,9 +129,9 @@ def new_claim(emp: str = "EMP-001"):
 
 
 @router.post("/employee/drafts")
-async def create_draft(emp: str = Form(...), purpose: str = Form(...), destination: str = Form(...),
+async def create_draft(request: Request, purpose: str = Form(...), destination: str = Form(...),
                        start_date: str = Form(...), end_date: str = Form(...), files: list[UploadFile] = File([])):
-    core.store.get_employee(emp)
+    emp = core.require_employee(request)
     if end_date < start_date:
         raise HTTPException(400, "The trip end date is before the start date")
     files = [f for f in files if f.filename]
@@ -189,8 +194,11 @@ def _input(card: dict, k: str, allowed_cats: list[str]) -> str:
 
 
 @router.get("/employee/drafts/{did}", response_class=HTMLResponse)
-def draft_page(did: str):
-    d = get_draft(did)
+def draft_page(did: str, request: Request):
+    emp = auth.current_employee(request)
+    if not emp:
+        return core.page("Draft", auth.sign_in_notice())
+    d = get_draft(did, emp)
     h = d["header"]
     allowed = [c for c in core.store.policy["allowed_categories"] if c not in ("late_checkout",)]
     others = lambda cid: [(c["id"], f"card {n + 1}") for n, c in enumerate(d["cards"]) if c["id"] != cid]  # noqa: E731
@@ -402,7 +410,7 @@ def _submit(d: dict) -> str:
 
 @router.post("/employee/drafts/{did}")
 async def update_draft(did: str, request: Request):
-    d = get_draft(did)
+    d = get_draft(did, core.require_employee(request))
     form = await request.form()
     _apply_edits(d, form)
     action = str(form.get("action", "save"))
@@ -443,10 +451,10 @@ REVIEWING = f"{UNDER_REVIEW['note_id'].rstrip('.')} / {UNDER_REVIEW['note_en'].r
 @router.get("/employee/claims/{cid}", response_class=HTMLResponse)
 def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: ignore[assignment]  # direct calls pass no request
     from . import qa as qa_web  # Employee Q&A hook; a no-op unless EMPLOYEE_QA is on
-    try:
-        claim = core.store.get_claim(cid)
-    except KeyError:
-        raise HTTPException(404, f"Unknown claim {cid}")
+    emp = auth.current_employee(request)
+    if not emp:
+        return core.page("Klaim / Claim", auth.sign_in_notice())
+    claim = core.owned_claim(cid, emp)
     parts = qa_web.claim_page_parts(request, cid, claim["employee_id"])
     if isinstance(parts, HTMLResponse):
         return parts
@@ -478,7 +486,7 @@ def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: i
         rows += (f"<tr><td>{e(label(it['category']))}<div class=note>{e(it['description'])}</div></td><td>{e(it['date'])}</td>"
                  f"<td class=num>{e(rupiah(res.claimed))}</td><td>{e(', '.join(have)) or '<span class=note>none</span>'}</td>"
                  f"<td><span class='tag {cls}'>{e(status)}</span></td><td>{add}</td></tr>")
-    body = f"""<p><a href="/employee?emp={e(claim['employee_id'])}">&larr; My claims</a></p>
+    body = f"""<p><a href="/employee">&larr; My claims</a></p>
 {f'<p class="tag ok">{e(msg)}: files were forwarded to {e(core.MAILBOX)} and linked to their items.</p>' if msg else ''}
 <p>{e(claim['purpose'])} &middot; {e(claim['trip']['destination'])} {e(claim['trip']['start_date'])} &rarr;
 {e(claim['trip']['end_date'])} &middot; status {core.status_tag(claim['status'])}</p>
@@ -488,8 +496,8 @@ def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: i
 
 
 @router.post("/employee/claims/{cid}/items/{iid}/files")
-async def add_file(cid: str, iid: str, file: UploadFile = File(...)):
-    claim = core.store.get_claim(cid)
+async def add_file(cid: str, iid: str, request: Request, file: UploadFile = File(...)):
+    claim = core.owned_claim(cid, core.require_employee(request))
     item = next((i for i in claim["items"] if i["id"] == iid), None)
     if not item:
         raise HTTPException(404, f"Unknown item {iid}")

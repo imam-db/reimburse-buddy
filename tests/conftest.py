@@ -20,12 +20,14 @@ TEST_ACCOUNTS = {  # employee_id -> (email, role)
 _HASH: dict[str, str] = {}
 
 
-def install_test_users() -> users.MemoryUserStore:
-    """Install a MemoryUserStore with the accounts above (one scrypt hash, computed once per run)."""
+def install_test_users(roles: dict[str, str] | None = None) -> users.MemoryUserStore:
+    """Install a MemoryUserStore with the accounts above (one scrypt hash, computed once per run).
+
+    `roles` overrides the role per employee_id, e.g. {"EMP-101": "finance"} for the self-approval scene."""
     _HASH.setdefault("pw", users.hash_password(TEST_PASSWORD))
     store = users.MemoryUserStore()
     for emp, (email, role) in TEST_ACCOUNTS.items():
-        store.add(emp, email, role=role, password_hash=_HASH["pw"])
+        store.add(emp, email, role=(roles or {}).get(emp, role), password_hash=_HASH["pw"])
     auth.set_store(store)
     return store
 

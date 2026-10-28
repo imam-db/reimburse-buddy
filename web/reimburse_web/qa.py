@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import re
 from html import escape
+from urllib.parse import quote
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -24,7 +25,7 @@ from reimburse_agent.qa import engine as qa_engine  # noqa: E402
 from reimburse_agent.qa.tools import Session  # noqa: E402
 
 router = APIRouter()
-DEV_EMPLOYEE_ENV = "REIMBURSE_DEV_EMPLOYEE"  # DEV ONLY: acts as this employee when the login gate is off
+DEV_EMPLOYEE_ENV = auth.DEV_EMPLOYEE_ENV
 STATE: dict = {}  # service, history per session id
 QUICK = (("Apa yang kurang?", "Apa yang kurang? / What's missing?"), ("Berapa plafon hotel?", "Berapa plafon hotel? / Hotel cap?"))
 
@@ -52,23 +53,20 @@ def service() -> qa_engine.QAService:
 
 
 def session_of(request: Request) -> Session | None:
-    """The signed-in employee, or None. Reviewer and finance sessions have no employee Q&A identity.
+    """The acting employee (auth.current_employee: the login session, or REIMBURSE_DEV_EMPLOYEE with the gate off).
 
-    DEV ONLY: with the login gate off, REIMBURSE_DEV_EMPLOYEE names the employee (one fixed session id).
-    Once the gate is on this fallback is ignored, so it can never override a real login."""
-    if auth.enabled():
-        sess = auth.session_of(request)
-        if sess is None or sess.role != "employee":
-            return None
-        return Session(sess.reviewer, sess.nonce)
-    emp = os.environ.get(DEV_EMPLOYEE_ENV, "").strip()
-    return Session(emp, "dev") if emp else None
+    Q&A stays employee-only: a reviewer or finance session has no Q&A identity."""
+    emp = auth.current_employee(request)
+    if not emp:
+        return None
+    if not auth.enabled():
+        return Session(emp, "dev")
+    sess = auth.session_of(request)
+    return Session(emp, sess.nonce) if sess.role == "employee" else None
 
 
 def _sign_in_notice() -> str:
-    if auth.enabled():
-        return "<p>Silakan <a href='/login'>masuk</a> sebagai karyawan. / Please <a href='/login'>sign in</a> as an employee.</p>"
-    return (f"<p class='demo'><b>DEV ONLY</b>: the login gate is off; set {DEV_EMPLOYEE_ENV}=EMP-xxx to act as an employee.</p>")
+    return auth.sign_in_notice()
 
 
 CSS = """.qa{border:2px solid #3a7bd5;border-radius:10px;padding:12px 16px;margin:16px 0;background:#f6f9ff}
@@ -97,15 +95,10 @@ def _qa_box(sess: Session, cid: str) -> str:
             f" <button>Tanya / Ask</button></p></form></div>")
 
 
-@router.get("/employee/claims", response_class=HTMLResponse)
-def my_claims_page(request: Request):
-    sess = session_of(request)
-    web = _web()
-    if not sess:
-        return web.page("Klaim saya / My claims", _sign_in_notice())
-    rows = "".join(f"<li><a href='/employee/claims/{escape(c['id'])}'>{escape(c['id'])}</a> {escape(c['trip']['destination'])}"
-                   f" {escape(c['trip']['start_date'])}</li>" for c in web.store.claims if c["employee_id"] == sess.employee_id)
-    return web.page("Klaim saya / My claims", f"<ul>{rows}</ul>")
+@router.get("/employee/claims")
+def my_claims_page(msg: str = ""):
+    """The employee portal is /employee; this old address redirects there (keeping ?msg=)."""
+    return RedirectResponse("/employee" + (f"?msg={quote(msg)}" if msg else ""), status_code=303)
 
 
 def claim_page_parts(request: Request | None, cid: str, owner: str) -> tuple[str, str] | HTMLResponse:
@@ -130,7 +123,7 @@ def ask(request: Request, question: str = Form(""), quick: str = Form(""), claim
     sess = session_of(request)
     if not sess:
         raise HTTPException(401, "Silakan masuk dulu / please sign in first")
-    target = f"/employee/claims/{claim_id}" if claim_id.startswith("CLM-") else "/employee/claims"
+    target = f"/employee/claims/{claim_id}" if claim_id.startswith("CLM-") else "/employee"
     if not question:
         return RedirectResponse(target + "#qa", status_code=303)
     r = service().ask(sess, question, context_claim_id=claim_id or None)

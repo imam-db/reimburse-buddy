@@ -116,13 +116,17 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(web, "UPLOAD_DIR", tmp_path)
     monkeypatch.delenv("REIMBURSE_EXTRACTOR", raising=False)
     monkeypatch.delenv("REIMBURSE_PLAUSIBLE_MAX", raising=False)
+    monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", "EMP-001")  # gate off: the acting employee comes from the environment
     web.reset_all()
-    yield TestClient(web.app)
+    c = TestClient(web.app)
+    c.mp = monkeypatch  # drop() switches the acting employee through it
+    yield c
     web.reset_all()
 
 
 def drop(client, names, emp="EMP-001", start="2026-10-02", end="2026-10-04"):
-    trip = dict(emp=emp, purpose="Client visit", destination="Surabaya", start_date=start, end_date=end)
+    client.mp.setenv("REIMBURSE_DEV_EMPLOYEE", emp)
+    trip = dict(purpose="Client visit", destination="Surabaya", start_date=start, end_date=end)
     files = [("files", (Path(n).name, (SAMPLES / n).read_bytes())) for n in names]
     r = client.post("/employee/drafts", data=trip, files=files, follow_redirects=False)
     return web.DRAFTS[r.headers["location"].rsplit("/", 1)[1]]
@@ -142,7 +146,7 @@ def submit(client, d, **overrides):
 
 
 def test_txt_uploads_are_rejected(client):
-    r = client.post("/employee/drafts", data=dict(emp="EMP-001", purpose="x", destination="Surabaya",
+    r = client.post("/employee/drafts", data=dict(purpose="x", destination="Surabaya",
                                                   start_date="2026-10-02", end_date="2026-10-04"),
                     files=[("files", ("taxi.txt", b"TAKSI\nTOTAL Rp 230.000", "text/plain"))])
     assert r.status_code == 400

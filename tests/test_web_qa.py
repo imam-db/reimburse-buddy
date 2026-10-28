@@ -22,7 +22,7 @@ def client(monkeypatch):
 
 
 def login(c, emp):
-    assert login_as(c, emp, "/employee/claims").status_code == 303
+    assert login_as(c, emp, "/employee").status_code == 303
 
 
 def test_flag_off_hides_box_and_endpoint(client, monkeypatch):
@@ -101,7 +101,7 @@ def test_signed_out_is_sent_to_login(client):
 
 def test_no_identity_picker_and_session_route_is_gone(client):
     login(client, "EMP-003")
-    for url in ("/employee/claims", "/employee/claims/CLM-2026-0104"):
+    for url in ("/employee", "/employee/claims/CLM-2026-0104"):
         assert "DEMO session" not in client.get(url).text and "/employee/session" not in client.get(url).text
     assert client.post("/employee/session", data={"emp": "EMP-001"}).status_code in (404, 405)
     assert not hasattr(qa, "COOKIE") and not hasattr(qa, "_picker")
@@ -109,22 +109,22 @@ def test_no_identity_picker_and_session_route_is_gone(client):
 
 def test_employee_sees_only_own_claims(client):
     login(client, "EMP-003")
-    page = client.get("/employee/claims").text
+    page = client.get("/employee").text
     assert "CLM-2026-0104" in page and "CLM-2026-0101" not in page
     login(client, "EMP-001")
-    page = client.get("/employee/claims").text
+    page = client.get("/employee").text
     assert "CLM-2026-0101" in page and "CLM-2026-0104" not in page
 
 
 def test_demo_cookie_grants_nothing(client):
     login(client, "EMP-003")
     client.cookies.set("rb_demo_session", "EMP-001|abc.forged")
-    assert "CLM-2026-0101" not in client.get("/employee/claims").text
+    assert "CLM-2026-0101" not in client.get("/employee").text
 
 
 def test_reviewer_has_no_employee_qa_identity(client):
-    login_as(client, "EMP-100")
-    assert client.post("/employee/qa", data={"question": "klaim saya?"}).status_code == 401
+    login_as(client, "EMP-100")  # a manager: /employee/* is closed to the role
+    assert client.post("/employee/qa", data={"question": "klaim saya?"}).status_code == 403
 
 
 def test_gate_off_dev_fallback(client, monkeypatch):
@@ -132,7 +132,7 @@ def test_gate_off_dev_fallback(client, monkeypatch):
     auth.set_store(None)
     monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", "EMP-003")
     c = TestClient(web.app)
-    page = c.get("/employee/claims").text
+    page = c.get("/employee").text
     assert "CLM-2026-0104" in page and "CLM-2026-0101" not in page
     monkeypatch.delenv("REIMBURSE_DEV_EMPLOYEE")
-    assert "DEV ONLY" in c.get("/employee/claims").text
+    assert "DEV ONLY" in c.get("/employee").text

@@ -29,6 +29,7 @@ REQUIRED = {
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(web, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", "EMP-001")  # gate off: the acting employee comes from the environment
     monkeypatch.delenv("EMPLOYEE_QA", raising=False)
     web.reset_all()
     yield TestClient(web.app)
@@ -63,7 +64,7 @@ def _visible(markup: str) -> str:
 
 
 def _draft(client) -> str:
-    r = client.post("/employee/drafts", data={"emp": "EMP-001", "purpose": "Client visit", "destination": "Surabaya",
+    r = client.post("/employee/drafts", data={"purpose": "Client visit", "destination": "Surabaya",
                                               "start_date": "2026-10-02", "end_date": "2026-10-04"},
                     follow_redirects=False)
     assert r.status_code == 303
@@ -74,13 +75,15 @@ def _employee_pages(client) -> dict[str, str]:
     # Populate both mailbox tables so their former ID columns are exercised.
     client.post("/admin/claims/CLM-2026-0101/message",
                 data={"subject": "Claim CLM-2026-0101: receipt", "body": "Mohon kirim struk (IT-1)."})
-    client.post("/employee/forward", data={"emp": "EMP-001", "subject": "Taxi receipt", "claim_id": "CLM-2026-0101",
+    client.post("/employee/forward", data={"subject": "Taxi receipt", "claim_id": "CLM-2026-0101",
                                            "att_type": "receipt", "item_id": "IT-1"})
     did = _draft(client)
+    with pytest.MonkeyPatch.context() as mp:  # another employee's portal page
+        mp.setenv("REIMBURSE_DEV_EMPLOYEE", "EMP-004")
+        other = client.get("/employee").text
     return {
         "/employee": client.get("/employee").text,
-        "/employee?emp=EMP-004": client.get("/employee?emp=EMP-004").text,
-        "/employee/claims": client.get("/employee/claims").text,
+        "/employee (EMP-004)": other,
         "/employee/claims/CLM-2026-0101": client.get("/employee/claims/CLM-2026-0101").text,
         "/employee/new": client.get("/employee/new").text,
         f"/employee/drafts/{did}": client.get(f"/employee/drafts/{did}").text,
