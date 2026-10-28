@@ -3,7 +3,7 @@ validation, hygiene). The Postgres variant runs only with `-m postgres` and DATA
 
 import os
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -98,10 +98,10 @@ def test_sweep_marks_unanswered_staged_actions_expired(backend):
     log.append(A.make_event(r, "staged_action", "s1", action_id="s1", args_hash="h1", payload={"tool": "x"}))
     log.append(A.make_event(r, "staged_action", "s2", action_id="s2", args_hash="h2", payload={"tool": "x"}))
     log.append(A.make_event(r, "approval", "s2", actor="human:x", action_id="s2", args_hash="h2"))
-    assert A.sweep_expired(log, older_than=timedelta(0)) >= 1
+    assert A.sweep_expired(log, older_than=timedelta(0), now=datetime.now(timezone.utc) + timedelta(seconds=1)) >= 1
     exp = [e for e in log.list(r) if e["event_type"] == "expired"]
     assert [(e["action_id"], e["actor"]) for e in exp] == [("s1", "system")]
-    A.sweep_expired(log, older_than=timedelta(0))
+    A.sweep_expired(log, older_than=timedelta(0), now=datetime.now(timezone.utc) + timedelta(seconds=1))
     assert len([e for e in log.list(r) if e["event_type"] == "expired"]) == 1  # idempotent
 
 
