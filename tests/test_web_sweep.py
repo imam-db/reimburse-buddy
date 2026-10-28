@@ -41,10 +41,10 @@ def build_plan(run_id: str, version: int = 1) -> dict:
 @pytest.fixture
 def prepared(tmp_path, monkeypatch):
     from reimburse_agent.audit import JsonlAuditLog
-    from reimburse_agent.office.store import PlanStore
+    from reimburse_agent.office.store import FilePlanStore
 
     web.reset_all()
-    plans.STATE.update(store=PlanStore(tmp_path), log=JsonlAuditLog())
+    plans.STATE.update(store=FilePlanStore(tmp_path), log=JsonlAuditLog())
     monkeypatch.setattr(plans, "_SWEPT", False)
     yield plans
     plans.STATE.clear()
