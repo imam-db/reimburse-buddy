@@ -248,6 +248,18 @@ psql "$OWNER_DATABASE_URL" -f agent/migrations/007_app_users.sql
 uv --directory web run python -m reimburse_web.seed_users --dsn "$OWNER_DATABASE_URL" --employee EMP-100 --role reviewer
 ```
 
+To create every account in `data/employees.json` in one run, use `--all`. The role comes from each row: a manager in Finance becomes `finance`, any other manager `reviewer`, everyone else `employee`. `--same-password` (with `--all`) asks for one password and uses it for every account, which is a demo convenience only.
+
+```bash
+uv --directory web run python -m reimburse_web.seed_users --dsn "$OWNER_DATABASE_URL" --all
+```
+
+`--dry-run` prints the accounts and their roles without asking for a password or connecting to the database, so it needs no `--dsn`:
+
+```bash
+uv --directory web run python -m reimburse_web.seed_users --all --dry-run
+```
+
 ### Who may approve
 
 The reviewer picked at login is the actor on every decision. Nobody may approve their own work:
