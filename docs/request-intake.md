@@ -22,18 +22,23 @@ office tools only after a logged approval.
      frozen start time, so the run can be replayed; with the gate on it also records
      `submitted_by: <EMP-ID>` (the reviewer who filled the form), and the same field is copied onto
      `plan.json` as soon as the plan is staged (`plan_graph.py` is not involved: the web layer stamps it);
-   - invokes one per-process plan graph (in-memory `MemorySaver`, one thread per run). Its mock office
-     dispatches per run to `<plan store>/<run_id>/mock_office.json`, like `agent/plan_demo.py`;
+   - invokes one per-process plan graph, one thread per run. The checkpointer is `PostgresSaver` on the
+     shared pool when `REIMBURSE_PLAN_BACKEND=postgres`, and `MemorySaver` otherwise. Its mock office
+     dispatches per run to `<plan store>/<run_id>/mock_office.json` on the file backend, or to
+     `mock_office_rows` in Postgres, like `agent/plan_demo.py`;
    - redirects with `303` to `/admin/plans/<run_id>`.
 3. `/admin/plans/<run_id>` renders whichever state the run is in:
    - a **clarification question** while the graph is interrupted on `clarify`;
    - the normal **plan confirmation page** once actions are staged (it shows the requester and
      `Diajukan oleh / submitted by: <name>`);
-   - the **not-staged / refusal** page when staging validation failed (for example, no recipient).
-4. `POST /admin/plans/<run_id>/decide` saves the reviewer's decision map and, when this web process still
-   holds the live graph for the run, resumes it (`approval -> executor -> mock tools`). Without a live
-   graph the decisions are only stored, exactly as before, so an external driver such as
-   `agent/plan_demo.py` keeps working.
+   - the **not-staged / refusal** page when staging validation failed (for example, no recipient);
+   - the **cannot be resumed** page when the run cannot be continued at all (see [After a
+     restart](#after-a-restart)).
+4. `POST /admin/plans/<run_id>/decide` saves the reviewer's decision map and, when the graph for the run is
+   available (in this process, or in the checkpointer after a restart), resumes it
+   (`approval -> executor -> mock tools`). Without a runnable graph the decisions are only stored, exactly
+   as before, so an external driver such as `agent/plan_demo.py` keeps working — unless the intake itself
+   started the run, in which case the page says it cannot be resumed instead of claiming it was saved.
    The decision map records the reviewer from the demo login as `human:<EMP-ID>`. An `approve` decision is
    refused before anything is stored (an `access_denied` event with `reason: self_approval` and
    `payload.blocked` saying which rule fired) when the reviewer is the plan's `requester` **or** the
@@ -61,6 +66,42 @@ and redirects back to the plan page.
 
 While the question is open no action is staged: the audit log contains no `staged_action` event and the
 page contains no approve control.
+
+## After a restart
+
+A request that is waiting — on a who-question or on an approval — is held by two things: the plan store
+(`plan_requests`, `plan_versions`, `plan_decisions`, `mock_office_rows`) and the plan graph's checkpointer
+(the open interrupt). With `REIMBURSE_PLAN_BACKEND=postgres` both are in the database, so the web process
+can be replaced at any time: the question is still there, the approval still works, and the reviewer who
+submitted the request is still `submitted_by`.
+
+`_LIVE` in `web/reimburse_web/intake.py` is only a cache of the graphs this process already has. A run that
+is not in it is looked up in the checkpointer, re-registered and resumed, so `pending_for()`,
+`resume_if_live()` and the answer endpoint all take the same path after a restart as before one.
+
+When there is nothing to resume, the page says so instead of pretending:
+
+- the intake started the run (it has a stored `request.json`) and the checkpointer has no thread for it:
+  "Rencana ini tidak bisa dilanjutkan setelah server dimulai ulang. Gunakan Jalankan ulang." with a
+  **Jalankan ulang** button, no decision form, and no `execution` event. `/answer` answers the same way,
+  with HTTP 409;
+- the run belongs to an external driver (`plan_demo.py` started it, so there is no stored request): the
+  decision map is stored and the page says "Keputusan disimpan", exactly as before;
+- the run already finished: its actions were executed when the decisions were first posted, so a second
+  submit stores the map again and runs nothing.
+
+With the file backend (`MemorySaver`) a restart is the first case: that is what the demo did before this
+change, now stated on the page instead of a silent "decisions saved".
+
+## What this does not cover yet
+
+- **The claim agent's checkpoint** still lives in the worker (`agent/investigate_worker.py`, one subprocess
+  per run, `graph.py` untouched). A claim investigation that is waiting on a reviewer when the server
+  restarts is lost; only the request-intake plans are covered here.
+- **Demo data is in memory**: `web.store` (claims, review state, upload drafts) is rebuilt at startup, so a
+  restart resets the claim side of the demo even though the plans survive.
+- **Uploads are on the VPS disk** (`REIMBURSE_WEB_UPLOADS`, default `web/uploads`): they are not in
+  Postgres, so they do not follow the plan state to another instance or survive a lost disk.
 
 ## Time and time zones
 
@@ -113,6 +154,10 @@ plan store and audit log, no model calls):
 Run the suites with:
 
 ```sh
-uv run --offline pytest -q          # web, rule engine, intake
+uv run --offline pytest -q                     # web, rule engine, intake (the Postgres tests skip)
+DATABASE_URL=<app-role DSN> uv run --offline pytest -q -m postgres   # plan state + checkpoints
 cd agent && uv run --offline pytest -q
 ```
+
+`tests/test_request_intake_restart.py` and `agent/tests/test_plan_store_contract.py` are the two that need a
+real database; everything else runs on the file backend.
