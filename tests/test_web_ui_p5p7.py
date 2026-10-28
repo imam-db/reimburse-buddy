@@ -183,7 +183,6 @@ def test_every_form_control_on_the_pages_has_a_label(client):
             f"/admin/claims/{HERO}": client.get(f"/admin/claims/{HERO}").text,
             "/admin/investigations/fake-run": client.get("/admin/investigations/fake-run").text,
             "/employee": client.get("/employee").text,
-            "/employee (alias)": client.get("/employee").text,
             f"/employee/claims/{HERO}": client.get(f"/employee/claims/{HERO}").text,
             "/employee/new": client.get("/employee/new").text,
             f"/employee/drafts/{did}": client.get(f"/employee/drafts/{did}").text,

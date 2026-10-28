@@ -84,7 +84,6 @@ def _employee_pages(client) -> dict[str, str]:
     return {
         "/employee": client.get("/employee").text,
         "/employee (EMP-004)": other,
-        "/employee (alias)": client.get("/employee").text,
         "/employee/claims/CLM-2026-0101": client.get("/employee/claims/CLM-2026-0101").text,
         "/employee/new": client.get("/employee/new").text,
         f"/employee/drafts/{did}": client.get(f"/employee/drafts/{did}").text,
