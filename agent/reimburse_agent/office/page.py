@@ -102,11 +102,12 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
            nav_html,
            "<main id=main tabindex='-1'>",
            f"<h1>Konfirmasi rencana</h1>",
-           f"<p class=muted>Run {run} &middot; {e(plan['plan_id'])} &middot; peminta: "
-           f"{_person(directory, plan['requester'])}"
+           f"<p class=muted>Peminta: {_person(directory, plan['requester'])}"
            + (f" &middot; <span id=submitted-by>Diajukan oleh: "
               f"{_person(directory, plan['submitted_by'])}</span>" if plan.get("submitted_by") else "")
            + "</p>",
+           f"<details><summary>Detail rencana</summary><p class=muted>Run {run} &middot; "
+           f"{e(plan['plan_id'])}</p></details>",
            "<p><b>Belum ada yang dikirim sampai Anda menyetujui.</b> Semua alat masih tiruan.</p>"]
     if not allow_approve:
         note = blocked_note or "Anda peminta rencana ini, jadi tombol Setujui dimatikan."
@@ -135,7 +136,7 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
                    f"<ul>{errors}</ul>"
                    "<p>Tidak ada tindakan yang bisa disetujui di halaman ini.</p></div>")
     if msg:
-        out.append(f"<p class=tag>{e(msg)}</p>")
+        out.append(f"<div class='alert' role='status' tabindex='-1'>{e(msg)}</div>")
     out.append(f"<div class=card><b>Permintaan</b><pre>{e(plan['request'])}</pre></div>")
     for nt in plan.get("notices", []):
         out.append(f"<div class=notice><b>&#9888; Peringatan injeksi</b><br>"
@@ -150,7 +151,8 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
         by_action.setdefault(a.get("action_id", ""), []).append(a)
     form = action_url is not None and not expired and not refused and not stale
     if form:
-        out.append(f"<form method=post action='{e(action_url)}'><input type=hidden name=plan_id value='{e(plan['plan_id'])}'>")
+        out.append(f"<form method=post action='{e(action_url)}' id='plan-form'>"
+                   f"<input type=hidden name=plan_id value='{e(plan['plan_id'])}'>")
     for i, a in enumerate([] if refused else plan["actions"], 1):
         aid = a["action_id"]
         st = _status(events, aid)
@@ -162,7 +164,7 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
         if assume_here:
             badges += " <span class='tag assume-badge'>waktu diusulkan agent</span>"
         if infl:
-            badges += " <span class='tag influenced'>⚠ dipengaruhi konten mencurigakan</span>"
+            badges += " <span class='tag influenced' id='influenced-warning'>⚠ dipengaruhi konten mencurigakan</span>"
         if a["where"] == "email":
             sentence = f"Kirim email ke <b>{e(names)}</b> — segera setelah Anda menyetujui"
             if a["what"].get("body"):
@@ -184,8 +186,8 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
             c = " class=influenced" if name in infl else ""
             flag = (" <span class='tag influenced'>dipengaruhi konten yang ditandai</span>") if name in infl else ""
             return f"<pre{c}>{e(text)}</pre>{flag}" if pre else f"<span{c}>{e(text)}</span>{flag}"
-        rows = [f"<tr><th>Siapa</th><td>{'<br>'.join(_person(directory, w) for w in a['who'])}</td></tr>",
-                f"<tr><th>Apa</th><td><span class=tag title='{e(a['tool'])}'>"
+        rows = [f"<tr><th scope=row>Untuk</th><td>{'<br>'.join(_person(directory, w) for w in a['who'])}</td></tr>",
+                f"<tr><th scope=row>Yang terjadi</th><td><span class=tag title='{e(a['tool'])}'>"
                 f"{e(TOOL_LABELS.get(a['tool'], a['tool']))}</span> "
                 + (field("subject", a["what"].get("subject", "")) if a["what"].get("subject")
                    else field("title", a["what"].get("title", "")))
@@ -196,20 +198,28 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
                           for p, t in w["local"].items())
             alts = ", ".join(R.fmt_local(rules, R.parse_iso(x), directory.get(plan["requester"]).tz)
                              for x in w.get("alternatives", []))
-            rows.append(f"<tr><th>Kapan</th><td>{e(w['duration_min'])} menit, "
-                        f"<span class=muted>{e(w['start'])}</span>"
-                        f"<div class=note>Waktu lokal setiap peserta</div>"
-                        f"<table>{loc}</table>"
+            req = directory.get(plan["requester"])
+            main_time = _id_time(rules, R.parse_iso(w["start"]), req.tz) if req else ""
+            rows.append(f"<tr><th scope=row>Waktu</th><td>{e(w['duration_min'])} menit"
+                        + (f", <b>{e(main_time)}</b>" if main_time else "")
+                        + f"<div class=note>Waktu lokal setiap peserta</div>"
+                        f"<table><caption class=visually-hidden>Waktu lokal setiap peserta</caption>{loc}</table>"
                         + (f"<span class=muted>Alternatif: {e(alts)}</span>" if alts else "")
                         + "</td></tr>")
         else:
-            rows.append("<tr><th>Kapan</th><td>Segera setelah disetujui</td></tr>")
-        rows.append(f"<tr><th>Di mana</th><td>{e(WHERE[a['where']])}</td></tr>")
-        rows.append(f"<tr><th>Mengapa</th><td>{e(', '.join(a['why']) or '-')}</td></tr>")
-        assume = "".join(
-            f"<div class=assume><b>Asumsi:</b> {e(x['id'])}"
-            f"<details><summary>English</summary><i>{e(x['en'])}</i></details></div>"
-            for x in assume_here)
+            rows.append("<tr><th scope=row>Waktu</th><td>Segera setelah disetujui</td></tr>")
+        rows.append(f"<tr><th scope=row>Di mana</th><td>{e(WHERE[a['where']])}</td></tr>")
+        rows.append(f"<tr><th scope=row>Mengapa</th><td>{e(', '.join(a['why']) or '-')}</td></tr>")
+        if assume_here:
+            ids = ", ".join(x["id"] for x in assume_here)
+            english = " ".join(x["en"] for x in assume_here)
+            assume = (f"<div class=assume><b>Asumsi:</b> {e(ids)}"
+                      f"<details><summary>English</summary><i>{e(english)}</i></details></div>")
+        else:
+            assume = ""
+        tech = (f"<details><summary>Detail teknis</summary><p class=muted>Run {run} &middot; "
+                f"plan {e(plan['plan_id'])} &middot; aksi {e(aid)} &middot; hash argumen "
+                f"{e(a['args_hash'][:12])}</p></details>")
         decide = ""
         if form and st is None:
             approve_control = (
@@ -224,10 +234,22 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
         elif st:
             decide = f"<p class=tag title='{e(st)}'>Status: {e(STATUS_LABELS.get(st, st))}</p>"
         out.append(f"<div class='card{cls}'><div class=\"sentence\">{sentence}</div>"
-                   f"<b>Aksi {i}</b> <span class=muted>{e(aid)} &middot; "
-                   f"<span title='args_hash'>hash argumen</span> "
-                   f"{e(a['args_hash'][:12])}</span><table>{''.join(rows)}</table>{assume}{decide}</div>")
+                   f"<b>Aksi {i}</b><table><caption class=visually-hidden>Rincian aksi {i}</caption>"
+                   f"{''.join(rows)}</table>{assume}{tech}{decide}</div>")
     if form:
-        out.append("<p><button type=submit>Kirim keputusan</button></p></form>")
+        actions = len(plan["actions"])
+        out.append(f"<div class='submit-bar' id='submit-bar'>"
+                   f"<span class='counts' id='decision-counts'>0 disetujui, {actions} ditolak</span>"
+                   f"<button type=button id='approve-all'>Setujui semua</button>"
+                   f"<button type=button id='reject-all'>Tolak semua</button>"
+                   f"<button type=submit class='primary'>Kirim keputusan</button></div></form>")
+        out.append("""<script>(function(){var f=document.getElementById('plan-form'),c=document.getElementById('decision-counts');
+if(!f||!c)return;function refresh(){var a=f.querySelectorAll("input[value=approve]:checked").length,
+r=f.querySelectorAll("input[value=reject]:checked").length;c.textContent=a+' disetujui, '+r+' ditolak';}
+f.addEventListener('change',refresh);refresh();
+document.getElementById('approve-all').addEventListener('click',function(){
+f.querySelectorAll("input[value=approve]:not([disabled])").forEach(function(x){x.checked=true;});refresh();});
+document.getElementById('reject-all').addEventListener('click',function(){
+f.querySelectorAll("input[value=reject]").forEach(function(x){x.checked=true;});refresh();});})();</script>""")
     out.append("</main></body></html>")
     return "".join(out)

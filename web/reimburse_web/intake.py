@@ -295,7 +295,7 @@ def render_question(run_id: str, payload: dict | None, msg: str = "", error: str
         control = (f'<label>{e(label("ui_employee_id"))} '
                    f'<input name="answer" aria-label="{e(label("ui_employee_id"))}" required></label>')
     body = f"""<p><a href="/admin/plans">&larr; Rencana</a></p>
-{f'<p class="tag ok">{e(msg)}</p>' if msg else ''}
+{f'<div class="alert" role="status" tabindex="-1">{e(msg)}</div>' if msg else ''}
 {f'<p class="tag bad" id="answer-refused">{e(error)}</p>' if error else ''}
 <div class="box"><h2>{e(label('ui_question_from_agent'))}</h2>
 <p><b>{e(q.get('id_text', ''))}</b></p>

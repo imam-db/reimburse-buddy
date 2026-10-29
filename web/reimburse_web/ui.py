@@ -137,8 +137,8 @@ def button(text: str, *, variant: str = "secondary", type: str = "submit", name:
 
 
 def alert(text: str, *, tone: str = "info", role: str = "status", id: str = "") -> str:
-    """A flash (`status`) or an error (`alert`)."""
-    return (f'<div class="alert"{_attrs(id=id, data_tone=tone, role=role, tabindex="-1" if role == "alert" else None)}>'
+    """A flash (`status`) or an error (`alert`); it takes focus so a redirect announces it."""
+    return (f'<div class="alert"{_attrs(id=id, data_tone=tone, role=role, tabindex="-1")}>'
             f"{e(text)}</div>")
 
 

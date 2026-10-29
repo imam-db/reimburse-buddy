@@ -28,7 +28,7 @@ def staged(tmp_path):
 def test_page_shows_plan_and_both_local_times(tmp_path):
     _, _, log, store = staged(tmp_path)
     html = page.render(store.load_plan("p1"), log, D, R.default_rules(), action_url="/admin/plans/p1/decide")
-    for s in ("Siapa", "Apa", "Kapan", "Di mana", "Mengapa",
+    for s in ("Untuk", "Yang terjadi", "Waktu", "Di mana", "Mengapa",
               "Budi Hartono", "EMP-202", "Fri 30 Oct 2026 13:00 WIB", "Fri 30 Oct 2026 15:00 WIT",
               "Asumsi:", "Friday prayer", "DOC-1", "Peringatan injeksi", "diabaikan",
               "decision:p1:v1:a1", "note:p1:v1:a2", "Setujui", "Tolak"):

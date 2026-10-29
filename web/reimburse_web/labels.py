@@ -140,6 +140,16 @@ LABELS = {
     "ui_nav_signed_in": "Masuk sebagai",
     "ui_nav_sign_out": "Keluar",
     "ui_nav_menu": "Menu",
+    # error pages (app exception handlers)
+    "ui_error_title": "Terjadi kesalahan",
+    "ui_back_home": "Kembali ke beranda",
+    "ui_err_400": "Permintaan tidak bisa diproses.",
+    "ui_err_403": "Anda tidak punya akses ke halaman ini.",
+    "ui_err_404": "Halaman atau data yang Anda cari tidak ditemukan.",
+    "ui_err_409": "Data sudah berubah. Muat ulang halaman lalu coba lagi.",
+    "ui_err_413": "Berkas terlalu besar.",
+    "ui_err_422": "Isian formulir belum lengkap atau tidak valid.",
+    "ui_err_503": "Layanan sedang bermasalah. Coba lagi sebentar lagi.",
     # employee portal (app.employee_page)
     "ui_portal_title": "Portal karyawan",
     "ui_my_claims": "Klaim saya",

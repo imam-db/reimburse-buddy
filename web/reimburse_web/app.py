@@ -22,8 +22,11 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from reimburse_buddy.data_store import DataStore
 from reimburse_buddy.decision import draft_decision
@@ -279,11 +282,50 @@ def page(title: str, body: str, status_code: int = 200) -> HTMLResponse:
 {ui.skip_link()}<header class="site-header">{nav_html()}</header>
 <main id="main" tabindex="-1"><h1>{escape(title)}</h1>{body}</main>
 <footer class="site-footer"><p class="note" id="footer-note">Synthetic data. Simulation only.</p></footer>
+<script>window.addEventListener('load',function(){{var a=document.querySelector('.alert');if(a)a.focus();}});</script>
 </body></html>""", status_code=status_code)
 
 
 def e(x) -> str:
     return escape(str(x))
+
+
+# --- failed navigations get a page, scripts still get JSON -----------------------------
+ERROR_TEXT = {400: "ui_err_400", 403: "ui_err_403", 404: "ui_err_404", 409: "ui_err_409",
+              413: "ui_err_413", 422: "ui_err_422", 503: "ui_err_503"}
+
+
+def _wants_html(request: Request) -> bool:
+    """A browser navigation: GET/HEAD that accepts HTML. Everything else keeps the JSON body."""
+    return request.method in ("GET", "HEAD") and "text/html" in request.headers.get("accept", "")
+
+
+def _error_page(request: Request, status_code: int, detail: str = "") -> HTMLResponse:
+    cur = auth.current_session()
+    home = auth.home_for(cur[1]) if cur else "/"
+    body = (ui.alert(label(ERROR_TEXT.get(status_code, "ui_err_400")), tone="danger", role="alert", id="error")
+            + f'<p><a class="btn primary" href="{e(home)}">{e(label("ui_back_home"))}</a></p>')
+    response = page(label("ui_error_title"), body, status_code=status_code)
+    if detail:
+        response.headers["X-Error-Detail"] = detail[:200]
+    return response
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error_handler(request: Request, exc: StarletteHTTPException):
+    if not _wants_html(request):
+        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
+    response = _error_page(request, exc.status_code)
+    if exc.headers:
+        response.headers.update(exc.headers)
+    return response
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    if not _wants_html(request):
+        return JSONResponse({"detail": jsonable_encoder(exc.errors())}, status_code=422)
+    return _error_page(request, 422, "validation")
 
 
 def options(values, selected=None) -> str:
@@ -1180,10 +1222,16 @@ def investigation_page(rid: str, request: Request):
     progress_html = ""
     if not (final or err):
         steps = [progress_step_text(x["tool"]) for x in evs if x["type"] == "step"]
-        steps_text = " → ".join(steps) or label("ui_waiting_first_step")
         elapsed = max(0, int(time.time() - run_started_at(run, start)))
+        items = []
+        for i, text in enumerate(steps):
+            attr = (' aria-current="step"' if i == len(steps) - 1
+                    else ' data-done="true"' if i < len(steps) - 1 else "")
+            items.append(f"<li{attr}>{e(text)}</li>")
+        if not items:
+            items = [f'<li aria-current="step">{e(label("ui_waiting_first_step"))}</li>']
         progress_html = f"""<div class="box" id="progress"><h2>{e(label('ui_progress'))}</h2>
-<p id="progress-steps">{e(steps_text)}</p>
+<ol class="stepper" id="progress-steps" aria-live="polite" aria-atomic="false">{''.join(items)}</ol>
 <p>{e(label('ui_elapsed'))}: <b id="elapsed">{elapsed}</b> {e(label('ui_seconds'))}</p>
 <script>(function(){{var n=document.getElementById('elapsed');if(!n)return;var s=parseInt(n.textContent,10)||0;
 setInterval(function(){{s+=1;n.textContent=s;}},1000);}})();</script></div>"""
@@ -1204,12 +1252,15 @@ setInterval(function(){{s+=1;n.textContent=s;}},1000);}})();</script></div>"""
     if not (final or err):
         tail += (f"<form method=post action='/admin/investigations/{e(rid)}/cancel' id=cancel>"
                  f"<button>{e(label('ui_cancel_run'))}</button></form>")
-    refresh = "" if (final or err or pend or q) else '<meta http-equiv="refresh" content="2">'
+    refresh = "" if (final or err or pend or q) else (
+        '<script>(function(){var t;function go(){clearTimeout(t);if(document.hidden)return;'
+        't=setTimeout(function(){location.reload();},2000);}'
+        'document.addEventListener("visibilitychange",go);go();})();</script>')
     body = f"""{refresh}<p><a href="/admin/claims/{e(run.claim_id)}">&larr; {e(label('ui_claim_title').format(cid=run.claim_id))}</a></p>
 <div class="box"><h2>{e(label('ui_agent_investigation').format(cid=run.claim_id))}</h2>
 <p>{e(label('ui_status_word'))} <b id=status>{e(status)}</b> &middot; {e(label('ui_model'))} {e(start.get('model', '...'))} &middot; {e(label('ui_compact'))} {e(label('ui_on') if start.get('compact') else '...')}</p>
 <p class=note>{e(label('ui_agent_note'))}</p>
-<div class="table-wrap"><table id=trace style="table-layout:fixed;width:100%;word-break:break-word"><tr><th>#</th><th>{e(label('ui_tool'))}</th><th>{e(label('ui_args'))}</th><th>{e(label('ui_result'))}</th></tr>{rows}</table></div></div>
+<div class="table-wrap"><table id=trace style="table-layout:fixed;width:100%;word-break:break-word"><caption class=visually-hidden>{e(label('ui_trace'))}</caption><tr><th scope=col>#</th><th scope=col>{e(label('ui_tool'))}</th><th scope=col>{e(label('ui_args'))}</th><th scope=col>{e(label('ui_result'))}</th></tr>{rows}</table></div></div>
 {progress_html}{pending_html}{tail}"""
     return page(label("ui_investigate_title").format(cid=run.claim_id), body)
 

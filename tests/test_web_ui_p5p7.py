@@ -252,7 +252,8 @@ def test_progress_box_maps_steps_and_counts_seconds(client, monkeypatch, tmp_pat
     assert 'id="progress"' in html
     assert "Menghitung dengan mesin aturan…" in html
     assert "Mencari boarding pass/struk di mailbox…" in html
-    assert "Menghitung dengan mesin aturan… → Mencari boarding pass/struk di mailbox…" in html
+    assert '<ol class="stepper" id="progress-steps" aria-live="polite"' in html
+    assert 'aria-current="step"' in html
     assert re.search(r"Waktu berjalan: <b id=\"elapsed\">\d+</b> detik", html)
     assert "setInterval" in html
     client.post(f"/admin/investigations/{rid}/cancel")
@@ -311,3 +312,24 @@ def test_employee_claim_has_one_styled_file_control_per_item(client):
     assert html.count("<details><summary>Tambah berkas</summary>") == len(items)
     for chunk in html.split("<details><summary>Tambah berkas</summary>")[1:]:
         assert "type=file" in chunk.split("</details>", 1)[0]
+
+
+# --- P5 accessibility and feedback ---------------------------------------------
+def test_failed_navigation_renders_an_html_page_and_scripts_still_get_json(client):
+    page = client.get("/admin/claims/CLM-NOPE", headers={"accept": "text/html"})
+    assert page.status_code == 404
+    assert '<html lang="id">' in page.text and 'role="alert"' in page.text
+    assert "Halaman atau data yang Anda cari tidak ditemukan." in page.text
+    assert 'href="/"' in page.text and "Kembali ke beranda" in page.text
+
+    script = client.get("/admin/claims/CLM-NOPE")
+    assert script.status_code == 404 and script.json()["detail"] == "Unknown claim CLM-NOPE"
+
+    post = client.post("/manager/requests/APR-999", data={"decision": "approved"})
+    assert post.status_code == 404 and post.json()["detail"] == "Unknown request APR-999"
+
+
+def test_flash_message_is_a_focusable_status_region(client):
+    html = client.get("/employee?msg=File+added").text
+    assert 'class="alert"' in html and 'role="status"' in html and 'tabindex="-1"' in html
+    assert "querySelector('.alert')" in html and "a.focus()" in html

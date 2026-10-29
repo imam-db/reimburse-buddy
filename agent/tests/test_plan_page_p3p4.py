@@ -56,3 +56,22 @@ def test_nothing_sent_line_and_reject_is_the_default():
     assert html.count("value=reject checked") == len(plan["actions"])
     assert "Setujui" in html and "Tolak" in html
     assert "<link rel=stylesheet href='/static/app.css'>" in html
+
+
+def test_action_cards_lead_with_the_sentence_and_keep_tech_in_details():
+    plan, html = render()
+    first = html.split('class="sentence"', 1)[1].split("</div>", 1)[0]
+    assert "Kirim email ke" in first
+    assert "<details><summary>Detail teknis</summary>" in html
+    for action in plan["actions"]:
+        assert action["action_id"] in html and action["args_hash"][:12] in html
+    assert "2026-10-30T" not in html  # localized times only on the page
+    assert "Waktu lokal setiap peserta" in html
+
+
+def test_sticky_submission_bar_states_the_counts_and_selects_all():
+    plan, html = render()
+    assert "id='submit-bar'" in html and "id='decision-counts'" in html
+    assert f"0 disetujui, {len(plan['actions'])} ditolak" in html
+    assert "id='approve-all'" in html and "Setujui semua" in html
+    assert "id='reject-all'" in html and "Tolak semua" in html

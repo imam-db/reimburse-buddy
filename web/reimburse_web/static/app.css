@@ -1084,6 +1084,29 @@ details > summary + * {
   margin: 10px 0;
 }
 
+.submit-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  justify-content: flex-end;
+  background: rgba(255, 255, 255, 0.97);
+  border-top: 1px solid var(--line);
+  padding: 10px 12px;
+  margin: var(--sp-4) 0 0;
+  box-shadow: 0 -6px 16px rgba(16, 24, 40, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.submit-bar .counts {
+  margin-right: auto;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 /* --- employee Q&A ------------------------------------------------------------ */
 
 .qa {
