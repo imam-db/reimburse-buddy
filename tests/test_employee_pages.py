@@ -343,3 +343,17 @@ def test_no_claims_shows_the_empty_state_without_blocks(client, monkeypatch):
             web.store.claims.remove(c)
     page = client.get("/employee").text
     assert "Belum ada klaim." in page and "<li class='claim-card'>" not in page
+
+
+# --- item 11: messages only when there are messages -------------------------------
+def test_no_messages_means_no_messages_section(client):
+    page = client.get("/employee").text
+    assert "Pesan dari finance" not in page and "Belum ada pesan." not in page
+
+
+def test_messages_section_follows_my_claims(client):
+    web.store.outbox.append({"to": "EMP-001", "claim_id": "CLM-2026-0101", "subject": "Mohon lengkapi",
+                             "body": "Unggah struk taksi <b>ya</b>"})
+    page = client.get("/employee").text
+    assert page.index("<h2>Klaim saya</h2>") < page.index("<h2>Pesan dari finance</h2>")
+    assert "Unggah struk taksi &lt;b&gt;ya&lt;/b&gt;" in page

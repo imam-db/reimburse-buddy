@@ -585,6 +585,11 @@ def employee_page(request: Request, msg: str = ""):
         claims_html = f"<div class='claims-wide'>{claims_html}</div><ul class='claims-compact'>{cards}</ul>"
     inbox = [m for m in store.outbox if m["to"] == emp]
     msgs = [[e(m["claim_id"]), e(m["subject"]), e(m["body"])] for m in inbox]
+    messages_html = ""  # only when finance wrote to this employee, right after "Klaim saya"
+    if msgs:
+        messages_html = (f"<h2>{e(label('ui_messages_from_finance'))}</h2>"
+                         + ui.table([label('ui_col_claim'), label('ui_col_subject'), label('ui_col_body')], msgs,
+                                    caption=label('ui_messages_from_finance')))
     fwd = [m for m in store.inbox if m.get("owner_id") == emp]
     fwd_rows = [[date_html(m["date"]), e(m["subject"]),
                  e(", ".join(a["name"] for a in m.get("attachments", [])))] for m in fwd]
@@ -593,10 +598,8 @@ def employee_page(request: Request, msg: str = ""):
 {ui.page_header("", label('ui_new_claim_hint'), '<a class="btn primary" href="/employee/new">' + e(label('ui_start_new_claim')) + '</a>')}
 <h2>{e(label('ui_my_claims'))}</h2>
 {claims_html}
+{messages_html}
 {portal_box(request)}
-<h2>{e(label('ui_messages_from_finance'))}</h2>
-{ui.table([label('ui_col_claim'), label('ui_col_subject'), label('ui_col_body')], msgs,
-          caption=label('ui_messages_from_finance'), empty=label('ui_no_messages'))}
 <h2>{e(label('ui_forwarded_mailbox'))}</h2>
 {ui.table([label('ui_col_date'), label('ui_col_subject'), label('ui_col_attachments')], fwd_rows,
           caption=label('ui_forwarded_mailbox'), empty=label('ui_no_forwarded'))}
