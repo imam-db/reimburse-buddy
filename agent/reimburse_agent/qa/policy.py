@@ -12,13 +12,21 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..retrieval import bm25
+from ..retrieval import bm25, tokens
 
 DEFAULT_PATH = Path(__file__).with_name("rulebook.json")
-# Question words that carry no policy meaning; without them an off-policy question scores 0.
+# Question words that carry no policy meaning; without them an off-policy question scores 0. "Plafon", "cap",
+# "limit" and "maksimal" are generic too: the topic is what the sentence is about ("hotel", "taksi"), not the
+# word for a ceiling.
 QUERY_STOP = frozenset("""berapa apa apakah yang di ke dari untuk dan atau saya aku kami kita anda kamu ini itu ada adalah
 bisa boleh dong ya kah nya gimana bagaimana kapan mana mau ingin tolong mohon jika kalau dengan per
+plafon cap limit maksimal
 what how much many is are the a an of for to in on my me i can could do does please tell about""".split())
+# A body mention is not an answer: "taksi" appears in the category list (POL-2) and the receipt rule (POL-6),
+# but no article is about taxis. An article is a candidate only when a remaining query word is in its title,
+# and its BM25 score must clear this floor. The floor is low enough for a tiny custom rulebook (one article)
+# and still drops incidental matches on long articles.
+MIN_SCORE = 0.4
 
 
 @dataclass(frozen=True)
@@ -46,5 +54,8 @@ class Rulebook:
             return []
         docs = [f"{a['title_id']} {a['title_en']} {a['text_id']} {a['text_en']}" for a in self.articles]
         scores = bm25(" ".join(words), docs)
-        ranked = sorted(((s, i) for i, s in enumerate(scores) if s > 0), reverse=True)[:k]
+        wanted = set(words)
+        ranked = sorted(((s, i) for i, (s, a) in enumerate(zip(scores, self.articles))
+                         if s >= MIN_SCORE and wanted & set(tokens(f"{a['title_id']} {a['title_en']}"))),
+                        reverse=True)[:k]
         return [{**self.articles[i], "score": round(s, 3)} for s, i in ranked]

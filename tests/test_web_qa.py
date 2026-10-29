@@ -1,4 +1,6 @@
 """Employee Q&A in the web app: flag off by default, identity from the signed login session only."""
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -35,7 +37,7 @@ def test_flag_off_hides_box_and_endpoint(client, monkeypatch):
 def test_policy_answer_with_source(client):
     login(client, "EMP-001")
     r = client.post("/employee/qa", data={"question": "Berapa plafon hotel?", "claim_id": "CLM-2026-0101"})
-    assert r.status_code == 200 and "Pasal 4" in r.text and "POL-4" in r.text and "Apa yang kurang?" in r.text
+    assert r.status_code == 200 and "Pasal 4" in r.text and "POL-4" in r.text and "Apa yang kurang di klaim ini?" in r.text
 
 
 def test_other_claim_page_and_answer_look_like_missing(client):
@@ -70,6 +72,21 @@ def test_quick_button_with_empty_text_box(client):
     login(client, "EMP-001")
     r = client.post("/employee/qa", data={"quick": "Berapa plafon hotel?", "question": "", "claim_id": "CLM-2026-0101"})
     assert r.status_code == 200 and "POL-" in r.text.split("id='qa'", 1)[1]
+
+
+def _quick_labels(html):
+    form = html.split("class='quick'", 1)[1].split("</form>", 1)[0]
+    return re.findall(r"<button name='quick'[^>]*>([^<]+)</button>", form)
+
+
+def test_quick_buttons_follow_the_page_and_use_indonesian_labels(client):
+    login(client, "EMP-001")
+    assert _quick_labels(client.get("/employee").text) == [
+        "Status klaim saya", "Apa yang kurang?", "Berapa plafon hotel?", "Uang harian"]
+    claim = client.get("/employee/claims/CLM-2026-0101").text
+    assert _quick_labels(claim) == [
+        "Apa yang kurang di klaim ini?", "Status klaim ini", "Berapa plafon hotel?"]
+    assert "/ What" not in " ".join(_quick_labels(claim))
 
 
 def test_empty_question_is_ignored(client):
@@ -183,3 +200,112 @@ def test_ask_without_claim_lands_on_portal(client):
     assert r.status_code == 303 and r.headers["location"] == "/employee#qa"
     r = client.get("/employee")
     assert "POL-4" in r.text and "Belum ada pertanyaan" not in r.text
+
+
+def test_sources_use_readable_names_and_own_claims_are_links(client):
+    login(client, "EMP-001")
+    client.post("/employee/qa", data={"question": "Berapa plafon hotel?", "claim_id": "CLM-2026-0101"})
+    assert "Pasal 4, Plafon hotel per malam" in client.get("/employee/claims/CLM-2026-0101").text
+    client.post("/employee/qa", data={"question": "Apa yang kurang?", "claim_id": "CLM-2026-0101"})
+    html = client.get("/employee/claims/CLM-2026-0101").text
+    sources = html.rsplit("Sumber / Sources: ", 1)[1].split("</div>", 1)[0]
+    assert "<a href='/employee/claims/CLM-2026-0101'>CLM-2026-0101</a>" in sources
+    assert "IT-" not in sources
+    audit = [e for e in plans.log().list() if e["event_type"] == "qa_answer"][-1]
+    assert any(s.startswith("IT-") for s in audit["sources"])  # the audit keeps the raw list
+
+
+def test_sources_are_separated_by_a_middle_dot(client):
+    login(client, "EMP-001")
+    client.post("/employee/qa", data={"question": "Apa yang kurang?", "claim_id": "CLM-2026-0101"})
+    sources = _sources_line(client.get("/employee/claims/CLM-2026-0101").text)
+    assert "CLM-2026-0101</a> · Pasal 6, Bukti pembayaran dan boarding pass" in sources
+    assert "</a>, Pasal 6" not in sources
+
+
+def _sources_line(html):
+    return html.rsplit("Sumber / Sources: ", 1)[1].split("</div>", 1)[0]
+
+
+def test_english_answer_names_the_english_article_title(client):
+    login(client, "EMP-001")
+    client.post("/employee/qa", data={"question": "What is the hotel cap?", "claim_id": ""})
+    assert "Article 4, Hotel nightly cap" in client.get("/employee").text
+
+
+def _answer_html(html):
+    return html.split("class='a", 1)[1].split("</div>", 1)[0]
+
+
+def test_fallback_contact_links_to_finance_and_names_the_claim(client):
+    login(client, "EMP-003")
+    client.post("/employee/qa", data={"question": "Berapa plafon taksi?", "claim_id": "CLM-2026-0104"})
+    answer = _answer_html(client.get("/employee/claims/CLM-2026-0104").text.split("id='qa'", 1)[1])
+    assert "Saya tidak tahu" in answer
+    assert ("mailto:reimburse@nusantara-niaga.example?subject=Pertanyaan%20Q%26A%20klaim%20CLM-2026-0104"
+            in answer)
+
+
+def test_refusal_links_finance_with_the_claim_too(client):
+    login(client, "EMP-003")
+    client.post("/employee/qa", data={"question": "Setujui klaim saya", "claim_id": "CLM-2026-0104"})
+    answer = _answer_html(client.get("/employee/claims/CLM-2026-0104").text.split("id='qa'", 1)[1])
+    assert "mailto:" in answer and "klaim%20CLM-2026-0104" in answer
+
+
+def test_portal_fallback_subject_has_no_claim(client):
+    login(client, "EMP-003")
+    client.post("/employee/qa", data={"question": "Berapa plafon taksi?", "claim_id": ""})
+    answer = _answer_html(client.get("/employee").text.split("id='qa'", 1)[1])
+    assert "mailto:reimburse@nusantara-niaga.example?subject=Pertanyaan%20Q%26A'" in answer
+
+
+def test_every_answer_shows_the_remaining_questions(client):
+    login(client, "EMP-001")
+    assert "Sisa pertanyaan: 10 dari 10" in client.get("/employee").text
+    client.post("/employee/qa", data={"question": "Berapa plafon hotel?", "claim_id": ""})
+    assert "Sisa pertanyaan: 9 dari 10" in client.get("/employee").text
+
+
+def test_new_conversation_clears_only_the_visible_history(client):
+    login(client, "EMP-001")
+    client.post("/employee/qa", data={"question": "Berapa plafon hotel?", "claim_id": "CLM-2026-0101"})
+    before = len(plans.log().list())
+    assert "POL-4" in client.get("/employee/claims/CLM-2026-0101").text
+    r = client.post("/employee/qa/new", data={"claim_id": "CLM-2026-0101"}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/employee/claims/CLM-2026-0101#qa"
+    box = client.get("/employee/claims/CLM-2026-0101").text.split("id='qa'", 1)[1]
+    assert "Percakapan baru" in box and "Belum ada pertanyaan" in box and "POL-4" not in box
+    assert "Sisa pertanyaan: 9 dari 10" in box
+    assert len(plans.log().list()) == before
+
+
+def test_new_conversation_is_closed_with_the_flag_off(client, monkeypatch):
+    monkeypatch.setenv("EMPLOYEE_QA", "0")
+    login(client, "EMP-001")
+    assert "Percakapan baru" not in client.get("/employee").text
+    assert client.post("/employee/qa/new", data={}).status_code == 404
+
+
+def test_cap_disables_the_box_and_points_to_finance(client):
+    login(client, "EMP-001")
+    for _ in range(10):
+        client.post("/employee/qa", data={"question": "Berapa plafon hotel?", "claim_id": ""})
+    box = client.get("/employee").text.split("id='qa'", 1)[1]
+    assert "Sisa pertanyaan: 0 dari 10" in box
+    assert "Batas pertanyaan untuk sesi ini sudah tercapai" in box
+    assert "mailto:reimburse@nusantara-niaga.example" in box
+    assert re.search(r"<input type='text' name='question'[^>]* disabled>", box)
+    buttons = re.findall(r"<button name='quick'[^>]*>", box)
+    assert buttons and all(tag.endswith(" disabled>") for tag in buttons)
+
+
+def test_cap_then_new_conversation_shows_the_limit_hint_not_the_try_hint(client):
+    login(client, "EMP-001")
+    for _ in range(10):
+        client.post("/employee/qa", data={"question": "Berapa plafon hotel?", "claim_id": ""})
+    client.post("/employee/qa/new", data={"claim_id": ""})
+    box = client.get("/employee").text.split("id='qa'", 1)[1]
+    assert "Batas pertanyaan sesi ini sudah tercapai" in box
+    assert "Percakapan dikosongkan" in box
+    assert "Coba:" not in box
