@@ -107,6 +107,26 @@ const p=document.getElementById('pick-files');if(p)p.addEventListener('click',()
 i.addEventListener('change',show);
 </script>"""
 
+BUSY_READ_JS = """<script>(function(){
+var f=document.getElementById('drop-form'),b=document.getElementById('read-files'),i=document.getElementById('files');
+if(!f||!b||!i)return;
+f.addEventListener('submit',function(){
+var n=i.files.length,t="__TEXT__";
+b.textContent=t.replace("{n}",n);b.disabled=true;f.setAttribute("aria-busy","true");
+});
+})();</script>""".replace("__TEXT__", label("ui_busy_read"))
+
+BUSY_SUBMIT_JS = """<script>(function(){
+var f=document.getElementById('draft-form'),b=document.getElementById('submit-claim');
+if(!f||!b)return;
+f.addEventListener('submit',function(e){
+var s=e.submitter;
+if(!s||s.value!=='submit')return;
+var h=document.createElement('input');h.type='hidden';h.name='action';h.value='submit';f.appendChild(h);
+b.textContent="__TEXT__";b.disabled=true;f.setAttribute("aria-busy","true");
+});
+})();</script>""".replace("__TEXT__", label("ui_busy_submit"))
+
 
 @router.get("/employee/new", response_class=HTMLResponse)
 def new_claim(request: Request):
@@ -117,7 +137,7 @@ def new_claim(request: Request):
     steps = [label("ui_step_trip"), label("ui_step_upload"), label("ui_step_verify")]
     body = f"""<p><a href="/employee">&larr; {e(label('ui_my_claims'))}</a> &middot; {e(me['name'])}</p>
 {ui.stepper(steps, 0)}
-<form method="post" action="/employee/drafts" enctype="multipart/form-data">
+<form method="post" action="/employee/drafts" enctype="multipart/form-data" id="drop-form">
 <div class="box"><h2>{e(label('ui_step_trip'))}</h2><label>{e(label('ui_field_purpose'))} <input name="purpose" size="40" required></label>
 <label>{e(label('ui_field_destination'))} <input name="destination" value="Surabaya" required></label>
 <br><label>{e(label('ui_field_dates'))} <input type="date" name="start_date" required></label> &rarr;
@@ -128,7 +148,7 @@ def new_claim(request: Request):
 <p><button type="button" id="pick-files">{e(label('ui_pick_files'))}</button></p>
 <div id="picked" class="note"></div>
 <p class="note">{e(label('ui_extraction_note'))}</p>
-<button type="submit">{e(label('ui_read_files'))}</button></div></form>{DROP_JS}"""
+<button type="submit" id="read-files">{e(label('ui_read_files'))}</button></div></form>{DROP_JS}{BUSY_READ_JS}"""
     return core.page(label("ui_new_claim"), body)
 
 
@@ -235,10 +255,10 @@ def draft_page(did: str, request: Request):
 {ui.stepper(steps, 2)}
 <p class="note">{e(label('ui_check_note').format(flag=label('self_declared')))}</p>{errs}
 {_summary(d)}
-<form method="post" action="/employee/drafts/{e(did)}"><div class="cards" id="draft-cards" tabindex="-1">{cards_html}</div>
+<form method="post" action="/employee/drafts/{e(did)}" id="draft-form"><div class="cards" id="draft-cards" tabindex="-1">{cards_html}</div>
 <p class="draft-add">{ui.button(label("ui_add_item"), variant="secondary", name="action", value="add")}</p>
 {_submit_bar(d)}</form>
-<div class="draft-spacer" aria-hidden="true"></div>"""
+<div class="draft-spacer" aria-hidden="true"></div>{BUSY_SUBMIT_JS}"""
     return core.page(label("ui_check_title"), body)
 
 
@@ -330,7 +350,7 @@ def _submit_bar(d: dict) -> str:
     return (f'<div class="draft-bar" id="draft-bar">'
             f'<p class="bar-summary">{summary}</p>'
             f'{ui.button(label("ui_save_changes"), variant="secondary", name="action", value="save")}'
-            f'{ui.button(label("ui_submit_claim"), variant="primary", name="action", value="submit")}'
+            f'{ui.button(label("ui_submit_claim"), variant="primary", name="action", value="submit", id="submit-claim")}'
             f'</div>')
 
 

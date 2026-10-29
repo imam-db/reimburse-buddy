@@ -223,6 +223,8 @@ LABELS = {
     "ui_bar_items": "{n} item",
     "ui_bar_total": "Total diajukan {total}",
     "ui_bar_incomplete": "{n} kartu belum lengkap",
+    "ui_busy_read": "Membaca {n} berkas…",
+    "ui_busy_submit": "Mengirim…",
     "ui_err_category": "Pilih kategori.",
     "ui_err_date": "Tanggal harus berada dalam rentang perjalanan.",
     "ui_err_amount": "Nominal harus bilangan bulat rupiah, misalnya 1.350.000.",

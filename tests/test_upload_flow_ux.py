@@ -79,6 +79,16 @@ def visible(markup: str) -> str:
     return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", markup))).strip()
 
 
+def form_of(d: dict) -> dict:
+    out = {}
+    for c in d["cards"]:
+        for k, v in c["fields"].items():
+            out[f"c_{c['id']}_{k}"] = "" if v["value"] is None else str(v["value"])
+        for f in c["files"]:
+            out[f"f_{f['id']}_doc_type"] = f["doc_type"]
+    return out
+
+
 # --- P1.1: extraction errors in one Indonesian sentence -----------------------
 def test_extraction_error_is_one_indonesian_sentence(client, monkeypatch):
     d = drop(client, monkeypatch, {"bad.png": bad()})
@@ -151,3 +161,20 @@ def test_submit_bar_shows_items_total_and_incomplete(client, monkeypatch):
     assert 'style="font-weight:bold"' not in markup
     assert markup.index('id="draft-cards"') < markup.index('value="add"') < markup.index('id="draft-bar"')
     assert 'class="draft-spacer"' in markup
+
+
+# --- P1.6: busy state on long submits ------------------------------------------
+def test_busy_scripts_and_no_js_submit(client, monkeypatch):
+    new = client.get("/employee/new").text
+    assert 'id="drop-form"' in new and 'id="read-files"' in new
+    assert "aria-busy" in new and "Membaca" in new
+
+    d = drop(client, monkeypatch, {"ok.png": good(doc_type="taxi_receipt", date="2026-10-03",
+                                                  amount=150000, merchant="Taksi")})
+    draft = client.get(f"/employee/drafts/{d['id']}").text
+    assert 'id="draft-form"' in draft and 'id="submit-claim"' in draft
+    assert "aria-busy" in draft and "Mengirim" in draft
+
+    r = client.post(f"/employee/drafts/{d['id']}", data=dict(form_of(d), action="submit"),
+                    follow_redirects=False)
+    assert r.status_code == 303 and "/employee/claims/" in r.headers["location"]
