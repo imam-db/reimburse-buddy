@@ -668,6 +668,39 @@ def item_state(res, pending: dict) -> ItemState:
     return ItemState("done", "ok", "✓ " + label("ui_state_complete"), False, False)
 
 
+def item_files(emp: str, cid: str, iid: str, res, state: ItemState, pending: dict) -> str:
+    """The files cell: web uploads for the item, plus the attachments of the mailbox messages the engine
+    used as its evidence. Only messages the signed-in employee owns, and never mailbox files for a masked
+    item (its uploads stay, in the neutral tone). Chip tone: ok = used by the engine, warn = awaiting a
+    reviewer, neutral = anything else."""
+    origin = core.review(cid).get("origin", {})
+    used, waiting = set(res.evidence_used), set(pending.get(iid, []))
+    rank = {"ok": 0, "warn": 1, "": 2}
+    found: dict[str, str] = {}
+
+    def add(name: str, tone: str) -> None:
+        if name not in found or rank[tone] < rank[found[name]]:
+            found[name] = tone
+
+    for m in core.store.inbox:
+        if m.get("owner_id") != emp:
+            continue
+        atts = m.get("attachments", [])
+        uploaded = origin.get(m["id"]) == "employee_upload"
+        if uploaded:
+            for a in atts:
+                if a.get("linked_claim") == cid and a.get("linked_item") == iid:
+                    tone = "" if state.masked else "warn" if m["id"] in waiting else "ok" if m["id"] in used else ""
+                    add(a["name"], tone)
+        elif m["id"] in used and not state.masked:
+            for a in atts:
+                add(a["name"], "ok")
+    if not found:
+        return f"<span class=note>{e(label('none'))}</span>"
+    chips = [ui.badge(f"{n} ({label('ui_file_pending')})" if t == "warn" else n, t) for n, t in found.items()]
+    return f'<div class="chips">{"".join(chips)}</div>'
+
+
 def claim_summary(claim: dict, items: list, states: list[ItemState]) -> str:
     """Status, claimed total, the count per state and one next-step sentence. Claimed amounts only:
     the engine's approvable and pending totals never reach the employee."""
@@ -706,23 +739,16 @@ def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: i
         return parts
     qa_top, qa_box = parts
     chk = core.run_check(cid)
-    files_by_item: dict[str, list] = {}
-    for m in core.store.inbox:
-        for a in m.get("attachments", []):
-            if a.get("claim_id") == cid and a.get("item_id"):
-                files_by_item.setdefault(a["item_id"], []).append(a["name"])
     pending = core.pending_items(cid)
     rows: list[list[str]] = []
     states = [item_state(res, pending) for res in chk.items]
     for it, res, state in zip(claim["items"], chk.items, states):
-        have = list(dict.fromkeys(files_by_item.get(it["id"], [])))
         status, cls = state.text, state.tone
         add = (f"<details><summary>{e(label('ui_add_file'))}</summary>"
                f"<form method=post action='/employee/claims/{e(cid)}/items/{e(it['id'])}/files' enctype='multipart/form-data'>"
                f"<input type=file name=file aria-label='Berkas bukti untuk {e(it['id'])}' accept='.pdf,.png,.jpg,.jpeg' required> "
                f"<button>{e(label('ui_add_file'))}</button></form></details>")
-        files_cell = (ui.chips(have, tone="ok") if have
-                      else f"<span class=note>{e(label('none'))}</span>")
+        files_cell = item_files(emp, cid, it["id"], res, state, pending)
         rows.append([f"{e(label(it['category']))}<div class=note>{e(it['description'])}</div>", core.date_html(it["date"]),
                      e(rupiah(res.claimed)), files_cell, f"<span class='tag {cls}'>{e(status)}</span>", add])
     body = f"""<p><a href="/employee">&larr; {e(label('ui_my_claims'))}</a></p>

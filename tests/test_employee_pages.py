@@ -136,3 +136,43 @@ def test_claim_page_never_shows_the_engine_totals(client):
     for amount in (chk.total_approvable, chk.total_pending):
         assert web.rupiah(amount) not in page
     assert web.rupiah(chk.total_claimed) in page
+
+
+# --- item 3: files that match the evidence ---------------------------------------
+def test_hero_shows_the_mailbox_attachment_the_engine_used(client):
+    web.review(HERO)["evidence"].append("MSG-5201")  # Rina's own check-in pass for QZ 7520
+    chk = web.run_check(HERO)
+    assert any("MSG-5201" in r.evidence_used for r in chk.items)
+    page = client.get(f"/employee/claims/{HERO}").text
+    assert re.search(r'<span class="tag ok"[^>]*>QZ7520_mobile_checkin.pdf</span>', page)
+
+
+def test_uploaded_files_wait_in_warn_tone_and_masked_items_show_none_of_the_mailbox(client, monkeypatch):
+    cid = submit_new_claim(client, monkeypatch)
+    page = client.get(f"/employee/claims/{cid}").text
+    assert page.count("(menunggu verifikasi)</span>") == 2
+    assert len(re.findall(r'<span class="tag warn"', page)) == 2 and "taxi.png (menunggu verifikasi)" in page
+
+    emp = web.store.get_claim(cid)["employee_id"]
+    res_ = res(gaps=["duplicate_suspected"], iid="IT-1")
+    res_.evidence_used = ["MSG-5201"]
+    state = upload_flow.item_state(res_, {})
+    assert state.masked
+    cell = upload_flow.item_files(emp, cid, "IT-1", res_, state, {})
+    assert "QZ7520_mobile_checkin.pdf" not in cell
+    # the uploaded file of a masked item stays, in the neutral tone only
+    waiting = next(iter(web.pending_items(cid).values()))
+    cell = upload_flow.item_files(emp, cid, "IT-1", res_, state, {"IT-1": waiting})
+    assert 'class="tag"' in cell and "tag warn" not in cell and "tag ok" not in cell
+
+
+def test_a_message_owned_by_someone_else_never_shows_its_attachments(client):
+    web.store.inbox.append({"id": "MSG-X1", "owner_id": "EMP-002", "from": "x", "date": "2026-10-01",
+                            "subject": "s", "body": "", "attachments": [{"name": "someone_elses.pdf"}],
+                            "mailbox": web.MAILBOX})
+    web.review(HERO)["evidence"].append("MSG-X1")
+    assert "someone_elses.pdf" not in client.get(f"/employee/claims/{HERO}").text
+    res_ = res()
+    res_.evidence_used = ["MSG-X1"]
+    cell = upload_flow.item_files("EMP-001", HERO, "IT-1", res_, upload_flow.item_state(res_, {}), {})
+    assert "someone_elses.pdf" not in cell
