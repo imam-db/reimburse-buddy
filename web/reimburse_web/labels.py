@@ -163,7 +163,9 @@ LABELS = {
     "ui_forwarded_mailbox": "Diteruskan ke mailbox reimburse",
     "ui_employee_footer": "Karyawan:",
     "ui_flash_submitted": "Klaim diajukan",
-    "ui_flash_file_added": "File ditambahkan",
+    "ui_flash_submitted_files": "Klaim diajukan. Berkas Anda sudah diteruskan ke finance.",
+    "ui_flash_file_added": "Berkas ditambahkan",
+    "ui_flash_file_added_to": "Berkas ditambahkan ke {item}.",
     # table headers (employee, manager and claim pages)
     "ui_col_id": "ID",
     "ui_col_purpose": "Keperluan",
@@ -259,7 +261,6 @@ LABELS = {
     "ui_needs_action": "Perlu tindakan",
     "ui_finance_note": ("Finance meninjau setiap klaim. Nominal yang tampil adalah yang Anda ajukan; "
                         "finance yang memutuskan apa yang disetujui."),
-    "ui_forwarded_note": "{flash}: berkas diteruskan ke {mailbox} dan ditautkan ke itemnya.",
     # manager area (manager.py)
     "ui_no_approval_requests": "Belum ada permintaan persetujuan.",
     # manager approval requests (docs/adr/0003-manager-approval-requests.md)

@@ -534,8 +534,15 @@ def owned_claim(cid: str, emp: str) -> dict:
     return claim
 
 
-def flash_text(msg: str) -> str:
-    """Text for a flash message the redirects carry (?msg=...). Unknown text is shown as it was sent."""
+def flash_text(msg: str, item: str = "") -> str:
+    """Text for a flash message the redirects carry (?msg=...). Unknown text is shown as it was sent.
+
+    A bare "Submitted" is the new-claim flow (files were forwarded); "Submitted CLM-..." is the older
+    text form, which forwards nothing. `item` is the readable name of the item a file was added to."""
+    if msg == "Submitted":
+        return label("ui_flash_submitted_files")
+    if msg == "File added" and item:
+        return label("ui_flash_file_added_to").format(item=item)
     for english, code in (("Submitted", "ui_flash_submitted"), ("File added", "ui_flash_file_added")):
         if msg == english or msg.startswith(english + " "):
             return label(code) + msg[len(english):]

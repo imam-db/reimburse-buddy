@@ -749,8 +749,19 @@ def claim_summary(claim: dict, items: list, states: list[ItemState]) -> str:
     return ui.stats(cells, id="claim-summary") + (f"<p class='next-step' id='next-step'>{step}</p>" if step else "")
 
 
+def _item_name(claim: dict, iid: str) -> str:
+    """Readable name of one of the claim's own items ("" for an unknown id): category, plus the description
+    when it says more than the category."""
+    it = next((i for i in claim["items"] if i["id"] == iid), None)
+    if not it:
+        return ""
+    desc = str(it["description"] or "").strip()
+    name = label(it["category"])
+    return name if desc.lower() == str(it["category"]).strip().lower() or not desc else f"{name} ({desc})"
+
+
 @router.get("/employee/claims/{cid}", response_class=HTMLResponse)
-def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: ignore[assignment]  # direct calls pass no request
+def employee_claim(cid: str, request: Request = None, msg: str = "", item: str = ""):  # type: ignore[assignment]  # direct calls pass no request
     from . import qa as qa_web  # Employee Q&A hook; a no-op unless EMPLOYEE_QA is on
     emp = auth.current_employee(request)
     if not emp:
@@ -774,7 +785,7 @@ def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: i
         rows.append([f"{e(label(it['category']))}{note}", core.date_html(it["date"]),
                      e(rupiah(res.claimed)), files_cell, f"<span class='tag {cls}'>{e(status)}</span>", add])
     body = f"""<p><a href="/employee">&larr; {e(label('ui_my_claims'))}</a></p>
-{ui.alert(label("ui_forwarded_note").format(flash=core.flash_text(msg), mailbox=core.MAILBOX), tone="success") if msg else ''}
+{ui.alert(core.flash_text(msg, _item_name(claim, item)), tone="success") if msg else ''}
 <p>{e(claim['purpose'])} &middot; {e(claim['trip']['destination'])} {core.date_html(claim['trip']['start_date'])} &rarr;
 {core.date_html(claim['trip']['end_date'])}</p>
 {claim_summary(claim, claim["items"], states)}
@@ -793,4 +804,4 @@ async def add_file(cid: str, iid: str, request: Request, file: UploadFile = File
         raise HTTPException(404, f"Unknown item {iid}")
     entry = await _save_and_extract(file, cid)
     forward_files(claim["employee_id"], cid, claim["trip"], [(item, entry)])
-    return RedirectResponse(f"/employee/claims/{cid}?msg=File+added#item-{quote(iid)}", status_code=303)
+    return RedirectResponse(f"/employee/claims/{cid}?msg=File+added&item={quote(iid)}#item-{quote(iid)}", status_code=303)

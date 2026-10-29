@@ -245,4 +245,28 @@ def test_redirect_after_an_upload_lands_on_the_item_row(client, monkeypatch):
     r = client.post(f"/employee/claims/{cid}/items/IT-2/files", files={"file": ("again.png", b"\x89PNG\r\n\x1a\n")},
                     follow_redirects=False)
     assert r.status_code == 303
-    assert r.headers["location"] == f"/employee/claims/{cid}?msg=File+added#item-IT-2"
+    assert r.headers["location"] == f"/employee/claims/{cid}?msg=File+added&item=IT-2#item-IT-2"
+
+
+# --- item 7: plain flash text -----------------------------------------------------
+def test_flash_after_submit_is_plain_and_hides_the_mailbox(client, monkeypatch):
+    cid = submit_new_claim(client, monkeypatch)
+    page = client.get(f"/employee/claims/{cid}?msg=Submitted").text
+    assert "Klaim diajukan. Berkas Anda sudah diteruskan ke finance." in page
+    assert web.MAILBOX not in page and "reimburse@" not in page
+
+
+def test_flash_after_an_upload_names_the_item(client, monkeypatch):
+    cid = submit_new_claim(client, monkeypatch)
+    r = client.post(f"/employee/claims/{cid}/items/IT-1/files", files={"file": ("again.png", b"\x89PNG\r\n\x1a\n")})
+    assert r.status_code == 200
+    text = visible(r.text)
+    assert "Berkas ditambahkan ke Taksi." in text
+    assert web.MAILBOX not in r.text
+
+
+def test_flash_for_an_unknown_item_or_text_is_escaped(client):
+    cid = HERO
+    page = client.get(f"/employee/claims/{cid}?msg=File+added&item=IT-99").text
+    assert "Berkas ditambahkan" in page and "IT-99" not in page.split("<main", 1)[1].split("</main>")[0]
+    assert "&lt;b&gt;" in client.get(f"/employee/claims/{cid}?msg=%3Cb%3E").text
