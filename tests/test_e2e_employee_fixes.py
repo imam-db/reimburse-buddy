@@ -28,6 +28,16 @@ def test_anchor_targets_clear_the_sticky_header():
     assert "scroll-margin-top: calc(var(--header-h)" in block
 
 
+def test_submit_bar_renders_the_server_total_first_and_ships_the_live_script(client, monkeypatch):
+    d = drop(client, monkeypatch, {"ok.png": good(doc_type="taxi_receipt", date="2026-10-03",
+                                                  amount=150000, merchant="Taksi")})
+    page = client.get(f"/employee/drafts/{d['id']}").text
+    assert '<span id="bar-total">Total diajukan Rp150.000</span>' in page
+    assert '<span id="bar-incomplete">0 kartu belum lengkap</span>' in page
+    assert 'data-start="2026-10-02"' in page and 'data-end="2026-10-04"' in page
+    assert "getElementById('bar-total')" in page  # the script is there; the page still works without it
+
+
 def test_reasons_show_as_hints_before_the_first_save_and_as_errors_after(client, monkeypatch):
     d = drop(client, monkeypatch, {"bad.png": bad()})
     page = client.get(f"/employee/drafts/{d['id']}").text

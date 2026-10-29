@@ -168,7 +168,31 @@ f.querySelectorAll('input,select,textarea').forEach(function(x){x.disabled=!on;}
 sel.addEventListener('change',sync);});
 })();</script>"""
 
-DATE_MIN_JS = """<script>(function(){
+# Recomputes the submit bar as amounts change. Presentation only: the server value is rendered first and
+# the same rules (_card_problems) still decide on save and submit.
+LIVE_BAR_JS = """<script>(function(){
+var f=document.getElementById('draft-form'),bar=document.getElementById('draft-bar');
+var tot=document.getElementById('bar-total'),inc=document.getElementById('bar-incomplete');
+if(!f||!bar||!tot||!inc)return;
+var AMT=/^(\\d+|\\d{1,3}(\\.\\d{3})+)$/;
+function rp(n){return 'Rp'+String(n).replace(/\\B(?=(\\d{3})+(?!\\d))/g,'.');}
+function val(card,k){var el=card.querySelector('[name="c_'+card.getAttribute('data-card')+'_'+k+'"]');
+return el&&!el.disabled?el.value.trim():'';}
+function amount(card){var v=val(card,'amount');return AMT.test(v)?parseInt(v.replace(/\\./g,''),10):0;}
+function incomplete(card){
+var sel=card.querySelector('select[data-role=category]'),cat=sel?sel.value:'',d=val(card,'date');
+if(!cat||!d||d<bar.dataset.start||d>bar.dataset.end||amount(card)<=0)return true;
+if(cat==='flight'&&!val(card,'flight_no'))return true;
+if(cat==='hotel'&&!/^\\d+$/.test(val(card,'nights')))return true;
+return false;}
+function update(){var sum=0,bad=0;
+f.querySelectorAll('[data-card]').forEach(function(c){sum+=amount(c);if(incomplete(c))bad++;});
+tot.textContent=bar.dataset.tTotal.replace('{total}',rp(sum));
+inc.textContent=bar.dataset.tIncomplete.replace('{n}',bad);}
+f.addEventListener('input',update);f.addEventListener('change',update);
+})();</script>"""
+
+DATE_MIN_JS ="""<script>(function(){
 var s=document.getElementById('start-date'),e=document.getElementById('end-date');
 if(!s||!e)return;
 function sync(){e.min=s.value;if(e.value&&s.value&&e.value<s.value)e.value='';}
@@ -338,7 +362,7 @@ def draft_page(did: str, request: Request):
 <form method="post" action="/employee/drafts/{e(did)}" id="draft-form"><div class="cards" id="draft-cards" tabindex="-1">{cards_html}</div>
 <p class="draft-add">{ui.button(label("ui_add_item"), variant="secondary", name="action", value="add")}</p>
 {_submit_bar(d)}</form>
-<div class="draft-spacer" aria-hidden="true"></div>{BUSY_SUBMIT_JS}{FOCUS_JS}{CATEGORY_JS}"""
+<div class="draft-spacer" aria-hidden="true"></div>{BUSY_SUBMIT_JS}{FOCUS_JS}{CATEGORY_JS}{LIVE_BAR_JS}"""
     return core.page(label("ui_check_title"), body)
 
 
@@ -437,9 +461,11 @@ def _submit_bar(d: dict) -> str:
     """The sticky bar: item count, claimed total and incomplete-card count, then save/submit."""
     incomplete = len([c for c in d["cards"] if _card_errors(c, d["header"])])
     summary = (f'{e(label("ui_bar_items").format(n=len(d["cards"])))} &middot; '
-               f'{e(label("ui_bar_total").format(total=rupiah(_draft_total(d))))} &middot; '
-               f'{e(label("ui_bar_incomplete").format(n=incomplete))}')
-    return (f'<div class="draft-bar" id="draft-bar">'
+               f'<span id="bar-total">{e(label("ui_bar_total").format(total=rupiah(_draft_total(d))))}</span> &middot; '
+               f'<span id="bar-incomplete">{e(label("ui_bar_incomplete").format(n=incomplete))}</span>')
+    h = d["header"]
+    return (f'<div class="draft-bar" id="draft-bar" data-start="{e(h["start_date"])}" data-end="{e(h["end_date"])}" '
+            f'data-t-total="{e(label("ui_bar_total"))}" data-t-incomplete="{e(label("ui_bar_incomplete"))}">'
             f'<p class="bar-summary">{summary}</p>'
             f'{ui.button(label("ui_save_changes"), variant="secondary", name="action", value="save")}'
             f'{ui.button(label("ui_submit_claim"), variant="primary", name="action", value="submit", id="submit-claim")}'
