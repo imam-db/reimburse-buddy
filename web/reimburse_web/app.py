@@ -36,7 +36,7 @@ from . import manager
 from .manager import router as manager_router
 from .labels import label, person
 from .plans import router as plans_router, startup_config_check, startup_sweep
-from .qa import router as qa_router
+from .qa import portal_box, router as qa_router
 
 BATCH = "2026-W43"
 # A second batch with one claim owned by EMP-101, so the self-approval refusal can be shown on the claim
@@ -481,6 +481,7 @@ def employee_page(request: Request, msg: str = ""):
     body = f"""
 {f'<p class="tag ok">{e(flash_text(msg))}</p>' if msg else ''}
 <h2>{e(label('ui_my_claims'))}</h2><div class="table-wrap"><table><tr><th>{e(label('ui_col_id'))}</th><th>{e(label('ui_col_purpose'))}</th><th>{e(label('ui_col_trip'))}</th><th class=num>{e(label('ui_col_claimed'))}</th><th>{e(label('ui_col_status'))}</th></tr>{rows}</table></div>
+{portal_box(request)}
 <h2>{e(label('ui_messages_from_finance'))}</h2>{'<div class="table-wrap"><table><tr><th>' + e(label('ui_col_claim')) + '</th><th>' + e(label('ui_col_subject')) + '</th><th>' + e(label('ui_col_body')) + '</th></tr>' + msgs + '</table></div>' if msgs else '<p class=note>' + e(label('ui_no_messages')) + '</p>'}
 <div class="box"><h2>{e(label('ui_new_claim'))}</h2><p>{e(label('ui_new_claim_hint'))}</p>
 <p><a class="btn" href="/employee/new">{e(label('ui_start_new_claim'))}</a></p></div>
