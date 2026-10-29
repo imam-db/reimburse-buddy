@@ -13,6 +13,7 @@ Status: `Proposed` (written, not yet agreed) → `Accepted` (agreed, work may st
 | [0002](0002-employee-identity-from-session.md) | Employee identity comes from the login session | Accepted |
 | [0003](0003-manager-approval-requests.md) | Managers answer approval requests; finance decides | Accepted |
 | [0004](0004-seeding-employee-accounts.md) | Seeding the employee accounts | Accepted |
+| [0005](0005-employee-qa-improvements.md) | Employee Q&A: answer quality and usability | Accepted |
 
 ## Template
 
