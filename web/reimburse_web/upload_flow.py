@@ -236,19 +236,26 @@ def draft_page(did: str, request: Request):
         keys = ["category", "date", "amount", "merchant"] + (["flight_no"] if cat == "flight" else []) + \
                (["nights"] if cat == "hotel" else [])
         files = ""
+        moves = ""
         for f in c["files"]:
-            mv = (f"<select name='move_{f['id']}' aria-label='Pindahkan berkas ke kartu lain'>{core.options([('', label('ui_move_to'))] + others(c['id']))}</select>"
-                  f"<button name=action value='move:{f['id']}'>{e(label('ui_move'))}</button>") if len(d["cards"]) > 1 else ""
-            files += (f"<li>{e(f['name'])} <select name='f_{f['id']}_doc_type' aria-label='Jenis dokumen untuk {e(f['name'])}'>{core.options([(t, label(t)) for t in DOC_TYPES], f['doc_type'])}</select>"
+            files += (f"<li class='file-row'>{e(f['name'])} <select name='f_{f['id']}_doc_type' aria-label='Jenis dokumen untuk {e(f['name'])}'>{core.options([(t, label(t)) for t in DOC_TYPES], f['doc_type'])}</select>"
                       f" {_badge({'source': f['doc_type_source'], 'confidence': f['extract']['fields']['doc_type']['confidence']})}"
-                      f"{_err(f)} {mv}</li>")
-        merge = (f"<select name='merge_{c['id']}' aria-label='Gabungkan kartu ke kartu lain'>{core.options([('', label('ui_merge_into'))] + others(c['id']))}</select>"
-                 f"<button name=action value='merge:{c['id']}'>{e(label('ui_merge'))}</button>") if len(d["cards"]) > 1 else ""
+                      f"{_err(f)}</li>")
+            if len(d["cards"]) > 1:
+                moves += (f"<div class='manage-row'><span class=note>{e(f['name'])}</span> "
+                          f"<select name='move_{f['id']}' aria-label='Pindahkan berkas ke kartu lain'>{core.options([('', label('ui_move_to'))] + others(c['id']))}</select>"
+                          f"<button name=action value='move:{f['id']}'>{e(label('ui_move'))}</button></div>")
+        merge = (f"<div class='manage-row'><select name='merge_{c['id']}' aria-label='Gabungkan kartu ke kartu lain'>{core.options([('', label('ui_merge_into'))] + others(c['id']))}</select>"
+                 f"<button name=action value='merge:{c['id']}'>{e(label('ui_merge'))}</button></div>") if len(d["cards"]) > 1 else ""
         split = f"<button name=action value='split:{c['id']}'>{e(label('ui_split'))}</button>" if len(c["files"]) > 1 else ""
+        manage = (f"<details class='manage'><summary>{e(label('ui_manage_card'))}</summary>"
+                  f"{moves}{merge}{split}"
+                  f"<button class='btn quiet-danger' name=action value='delete:{c['id']}' onclick='return confirm(&quot;Hapus item ini?&quot;)'>{e(label('ui_delete'))}</button>"
+                  f"</details>")
         errs = "".join(f"<div class=err>{e(x)}</div>" for x in c["errors"])
         cards_html += (f"<div class='card' id='card-{e(c['id'])}'><b>{e(label('ui_card'))} {n + 1}</b>{errs}{''.join(_input(c, k, allowed) for k in keys)}"
                        f"<div class=note>{e(label('ui_col_files'))}</div><ul>{files or '<li class=note>' + e(label('ui_no_file_yet')) + '</li>'}</ul>"
-                       f"{merge} {split} <button class='btn quiet-danger' name=action value='delete:{c['id']}' onclick='return confirm(&quot;Hapus item ini?&quot;)'>{e(label('ui_delete'))}</button></div>")
+                       f"{manage}</div>")
     errs = "".join(f"<p class=err>{e(x)}</p>" for x in d["errors"])
     steps = [label("ui_step_trip"), label("ui_step_upload"), label("ui_step_verify")]
     body = f"""<p>{e(h['purpose'])} &middot; {e(h['destination'])} {core.date_html(h['start_date'])} &rarr; {core.date_html(h['end_date'])}</p>

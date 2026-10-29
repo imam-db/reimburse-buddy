@@ -1270,6 +1270,31 @@ details > summary + * {
   height: 72px;
 }
 
+.file-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.manage {
+  margin-top: var(--sp-2);
+}
+
+.manage-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.manage-row select {
+  width: auto;
+  max-width: 220px;
+}
+
 @media (max-width: 720px) {
   .draft-bar {
     flex-wrap: nowrap;

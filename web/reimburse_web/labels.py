@@ -204,6 +204,7 @@ LABELS = {
     "ui_merge": "Gabung",
     "ui_split": "Pisah",
     "ui_delete": "Hapus",
+    "ui_manage_card": "Atur kartu",
     "ui_choose": "pilih...",
     "ui_move_to": "pindah ke...",
     "ui_merge_into": "gabung ke...",

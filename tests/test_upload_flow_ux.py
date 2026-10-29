@@ -178,3 +178,42 @@ def test_busy_scripts_and_no_js_submit(client, monkeypatch):
     r = client.post(f"/employee/drafts/{d['id']}", data=dict(form_of(d), action="submit"),
                     follow_redirects=False)
     assert r.status_code == 303 and "/employee/claims/" in r.headers["location"]
+
+
+# --- P2.7: secondary actions behind one disclosure -----------------------------
+def test_secondary_actions_live_behind_one_disclosure(client, monkeypatch):
+    d = drop(client, monkeypatch, {
+        "a.png": good(doc_type="taxi_receipt", date="2026-10-03", amount=150000, merchant="Taksi"),
+        "b.png": good(doc_type="meal_receipt", date="2026-10-03", amount=95000, merchant="Warung"),
+    })
+    a, b = (c["id"] for c in d["cards"])
+    fid = d["cards"][0]["files"][0]["id"]
+    markup = client.get(f"/employee/drafts/{d['id']}").text
+    assert "<summary>Atur kartu</summary>" in markup
+    assert f"name='move_{fid}'" in markup and f"value='move:{fid}'" in markup
+    assert f"name='merge_{a}'" in markup and f"value='merge:{a}'" in markup
+    assert f"value='delete:{a}'" in markup and "Hapus item ini?" in markup
+    assert markup.index("<summary>Atur kartu</summary>") < markup.index(f"value='delete:{a}'")
+
+    r = client.post(f"/employee/drafts/{d['id']}",
+                    data=dict(form_of(d), action=f"move:{fid}", **{f"move_{fid}": b}),
+                    follow_redirects=False)
+    assert r.status_code == 303
+    assert len(d["cards"][0]["files"]) == 0 and len(d["cards"][1]["files"]) == 2
+
+    r = client.post(f"/employee/drafts/{d['id']}",
+                    data=dict(form_of(d), action=f"merge:{a}", **{f"merge_{a}": b}),
+                    follow_redirects=False)
+    assert r.status_code == 303 and len(d["cards"]) == 1
+    merged = d["cards"][0]["id"]
+    markup = client.get(f"/employee/drafts/{d['id']}").text
+    assert f"value='split:{merged}'" in markup
+
+    r = client.post(f"/employee/drafts/{d['id']}",
+                    data=dict(form_of(d), action=f"split:{merged}"), follow_redirects=False)
+    assert r.status_code == 303 and len(d["cards"]) == 2
+
+    first = d["cards"][0]["id"]
+    r = client.post(f"/employee/drafts/{d['id']}",
+                    data=dict(form_of(d), action=f"delete:{first}"), follow_redirects=False)
+    assert r.status_code == 303 and len(d["cards"]) == 1
