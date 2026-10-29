@@ -1299,6 +1299,32 @@ details > summary + * {
   display: none;
 }
 
+.amount-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.amount-field .prefix {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.amount-field input {
+  flex: 1;
+  min-width: 0;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.file-row .err {
+  flex-basis: 100%;
+}
+
 @media (max-width: 720px) {
   .draft-bar {
     flex-wrap: nowrap;

@@ -143,6 +143,13 @@ f.querySelectorAll('input,select,textarea').forEach(function(x){x.disabled=!on;}
 sel.addEventListener('change',sync);});
 })();</script>"""
 
+DATE_MIN_JS = """<script>(function(){
+var s=document.getElementById('start-date'),e=document.getElementById('end-date');
+if(!s||!e)return;
+function sync(){e.min=s.value;if(e.value&&s.value&&e.value<s.value)e.value='';}
+s.addEventListener('change',sync);sync();
+})();</script>"""
+
 
 @router.get("/employee/new", response_class=HTMLResponse)
 def new_claim(request: Request):
@@ -154,17 +161,20 @@ def new_claim(request: Request):
     body = f"""<p><a href="/employee">&larr; {e(label('ui_my_claims'))}</a> &middot; {e(me['name'])}</p>
 {ui.stepper(steps, 0)}
 <form method="post" action="/employee/drafts" enctype="multipart/form-data" id="drop-form">
-<div class="box"><h2>{e(label('ui_step_trip'))}</h2><label>{e(label('ui_field_purpose'))} <input name="purpose" size="40" required></label>
-<label>{e(label('ui_field_destination'))} <input name="destination" value="Surabaya" required></label>
-<br><label>{e(label('ui_field_dates'))} <input type="date" name="start_date" required></label> &rarr;
-<label>{e(label('ui_field_end_date'))} <input type="date" name="end_date" required></label></div>
+<div class="box"><h2>{e(label('ui_step_trip'))}</h2>
+<label>{e(label('ui_field_purpose'))} <input name="purpose" size="40" placeholder="{e(label('ui_purpose_placeholder'))}" required></label>
+<label>{e(label('ui_field_destination'))} <input name="destination" placeholder="{e(label('ui_destination_placeholder'))}" required></label>
+<div class="date-row">
+<label>{e(label('ui_field_start_date'))} <input type="date" name="start_date" id="start-date" required></label>
+<label>{e(label('ui_field_end_date'))} <input type="date" name="end_date" id="end-date" required></label>
+</div></div>
 <div class="box"><h2>{e(label('ui_step_drop'))}</h2>
 <label id="drop" class="drop">{e(label('ui_drop_hint').format(max=MAX_FILES))}
 <input id="files" class="visually-hidden" type="file" name="files" multiple accept=".pdf,.png,.jpg,.jpeg"></label>
 <p><button type="button" id="pick-files">{e(label('ui_pick_files'))}</button></p>
 <div id="picked" class="note"></div>
 <p class="note">{e(label('ui_extraction_note'))}</p>
-<button type="submit" id="read-files">{e(label('ui_read_files'))}</button></div></form>{DROP_JS}{BUSY_READ_JS}"""
+<button type="submit" id="read-files">{e(label('ui_read_files'))}</button></div></form>{DROP_JS}{BUSY_READ_JS}{DATE_MIN_JS}"""
     return core.page(label("ui_new_claim"), body)
 
 
@@ -265,7 +275,8 @@ def draft_page(did: str, request: Request):
         for f in c["files"]:
             files += (f"<li class='file-row'>{e(f['name'])} <select name='f_{f['id']}_doc_type' aria-label='Jenis dokumen untuk {e(f['name'])}'>{core.options([(t, label(t)) for t in DOC_TYPES], f['doc_type'])}</select>"
                       f" {_badge({'source': f['doc_type_source'], 'confidence': f['extract']['fields']['doc_type']['confidence']})}"
-                      f"{_err(f)}</li>")            if len(d["cards"]) > 1:
+                      f"{_err(f)}</li>")
+            if len(d["cards"]) > 1:
                 moves += (f"<div class='manage-row'><span class=note>{e(f['name'])}</span> "
                           f"<select name='move_{f['id']}' aria-label='Pindahkan berkas ke kartu lain'>{core.options([('', label('ui_move_to'))] + others(c['id']))}</select>"
                           f"<button name=action value='move:{f['id']}'>{e(label('ui_move'))}</button></div>")

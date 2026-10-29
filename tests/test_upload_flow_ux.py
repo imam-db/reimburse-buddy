@@ -309,3 +309,21 @@ def test_hotel_validation_still_requires_nights(client, monkeypatch):
                     follow_redirects=False)
     assert r.status_code == 303 and d["id"] in web.DRAFTS
     assert "Jumlah malam wajib diisi untuk hotel." in d["cards"][0]["errors"]
+
+
+# --- P2.10/P2.11: amount prefix, hint placeholder, calmer file rows ------------
+def test_amount_field_has_a_prefix_and_a_hint_placeholder(client, monkeypatch):
+    d = drop(client, monkeypatch, {"bad.png": bad(),
+                                   "ok.png": good(doc_type="taxi_receipt", date="2026-10-03",
+                                                  amount=150000, merchant="Taksi")})
+    markup = client.get(f"/employee/drafts/{d['id']}").text
+    assert "class='amount-field'" in markup and "class='prefix'" in markup
+    assert "Rp" in markup and "placeholder='contoh: 1.350.000'" in markup
+    css = client.get("/static/app.css").text
+    assert "::placeholder" in css and "var(--muted)" in css and ".file-row .err" in css
+    assert markup.count("class='file-row'") == 2
+
+    good_id = d["cards"][1]["id"]
+    form = dict(form_of(d), **{f"c_{good_id}_amount": "95.000"})
+    client.post(f"/employee/drafts/{d['id']}", data=dict(form, action="save"))
+    assert d["cards"][1]["fields"]["amount"]["value"] == 95000
