@@ -138,8 +138,13 @@ def button(text: str, *, variant: str = "secondary", type: str = "submit", name:
 
 def alert(text: str, *, tone: str = "info", role: str = "status", id: str = "") -> str:
     """A flash (`status`) or an error (`alert`); it takes focus so a redirect announces it."""
+    return alert_html(e(text), tone=tone, role=role, id=id)
+
+
+def alert_html(body: str, *, tone: str = "info", role: str = "status", id: str = "") -> str:
+    """Like alert(), but `body` is markup the caller has already escaped."""
     return (f'<div class="alert"{_attrs(id=id, data_tone=tone, role=role, tabindex="-1")}>'
-            f"{e(text)}</div>")
+            f"{body}</div>")
 
 
 def stepper(steps: list[str], current: int = 0, *, id: str = "") -> str:

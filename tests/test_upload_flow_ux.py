@@ -89,3 +89,26 @@ def test_extraction_error_is_one_indonesian_sentence(client, monkeypatch):
         assert raw not in text
     assert f'title="{BAD_ERROR}"' in markup
     assert d["cards"][0]["files"][0]["error"] == BAD_ERROR
+
+
+# --- P1.2: summary banner ------------------------------------------------------
+def test_summary_banner_lists_unreadable_files_and_incomplete_cards(client, monkeypatch):
+    d = drop(client, monkeypatch, {"bad.png": bad(),
+                                   "ok.png": good(doc_type="taxi_receipt", date="2026-10-03",
+                                                  amount=150000, merchant="Taksi")})
+    markup = client.get(f"/employee/drafts/{d['id']}").text
+    assert 'class="alert"' in markup and 'role="status"' in markup
+    assert "1 dari 2 berkas belum terbaca." in markup
+    bad_card = d["cards"][0]["id"]
+    assert "Lengkapi kartu <a href='#card-" in markup
+    assert f"href='#card-{bad_card}'" in markup
+    assert f"id='card-{bad_card}'" in markup
+    assert "Lengkapi kartu 1" in visible(markup)
+
+
+def test_summary_banner_is_absent_when_everything_is_readable(client, monkeypatch):
+    d = drop(client, monkeypatch, {"ok.png": good(doc_type="taxi_receipt", date="2026-10-03",
+                                                  amount=150000, merchant="Taksi")})
+    markup = client.get(f"/employee/drafts/{d['id']}").text
+    assert 'class="alert"' not in markup
+    assert "berkas belum terbaca" not in visible(markup)

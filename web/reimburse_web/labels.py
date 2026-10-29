@@ -216,6 +216,8 @@ LABELS = {
     "ui_field_nights": "Jumlah malam",
     "ui_could_not_read": "Berkas tidak bisa dibaca.",
     "ui_fill_manual": "Isi kartu ini secara manual.",
+    "ui_summary_unreadable": "{bad} dari {total} berkas belum terbaca.",
+    "ui_summary_incomplete": "Lengkapi kartu {cards}.",
     "ui_err_category": "Pilih kategori.",
     "ui_err_date": "Tanggal harus berada dalam rentang perjalanan.",
     "ui_err_amount": "Nominal harus bilangan bulat rupiah, misalnya 1.350.000.",

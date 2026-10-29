@@ -223,12 +223,13 @@ def draft_page(did: str, request: Request):
                  f"<button name=action value='merge:{c['id']}'>{e(label('ui_merge'))}</button>") if len(d["cards"]) > 1 else ""
         split = f"<button name=action value='split:{c['id']}'>{e(label('ui_split'))}</button>" if len(c["files"]) > 1 else ""
         errs = "".join(f"<div class=err>{e(x)}</div>" for x in c["errors"])
-        cards_html += (f"<div class=card><b>{e(label('ui_card'))} {n + 1}</b>{errs}{''.join(_input(c, k, allowed) for k in keys)}"
+        cards_html += (f"<div class='card' id='card-{e(c['id'])}'><b>{e(label('ui_card'))} {n + 1}</b>{errs}{''.join(_input(c, k, allowed) for k in keys)}"
                        f"<div class=note>{e(label('ui_col_files'))}</div><ul>{files or '<li class=note>' + e(label('ui_no_file_yet')) + '</li>'}</ul>"
                        f"{merge} {split} <button class='btn quiet-danger' name=action value='delete:{c['id']}' onclick='return confirm(&quot;Hapus item ini?&quot;)'>{e(label('ui_delete'))}</button></div>")
     errs = "".join(f"<p class=err>{e(x)}</p>" for x in d["errors"])
     body = f"""<p>{e(h['purpose'])} &middot; {e(h['destination'])} {core.date_html(h['start_date'])} &rarr; {core.date_html(h['end_date'])}</p>
 <p class="note">{e(label('ui_check_note').format(flag=label('self_declared')))}</p>{errs}
+{_summary(d)}
 <form method="post" action="/employee/drafts/{e(did)}"><div class="cards" id="draft-cards" tabindex="-1">{cards_html}</div>
 <p><button name=action value="save">{e(label('ui_save_changes'))}</button> <button name=action value="add">{e(label('ui_add_item'))}</button>
 <button name=action value="submit" style="font-weight:bold">{e(label('ui_submit_claim'))}</button></p></form>"""
@@ -261,28 +262,50 @@ def _apply_edits(d: dict, form) -> None:
                 f["doc_type"], f["doc_type_source"] = v, "self_declared"
 
 
+def _card_errors(c: dict, h: dict) -> list[str]:
+    """Validation errors for one card, without mutating it (the banner and _validate share this)."""
+    allowed = core.store.policy["allowed_categories"]
+    f = {k: v["value"] for k, v in c["fields"].items()}
+    errors = []
+    if f["category"] not in allowed:
+        errors.append(label("ui_err_category"))
+    if not f["date"] or not (h["start_date"] <= str(f["date"]) <= h["end_date"]):
+        errors.append(label("ui_err_date"))
+    if not isinstance(f["amount"], int) or f["amount"] <= 0:
+        errors.append(label("ui_err_amount"))
+    if f["category"] == "flight" and not f["flight_no"]:
+        errors.append(label("ui_err_flight_no"))
+    if f["category"] == "hotel" and not str(f["nights"] or "").isdigit():
+        errors.append(label("ui_err_nights"))
+    return errors
+
+
 def _validate(d: dict) -> bool:
     h, ok = d["header"], True
-    allowed = core.store.policy["allowed_categories"]
     for c in d["cards"]:
-        c["errors"] = []
-        f = {k: v["value"] for k, v in c["fields"].items()}
-        if f["category"] not in allowed:
-            c["errors"].append(label("ui_err_category"))
-        if not f["date"] or not (h["start_date"] <= str(f["date"]) <= h["end_date"]):
-            c["errors"].append(label("ui_err_date"))
-        if not isinstance(f["amount"], int) or f["amount"] <= 0:
-            c["errors"].append(label("ui_err_amount"))
-        if f["category"] == "flight" and not f["flight_no"]:
-            c["errors"].append(label("ui_err_flight_no"))
-        if f["category"] == "hotel" and not str(f["nights"] or "").isdigit():
-            c["errors"].append(label("ui_err_nights"))
+        c["errors"] = _card_errors(c, h)
         ok = ok and not c["errors"]
     if not d["cards"]:
         d["errors"] = [label("ui_err_no_item")]
         return False
     d["errors"] = []
     return ok
+
+
+def _summary(d: dict) -> str:
+    """Banner above the cards: unreadable files and incomplete card numbers (linked to their anchor)."""
+    files = [f for c in d["cards"] for f in c["files"]]
+    unreadable = [f for f in files if f["error"]]
+    incomplete = [n for n, c in enumerate(d["cards"], 1) if _card_errors(c, d["header"])]
+    if not unreadable and not incomplete:
+        return ""
+    parts = []
+    if unreadable:
+        parts.append(e(label("ui_summary_unreadable").format(bad=len(unreadable), total=len(files))))
+    if incomplete:
+        links = ", ".join(f"<a href='#card-{e(d['cards'][n - 1]['id'])}'>{n}</a>" for n in incomplete)
+        parts.append(e(label("ui_summary_incomplete")).replace("{cards}", links))
+    return ui.alert_html(" ".join(parts), tone="warn")
 
 
 def plausible_max(category: str) -> int | None:
