@@ -57,3 +57,25 @@ def test_finished_plan_counts_rejections(tmp_path):
     g.invoke(Command(resume={"decisions": {a1: "approve", a2: "reject"}}), c)
     html = render(plan, log)
     assert "Rencana selesai: 1 aksi dijalankan, 1 ditolak." in html and "id='submit-bar'" not in html
+
+
+class _NoExecutionFor:
+    """The real log, minus the execution event of one action: approved, but it never ran."""
+    def __init__(self, inner, aid):
+        self.inner, self.aid = inner, aid
+
+    def list(self, run_id):
+        return [ev for ev in self.inner.list(run_id)
+                if not (ev.get("action_id") == self.aid and ev["event_type"] == "execution")]
+
+    def append(self, event):
+        return self.inner.append(event)
+
+
+def test_an_approval_that_did_not_execute_is_not_finished(tmp_path):
+    g, c, log, store = staged(tmp_path)
+    plan = store.load_plan("p1")
+    a1, a2 = (a["action_id"] for a in plan["actions"])
+    g.invoke(Command(resume={"decisions": {a1: "approve", a2: "approve"}}), c)
+    html = render(plan, _NoExecutionFor(log, a2))
+    assert "Rencana selesai" not in html

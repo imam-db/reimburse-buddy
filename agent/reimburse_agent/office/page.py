@@ -95,11 +95,12 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
     refused = bool(plan.get("staging_errors"))
     # Presentation only: which actions still wait for a decision, read from the audit log as before.
     statuses = {aid: _status(events, aid) for aid in action_ids}
-    waiting = [aid for aid, st in statuses.items() if st is None]
     ran = sum(1 for st in statuses.values() if st == "execution")
     rejected = sum(1 for st in statuses.values() if st == "rejection")
-    finished = bool(action_ids) and not waiting and not refused and not expired and (ran or rejected) > 0
-    link =f"<link rel=stylesheet href='{e(stylesheet_url)}'>" if stylesheet_url else ""
+    # Finished only when every action has a final outcome; an approval that did not execute is not one.
+    finished = (bool(action_ids) and not refused and not expired and (ran + rejected) > 0
+                and all(st in ("execution", "rejection", "superseded") for st in statuses.values()))
+    link = f"<link rel=stylesheet href='{e(stylesheet_url)}'>" if stylesheet_url else ""
     out = [f"<!doctype html><html lang=id><head><meta charset=utf-8>"
            f"<meta name=viewport content='width=device-width, initial-scale=1'>"
            f"<title>Konfirmasi rencana {run} · Reimburse Buddy</title>"
