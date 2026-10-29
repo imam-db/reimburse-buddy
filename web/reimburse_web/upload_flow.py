@@ -127,6 +127,12 @@ b.textContent="__TEXT__";b.disabled=true;f.setAttribute("aria-busy","true");
 });
 })();</script>""".replace("__TEXT__", label("ui_busy_submit"))
 
+FOCUS_JS = """<script>(function(){
+var h=location.hash;if(!h)return;var el=document.getElementById(h.slice(1));if(!el)return;
+try{el.focus({preventScroll:true});}catch(e){el.focus();}
+if(!matchMedia('(prefers-reduced-motion: reduce)').matches&&el.scrollIntoView)el.scrollIntoView({block:'nearest'});
+})();</script>"""
+
 
 @router.get("/employee/new", response_class=HTMLResponse)
 def new_claim(request: Request):
@@ -253,7 +259,7 @@ def draft_page(did: str, request: Request):
                   f"<button class='btn quiet-danger' name=action value='delete:{c['id']}' onclick='return confirm(&quot;Hapus item ini?&quot;)'>{e(label('ui_delete'))}</button>"
                   f"</details>")
         errs = "".join(f"<div class=err>{e(x)}</div>" for x in c["errors"])
-        cards_html += (f"<div class='card' id='card-{e(c['id'])}'><b>{e(label('ui_card'))} {n + 1}</b>{errs}{''.join(_input(c, k, allowed) for k in keys)}"
+        cards_html += (f"<div class='card' id='card-{e(c['id'])}' tabindex='-1'><b>{e(label('ui_card'))} {n + 1}</b>{errs}{''.join(_input(c, k, allowed) for k in keys)}"
                        f"<div class=note>{e(label('ui_col_files'))}</div><ul>{files or '<li class=note>' + e(label('ui_no_file_yet')) + '</li>'}</ul>"
                        f"{manage}</div>")
     errs = "".join(f"<p class=err>{e(x)}</p>" for x in d["errors"])
@@ -265,7 +271,7 @@ def draft_page(did: str, request: Request):
 <form method="post" action="/employee/drafts/{e(did)}" id="draft-form"><div class="cards" id="draft-cards" tabindex="-1">{cards_html}</div>
 <p class="draft-add">{ui.button(label("ui_add_item"), variant="secondary", name="action", value="add")}</p>
 {_submit_bar(d)}</form>
-<div class="draft-spacer" aria-hidden="true"></div>{BUSY_SUBMIT_JS}"""
+<div class="draft-spacer" aria-hidden="true"></div>{BUSY_SUBMIT_JS}{FOCUS_JS}"""
     return core.page(label("ui_check_title"), body)
 
 
@@ -497,17 +503,21 @@ async def update_draft(did: str, request: Request):
     verb, _, arg = action.partition(":")
     cards = d["cards"]
     find = lambda cid: next((c for c in cards if c["id"] == cid), None)  # noqa: E731
+    anchor = ""
     if verb == "delete" and find(arg):
         cards.remove(find(arg))
+        anchor = "draft-cards"
     elif verb == "split" and (c := find(arg)) and len(c["files"]) > 1:
         i = cards.index(c)
         cards[i:i + 1] = [_card_from_files([f]) for f in c["files"]]
+        anchor = f"card-{cards[i]['id']}"
     elif verb == "merge" and (c := find(arg)) and (t := find(str(form.get(f"merge_{arg}", "")))):
         t["files"] += c["files"]
         for k, v in c["fields"].items():
             if t["fields"][k]["value"] in (None, ""):
                 t["fields"][k] = v
         cards.remove(c)
+        anchor = f"card-{t['id']}"
     elif verb == "move":
         src = next((c for c in cards if any(f["id"] == arg for f in c["files"])), None)
         t = find(str(form.get(f"move_{arg}", "")))
@@ -515,13 +525,20 @@ async def update_draft(did: str, request: Request):
             f = next(f for f in src["files"] if f["id"] == arg)
             src["files"].remove(f)
             t["files"].append(f)
+            anchor = f"card-{src['id']}"
     elif verb == "add":
-        cards.append(_card_from_files([]))
+        card = _card_from_files([])
+        cards.append(card)
+        anchor = f"card-{card['id']}"
     elif verb == "submit":
         if _validate(d):
             cid = _submit(d)
             return RedirectResponse(f"/employee/claims/{cid}?msg=Submitted", status_code=303)
-    target = f"/employee/drafts/{did}" + ("#draft-cards" if verb in ("add", "delete") else "")
+    if verb == "save":
+        _validate(d)
+        first = next((c["id"] for c in cards if c["errors"]), "")
+        anchor = f"card-{first}" if first else ""
+    target = f"/employee/drafts/{did}" + (f"#{anchor}" if anchor else "")
     return RedirectResponse(target, status_code=303)
 
 

@@ -289,7 +289,7 @@ def page(title: str, body: str, status_code: int = 200) -> HTMLResponse:
 {ui.skip_link()}<header class="site-header">{nav_html()}</header>
 <main id="main" tabindex="-1"><h1>{escape(title)}</h1>{body}</main>
 <footer class="site-footer"><p class="note" id="footer-note">Synthetic data. Simulation only.</p></footer>
-<script>window.addEventListener('load',function(){{var a=document.querySelector('.alert');if(a)a.focus();}});</script>
+<script>window.addEventListener('load',function(){{var a=document.querySelector('.alert');if(a&&!location.hash)a.focus();}});</script>
 </body></html>""", status_code=status_code)
 
 

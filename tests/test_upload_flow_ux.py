@@ -217,3 +217,67 @@ def test_secondary_actions_live_behind_one_disclosure(client, monkeypatch):
     r = client.post(f"/employee/drafts/{d['id']}",
                     data=dict(form_of(d), action=f"delete:{first}"), follow_redirects=False)
     assert r.status_code == 303 and len(d["cards"]) == 1
+
+
+# --- P2.8: card anchors and return position ------------------------------------
+def test_cards_have_anchors_and_a_focus_script(client, monkeypatch):
+    d = drop(client, monkeypatch, {"ok.png": good(doc_type="taxi_receipt", date="2026-10-03",
+                                                  amount=150000, merchant="Taksi")})
+    markup = client.get(f"/employee/drafts/{d['id']}").text
+    cid = d["cards"][0]["id"]
+    assert f"id='card-{cid}'" in markup and "tabindex='-1'" in markup
+    assert "location.hash" in markup and "prefers-reduced-motion" in markup and "scrollIntoView" in markup
+
+
+def test_save_returns_to_the_first_card_with_an_error_or_nowhere(client, monkeypatch):
+    d = drop(client, monkeypatch, {"bad.png": bad(),
+                                   "ok.png": good(doc_type="taxi_receipt", date="2026-10-03",
+                                                  amount=150000, merchant="Taksi")})
+    bad_card = d["cards"][0]["id"]
+    r = client.post(f"/employee/drafts/{d['id']}", data=dict(form_of(d), action="save"),
+                    follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == f"/employee/drafts/{d['id']}#card-{bad_card}"
+
+    form = dict(form_of(d), **{f"c_{bad_card}_category": "taxi", f"c_{bad_card}_date": "2026-10-03",
+                               f"c_{bad_card}_amount": "50000", f"c_{bad_card}_merchant": "Taksi"})
+    r = client.post(f"/employee/drafts/{d['id']}", data=dict(form, action="save"),
+                    follow_redirects=False)
+    assert r.headers["location"] == f"/employee/drafts/{d['id']}"
+
+
+def test_add_returns_to_the_new_card(client, monkeypatch):
+    d = drop(client, monkeypatch, {"ok.png": good(doc_type="taxi_receipt", date="2026-10-03",
+                                                  amount=150000, merchant="Taksi")})
+    r = client.post(f"/employee/drafts/{d['id']}", data={"action": "add"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == f"/employee/drafts/{d['id']}#card-{d['cards'][-1]['id']}"
+
+
+def test_move_merge_split_and_delete_return_to_their_anchor(client, monkeypatch):
+    d = drop(client, monkeypatch, {
+        "a.png": good(doc_type="taxi_receipt", date="2026-10-03", amount=150000, merchant="Taksi"),
+        "b.png": good(doc_type="meal_receipt", date="2026-10-03", amount=95000, merchant="Warung"),
+    })
+    a, b = (c["id"] for c in d["cards"])
+    fid = d["cards"][0]["files"][0]["id"]
+
+    r = client.post(f"/employee/drafts/{d['id']}",
+                    data=dict(form_of(d), action=f"move:{fid}", **{f"move_{fid}": b}),
+                    follow_redirects=False)
+    assert r.headers["location"] == f"/employee/drafts/{d['id']}#card-{a}"
+
+    r = client.post(f"/employee/drafts/{d['id']}",
+                    data=dict(form_of(d), action=f"merge:{a}", **{f"merge_{a}": b}),
+                    follow_redirects=False)
+    assert r.headers["location"] == f"/employee/drafts/{d['id']}#card-{b}"
+
+    merged = d["cards"][0]["id"]
+    r = client.post(f"/employee/drafts/{d['id']}",
+                    data=dict(form_of(d), action=f"split:{merged}"), follow_redirects=False)
+    first = d["cards"][0]["id"]
+    assert r.headers["location"] == f"/employee/drafts/{d['id']}#card-{first}"
+
+    r = client.post(f"/employee/drafts/{d['id']}",
+                    data=dict(form_of(d), action=f"delete:{first}"), follow_redirects=False)
+    assert r.headers["location"] == f"/employee/drafts/{d['id']}#draft-cards"
