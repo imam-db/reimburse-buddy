@@ -1240,6 +1240,181 @@ details > summary + * {
   height: 72px;
 }
 
+.draft-add {
+  margin: var(--sp-3) 0;
+}
+
+.draft-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  background: rgba(255, 255, 255, 0.97);
+  border-top: 1px solid var(--line);
+  padding: 10px 12px;
+  margin: var(--sp-3) 0 0;
+  box-shadow: 0 -6px 16px rgba(16, 24, 40, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.draft-bar .bar-summary {
+  margin: 0 auto 0 0;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.draft-spacer {
+  height: 72px;
+}
+
+.file-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.manage {
+  margin-top: var(--sp-2);
+}
+
+.manage-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.manage-row select {
+  width: auto;
+  max-width: 220px;
+}
+
+.cat-field[hidden] {
+  display: none;
+}
+
+.cards .card label.cat-field[hidden] {
+  display: none;
+}
+
+.amount-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.amount-field .prefix {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.amount-field input {
+  flex: 1;
+  min-width: 0;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.file-row .err {
+  flex-basis: 100%;
+}
+
+.file-preview {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.thumb {
+  display: block;
+  max-height: 120px;
+  width: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+
+.doc-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.date-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0;
+}
+
+.date-row label {
+  display: block;
+}
+
+.picked {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0;
+}
+
+.picked li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.picked li .err {
+  margin-left: auto;
+}
+
+@media (min-width: 480px) {
+  .date-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .draft-bar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .draft-bar .bar-summary {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: 0.82rem;
+  }
+
+  .draft-bar button {
+    width: 100%;
+    padding: 0 10px;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+}
+
 /* --- employee Q&A ------------------------------------------------------------ */
 
 .qa {
@@ -1459,6 +1634,10 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
   }
 
   .submit-bar {
+    background: rgba(23, 28, 37, 0.97);
+  }
+
+  .draft-bar {
     background: rgba(23, 28, 37, 0.97);
   }
 

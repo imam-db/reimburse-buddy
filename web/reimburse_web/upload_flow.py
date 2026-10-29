@@ -13,10 +13,11 @@ import os
 import re
 import uuid
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from reimburse_buddy.amounts import normalize_attachment
 from reimburse_buddy.gaps import B_ONLY
@@ -43,6 +44,7 @@ CARD_FIELDS = ("category",) + tuple(f for f in FIELDS if f not in ("doc_type", "
 PLAUSIBLE_MAX = {"taxi": 1_000_000, "meal": 1_000_000, "hotel": 5_000_000, "flight": 15_000_000,
                  "per_diem": 2_000_000, "late_checkout": 3_000_000}
 MAX_FILES = 20
+FILE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".pdf": "application/pdf"}
 
 
 # --- draft model -------------------------------------------------------------
@@ -96,15 +98,80 @@ def get_draft(did: str, emp: str) -> dict:
 
 
 # --- pages ---------------------------------------------------------------------
-DROP_JS = """<script>
+DROP_JS = r"""<script>(function(){
 const z=document.getElementById('drop'),i=document.getElementById('files'),l=document.getElementById('picked');
-function show(){l.textContent=i.files.length?Array.from(i.files).map(f=>f.name).join(', '):'';}
-z.addEventListener('dragover',ev=>{ev.preventDefault();z.classList.add('over');});
-z.addEventListener('dragleave',()=>z.classList.remove('over'));
-z.addEventListener('drop',ev=>{ev.preventDefault();z.classList.remove('over');i.files=ev.dataTransfer.files;show();});
-const p=document.getElementById('pick-files');if(p)p.addEventListener('click',()=>i.click());
-i.addEventListener('change',show);
-</script>"""
+const pick=document.getElementById('pick-files'),submit=document.getElementById('read-files');
+if(!z||!i||!l)return;
+const MAX=__MAX__, MAXB=__MAXB__, OK=/\.(pdf|png|jpe?g)$/i;
+let files=[];
+function size(n){return n>=1048576?(n/1048576).toFixed(1)+' MB':Math.max(1,Math.round(n/1024))+' KB';}
+function bad(f){if(!OK.test(f.name))return "__BADTYPE__";if(f.size>MAXB)return "__TOOBIG__";return "";}
+function render(){
+l.innerHTML='';
+files.forEach(function(f,idx){
+const li=document.createElement('li'),why=bad(f);
+li.appendChild(document.createTextNode(f.name+' ('+size(f.size)+') '));
+if(why){const e=document.createElement('span');e.className='err';e.textContent=why;li.appendChild(e);}
+const b=document.createElement('button');b.type='button';b.textContent="__REMOVE__";
+b.addEventListener('click',function(){files.splice(idx,1);sync();});
+li.appendChild(b);l.appendChild(li);
+});
+submit.disabled=files.length>MAX||files.some(function(f){return bad(f);});
+}
+function sync(){const dt=new DataTransfer();files.forEach(function(f){dt.items.add(f);});i.files=dt.files;render();}
+function add(list){Array.from(list).forEach(function(f){files.push(f);});sync();}
+z.addEventListener('dragover',function(ev){ev.preventDefault();z.classList.add('over');});
+z.addEventListener('dragleave',function(){z.classList.remove('over');});
+z.addEventListener('drop',function(ev){ev.preventDefault();z.classList.remove('over');add(ev.dataTransfer.files);});
+if(pick)pick.addEventListener('click',function(){i.click();});
+i.addEventListener('change',function(){add(i.files);});
+})();</script>"""
+DROP_JS = (DROP_JS.replace("__MAXB__", str(core.MAX_UPLOAD_BYTES)).replace("__MAX__", str(MAX_FILES))
+           .replace("__BADTYPE__", label("ui_file_bad_type")).replace("__TOOBIG__", label("ui_file_too_big"))
+           .replace("__REMOVE__", label("ui_delete")))
+
+BUSY_READ_JS = """<script>(function(){
+var f=document.getElementById('drop-form'),b=document.getElementById('read-files'),i=document.getElementById('files');
+if(!f||!b||!i)return;
+f.addEventListener('submit',function(){
+var n=i.files.length,t="__TEXT__";
+b.textContent=t.replace("{n}",n);b.disabled=true;f.setAttribute("aria-busy","true");
+});
+})();</script>""".replace("__TEXT__", label("ui_busy_read"))
+
+BUSY_SUBMIT_JS = """<script>(function(){
+var f=document.getElementById('draft-form'),b=document.getElementById('submit-claim');
+if(!f||!b)return;
+f.addEventListener('submit',function(e){
+var s=e.submitter;
+if(!s||s.value!=='submit')return;
+var h=document.createElement('input');h.type='hidden';h.name='action';h.value='submit';f.appendChild(h);
+b.textContent="__TEXT__";b.disabled=true;f.setAttribute("aria-busy","true");
+});
+})();</script>""".replace("__TEXT__", label("ui_busy_submit"))
+
+FOCUS_JS = """<script>(function(){
+var h=location.hash;if(!h)return;var el=document.getElementById(h.slice(1));if(!el)return;
+try{el.focus({preventScroll:true});}catch(e){el.focus();}
+if(!matchMedia('(prefers-reduced-motion: reduce)').matches&&el.scrollIntoView)el.scrollIntoView({block:'nearest'});
+})();</script>"""
+
+CATEGORY_JS = """<script>(function(){
+document.querySelectorAll('[data-card]').forEach(function(card){
+var sel=card.querySelector("select[data-role=category]");if(!sel)return;
+function sync(){var cat=sel.value;
+card.querySelectorAll('.cat-field[data-cat]').forEach(function(f){
+var on=f.getAttribute('data-cat')===cat;f.hidden=!on;
+f.querySelectorAll('input,select,textarea').forEach(function(x){x.disabled=!on;});});}
+sel.addEventListener('change',sync);});
+})();</script>"""
+
+DATE_MIN_JS = """<script>(function(){
+var s=document.getElementById('start-date'),e=document.getElementById('end-date');
+if(!s||!e)return;
+function sync(){e.min=s.value;if(e.value&&s.value&&e.value<s.value)e.value='';}
+s.addEventListener('change',sync);sync();
+})();</script>"""
 
 
 @router.get("/employee/new", response_class=HTMLResponse)
@@ -113,19 +180,24 @@ def new_claim(request: Request):
     if not emp:
         return core.page(label("ui_new_claim"), auth.sign_in_notice())
     me = core.store.get_employee(emp)
+    steps = [label("ui_step_trip"), label("ui_step_upload"), label("ui_step_verify")]
     body = f"""<p><a href="/employee">&larr; {e(label('ui_my_claims'))}</a> &middot; {e(me['name'])}</p>
-<form method="post" action="/employee/drafts" enctype="multipart/form-data">
-<div class="box"><h2>{e(label('ui_step_trip'))}</h2><label>{e(label('ui_field_purpose'))} <input name="purpose" size="40" required></label>
-<label>{e(label('ui_field_destination'))} <input name="destination" value="Surabaya" required></label>
-<br><label>{e(label('ui_field_dates'))} <input type="date" name="start_date" required></label> &rarr;
-<label>{e(label('ui_field_end_date'))} <input type="date" name="end_date" required></label></div>
+{ui.stepper(steps, 0)}
+<form method="post" action="/employee/drafts" enctype="multipart/form-data" id="drop-form">
+<div class="box"><h2>{e(label('ui_step_trip'))}</h2>
+<label>{e(label('ui_field_purpose'))} <input name="purpose" size="40" placeholder="{e(label('ui_purpose_placeholder'))}" required></label>
+<label>{e(label('ui_field_destination'))} <input name="destination" placeholder="{e(label('ui_destination_placeholder'))}" required></label>
+<div class="date-row">
+<label>{e(label('ui_field_start_date'))} <input type="date" name="start_date" id="start-date" required></label>
+<label>{e(label('ui_field_end_date'))} <input type="date" name="end_date" id="end-date" required></label>
+</div></div>
 <div class="box"><h2>{e(label('ui_step_drop'))}</h2>
 <label id="drop" class="drop">{e(label('ui_drop_hint').format(max=MAX_FILES))}
 <input id="files" class="visually-hidden" type="file" name="files" multiple accept=".pdf,.png,.jpg,.jpeg"></label>
 <p><button type="button" id="pick-files">{e(label('ui_pick_files'))}</button></p>
-<div id="picked" class="note"></div>
-<p class="note">{e(label('ui_extraction_note').format(engine=get_extractor().name))}</p>
-<button type="submit">{e(label('ui_read_files'))}</button></div></form>{DROP_JS}"""
+<ul id="picked" class="picked"></ul>
+<p class="note">{e(label('ui_extraction_note'))}</p>
+<button type="submit" id="read-files">{e(label('ui_read_files'))}</button></div></form>{DROP_JS}{BUSY_READ_JS}{DATE_MIN_JS}"""
     return core.page(label("ui_new_claim"), body)
 
 
@@ -172,26 +244,40 @@ def _badge(f: dict) -> str:
 
 
 def _err(f: dict) -> str:
-    return f"<div class=err>{e(label('ui_could_not_read'))} {e(f['error'])}</div>" if f["error"] else ""
+    """One fixed Indonesian sentence for any extraction error; the raw error stays in `title` only."""
+    if not f["error"]:
+        return ""
+    return (f'<div class="err" title="{e(f["error"])}">'
+            f'{e(label("ui_could_not_read"))} {e(label("ui_fill_manual"))}</div>')
 
 
-def _input(card: dict, k: str, allowed_cats: list[str]) -> str:
+CAT_FIELD = {"flight_no": "flight", "nights": "hotel"}
+
+
+def _input(card: dict, k: str, allowed_cats: list[str], cat) -> str:
     f = card["fields"][k]
     v = "" if f["value"] is None else str(f["value"])
     low = " class='low'" if f["source"] in EXTRACTED and f["confidence"] < LOW_CONFIDENCE and v else ""
     name = f"c_{card['id']}_{k}"
+    extra = CAT_FIELD.get(k)
+    applies = extra is None or cat == extra
+    off = "" if applies else " disabled"
     if k == "category":
-        ctl = f"<select name='{name}'{low}>{core.options([('', label('ui_choose'))] + [(c, label(c)) for c in allowed_cats], v)}</select>"
+        ctl = f"<select name='{name}' data-role='category'{low}>{core.options([('', label('ui_choose'))] + [(c, label(c)) for c in allowed_cats], v)}</select>"
     elif k == "date":
         ctl = f"<input type='date' name='{name}' value='{e(v)}'{low}>"
     elif k == "amount":
         shown = f"{int(v):,}".replace(",", ".") if v.isdigit() else v
-        ctl = f"<input name='{name}' value='{e(shown)}' size=12 inputmode='numeric' placeholder='1.350.000'{low}>"
+        ctl = (f"<span class='amount-field'><span class='prefix' aria-hidden='true'>{e(label('ui_currency_prefix'))}</span>"
+               f"<input name='{name}' value='{e(shown)}' size=12 inputmode='numeric' "
+               f"placeholder='{e(label('ui_amount_placeholder'))}'{low}></span>")
     elif k == "nights":
-        ctl = f"<input name='{name}' value='{e(v)}' size=3{low}>"
+        ctl = f"<input name='{name}' value='{e(v)}' size=3{low}{off}>"
     else:
-        ctl = f"<input name='{name}' value='{e(v)}' size=22{low}>"
-    return f"<label>{e(label('ui_field_' + k))} {_badge(f)}<br>{ctl}</label>"
+        ctl = f"<input name='{name}' value='{e(v)}' size=22{low}{off}>"
+    attrs = f" class='cat-field' data-cat='{extra}'" if extra else ""  # only category-only fields toggle
+    hidden = "" if applies else " hidden"
+    return f"<label{attrs}{hidden}>{e(label('ui_field_' + k))} {_badge(f)}<br>{ctl}</label>"
 
 
 @router.get("/employee/drafts/{did}", response_class=HTMLResponse)
@@ -206,28 +292,48 @@ def draft_page(did: str, request: Request):
     cards_html = ""
     for n, c in enumerate(d["cards"]):
         cat = c["fields"]["category"]["value"]
-        keys = ["category", "date", "amount", "merchant"] + (["flight_no"] if cat == "flight" else []) + \
-               (["nights"] if cat == "hotel" else [])
+        keys = ["category", "date", "amount", "merchant", "flight_no", "nights"]
         files = ""
+        moves = ""
         for f in c["files"]:
-            mv = (f"<select name='move_{f['id']}' aria-label='Pindahkan berkas ke kartu lain'>{core.options([('', label('ui_move_to'))] + others(c['id']))}</select>"
-                  f"<button name=action value='move:{f['id']}'>{e(label('ui_move'))}</button>") if len(d["cards"]) > 1 else ""
-            files += (f"<li>{e(f['name'])} <select name='f_{f['id']}_doc_type' aria-label='Jenis dokumen untuk {e(f['name'])}'>{core.options([(t, label(t)) for t in DOC_TYPES], f['doc_type'])}</select>"
+            url = f"/employee/drafts/{e(did)}/files/{e(f['id'])}"
+            ext = Path(f["name"]).suffix.lower()
+            if ext in (".png", ".jpg", ".jpeg"):
+                preview = (f"<a class='file-preview' href='{url}' target='_blank' rel='noopener'>"
+                           f"<img class='thumb' loading='lazy' src='{url}' alt='Pratinjau {e(f['name'])}'></a>")
+            elif ext == ".pdf":
+                preview = (f"<a class='file-preview' href='{url}' target='_blank' rel='noopener'>"
+                           f"<span class='doc-icon' aria-hidden='true'>PDF</span></a>")
+            else:
+                preview = ""
+            files += (f"<li class='file-row'>{preview}{e(f['name'])} <select name='f_{f['id']}_doc_type' aria-label='Jenis dokumen untuk {e(f['name'])}'>{core.options([(t, label(t)) for t in DOC_TYPES], f['doc_type'])}</select>"
                       f" {_badge({'source': f['doc_type_source'], 'confidence': f['extract']['fields']['doc_type']['confidence']})}"
-                      f"{_err(f)} {mv}</li>")
-        merge = (f"<select name='merge_{c['id']}' aria-label='Gabungkan kartu ke kartu lain'>{core.options([('', label('ui_merge_into'))] + others(c['id']))}</select>"
-                 f"<button name=action value='merge:{c['id']}'>{e(label('ui_merge'))}</button>") if len(d["cards"]) > 1 else ""
+                      f"{_err(f)}</li>")
+            if len(d["cards"]) > 1:
+                moves += (f"<div class='manage-row'><span class=note>{e(f['name'])}</span> "
+                          f"<select name='move_{f['id']}' aria-label='Pindahkan berkas ke kartu lain'>{core.options([('', label('ui_move_to'))] + others(c['id']))}</select>"
+                          f"<button name=action value='move:{f['id']}'>{e(label('ui_move'))}</button></div>")
+        merge = (f"<div class='manage-row'><select name='merge_{c['id']}' aria-label='Gabungkan kartu ke kartu lain'>{core.options([('', label('ui_merge_into'))] + others(c['id']))}</select>"
+                 f"<button name=action value='merge:{c['id']}'>{e(label('ui_merge'))}</button></div>") if len(d["cards"]) > 1 else ""
         split = f"<button name=action value='split:{c['id']}'>{e(label('ui_split'))}</button>" if len(c["files"]) > 1 else ""
+        manage = (f"<details class='manage'><summary>{e(label('ui_manage_card'))}</summary>"
+                  f"{moves}{merge}{split}"
+                  f"<button class='btn quiet-danger' name=action value='delete:{c['id']}' onclick='return confirm(&quot;Hapus item ini?&quot;)'>{e(label('ui_delete'))}</button>"
+                  f"</details>")
         errs = "".join(f"<div class=err>{e(x)}</div>" for x in c["errors"])
-        cards_html += (f"<div class=card><b>{e(label('ui_card'))} {n + 1}</b>{errs}{''.join(_input(c, k, allowed) for k in keys)}"
+        cards_html += (f"<div class='card' id='card-{e(c['id'])}' data-card='{e(c['id'])}' tabindex='-1'><b>{e(label('ui_card'))} {n + 1}</b>{errs}{''.join(_input(c, k, allowed, cat) for k in keys)}"
                        f"<div class=note>{e(label('ui_col_files'))}</div><ul>{files or '<li class=note>' + e(label('ui_no_file_yet')) + '</li>'}</ul>"
-                       f"{merge} {split} <button class='btn quiet-danger' name=action value='delete:{c['id']}' onclick='return confirm(&quot;Hapus item ini?&quot;)'>{e(label('ui_delete'))}</button></div>")
+                       f"{manage}</div>")
     errs = "".join(f"<p class=err>{e(x)}</p>" for x in d["errors"])
+    steps = [label("ui_step_trip"), label("ui_step_upload"), label("ui_step_verify")]
     body = f"""<p>{e(h['purpose'])} &middot; {e(h['destination'])} {core.date_html(h['start_date'])} &rarr; {core.date_html(h['end_date'])}</p>
+{ui.stepper(steps, 2)}
 <p class="note">{e(label('ui_check_note').format(flag=label('self_declared')))}</p>{errs}
-<form method="post" action="/employee/drafts/{e(did)}"><div class="cards" id="draft-cards" tabindex="-1">{cards_html}</div>
-<p><button name=action value="save">{e(label('ui_save_changes'))}</button> <button name=action value="add">{e(label('ui_add_item'))}</button>
-<button name=action value="submit" style="font-weight:bold">{e(label('ui_submit_claim'))}</button></p></form>"""
+{_summary(d)}
+<form method="post" action="/employee/drafts/{e(did)}" id="draft-form"><div class="cards" id="draft-cards" tabindex="-1">{cards_html}</div>
+<p class="draft-add">{ui.button(label("ui_add_item"), variant="secondary", name="action", value="add")}</p>
+{_submit_bar(d)}</form>
+<div class="draft-spacer" aria-hidden="true"></div>{BUSY_SUBMIT_JS}{FOCUS_JS}{CATEGORY_JS}"""
     return core.page(label("ui_check_title"), body)
 
 
@@ -257,28 +363,70 @@ def _apply_edits(d: dict, form) -> None:
                 f["doc_type"], f["doc_type_source"] = v, "self_declared"
 
 
+def _card_errors(c: dict, h: dict) -> list[str]:
+    """Validation errors for one card, without mutating it (the banner and _validate share this)."""
+    allowed = core.store.policy["allowed_categories"]
+    f = {k: v["value"] for k, v in c["fields"].items()}
+    errors = []
+    if f["category"] not in allowed:
+        errors.append(label("ui_err_category"))
+    if not f["date"] or not (h["start_date"] <= str(f["date"]) <= h["end_date"]):
+        errors.append(label("ui_err_date"))
+    if not isinstance(f["amount"], int) or f["amount"] <= 0:
+        errors.append(label("ui_err_amount"))
+    if f["category"] == "flight" and not f["flight_no"]:
+        errors.append(label("ui_err_flight_no"))
+    if f["category"] == "hotel" and not str(f["nights"] or "").isdigit():
+        errors.append(label("ui_err_nights"))
+    return errors
+
+
 def _validate(d: dict) -> bool:
     h, ok = d["header"], True
-    allowed = core.store.policy["allowed_categories"]
     for c in d["cards"]:
-        c["errors"] = []
-        f = {k: v["value"] for k, v in c["fields"].items()}
-        if f["category"] not in allowed:
-            c["errors"].append(label("ui_err_category"))
-        if not f["date"] or not (h["start_date"] <= str(f["date"]) <= h["end_date"]):
-            c["errors"].append(label("ui_err_date"))
-        if not isinstance(f["amount"], int) or f["amount"] <= 0:
-            c["errors"].append(label("ui_err_amount"))
-        if f["category"] == "flight" and not f["flight_no"]:
-            c["errors"].append(label("ui_err_flight_no"))
-        if f["category"] == "hotel" and not str(f["nights"] or "").isdigit():
-            c["errors"].append(label("ui_err_nights"))
+        c["errors"] = _card_errors(c, h)
         ok = ok and not c["errors"]
     if not d["cards"]:
         d["errors"] = [label("ui_err_no_item")]
         return False
     d["errors"] = []
     return ok
+
+
+def _summary(d: dict) -> str:
+    """Banner above the cards: unreadable files and incomplete card numbers (linked to their anchor)."""
+    files = [f for c in d["cards"] for f in c["files"]]
+    unreadable = [f for f in files if f["error"]]
+    incomplete = [n for n, c in enumerate(d["cards"], 1) if _card_errors(c, d["header"])]
+    if not unreadable and not incomplete:
+        return ""
+    parts = []
+    if unreadable:
+        parts.append(e(label("ui_summary_unreadable").format(bad=len(unreadable), total=len(files))))
+    if incomplete:
+        links = ", ".join(f"<a href='#card-{e(d['cards'][n - 1]['id'])}'>{n}</a>" for n in incomplete)
+        parts.append(e(label("ui_summary_incomplete")).replace("{cards}", links))
+    return ui.alert_html(" ".join(parts), tone="warn")
+
+
+def _draft_total(d: dict) -> Decimal:
+    """Sum of the card amounts that parse as whole Rupiah; unreadable cards contribute nothing."""
+    return sum((Decimal(c["fields"]["amount"]["value"]) for c in d["cards"]
+                if isinstance(c["fields"]["amount"]["value"], int) and c["fields"]["amount"]["value"] > 0),
+               Decimal("0"))
+
+
+def _submit_bar(d: dict) -> str:
+    """The sticky bar: item count, claimed total and incomplete-card count, then save/submit."""
+    incomplete = len([c for c in d["cards"] if _card_errors(c, d["header"])])
+    summary = (f'{e(label("ui_bar_items").format(n=len(d["cards"])))} &middot; '
+               f'{e(label("ui_bar_total").format(total=rupiah(_draft_total(d))))} &middot; '
+               f'{e(label("ui_bar_incomplete").format(n=incomplete))}')
+    return (f'<div class="draft-bar" id="draft-bar">'
+            f'<p class="bar-summary">{summary}</p>'
+            f'{ui.button(label("ui_save_changes"), variant="secondary", name="action", value="save")}'
+            f'{ui.button(label("ui_submit_claim"), variant="primary", name="action", value="submit", id="submit-claim")}'
+            f'</div>')
 
 
 def plausible_max(category: str) -> int | None:
@@ -417,17 +565,21 @@ async def update_draft(did: str, request: Request):
     verb, _, arg = action.partition(":")
     cards = d["cards"]
     find = lambda cid: next((c for c in cards if c["id"] == cid), None)  # noqa: E731
+    anchor = ""
     if verb == "delete" and find(arg):
         cards.remove(find(arg))
+        anchor = "draft-cards"
     elif verb == "split" and (c := find(arg)) and len(c["files"]) > 1:
         i = cards.index(c)
         cards[i:i + 1] = [_card_from_files([f]) for f in c["files"]]
+        anchor = f"card-{cards[i]['id']}"
     elif verb == "merge" and (c := find(arg)) and (t := find(str(form.get(f"merge_{arg}", "")))):
         t["files"] += c["files"]
         for k, v in c["fields"].items():
             if t["fields"][k]["value"] in (None, ""):
                 t["fields"][k] = v
         cards.remove(c)
+        anchor = f"card-{t['id']}"
     elif verb == "move":
         src = next((c for c in cards if any(f["id"] == arg for f in c["files"])), None)
         t = find(str(form.get(f"move_{arg}", "")))
@@ -435,14 +587,44 @@ async def update_draft(did: str, request: Request):
             f = next(f for f in src["files"] if f["id"] == arg)
             src["files"].remove(f)
             t["files"].append(f)
+            anchor = f"card-{src['id']}"
     elif verb == "add":
-        cards.append(_card_from_files([]))
+        card = _card_from_files([])
+        cards.append(card)
+        anchor = f"card-{card['id']}"
     elif verb == "submit":
         if _validate(d):
             cid = _submit(d)
             return RedirectResponse(f"/employee/claims/{cid}?msg=Submitted", status_code=303)
-    target = f"/employee/drafts/{did}" + ("#draft-cards" if verb in ("add", "delete") else "")
+    if verb == "save":
+        _validate(d)
+        first = next((c["id"] for c in cards if c["errors"]), "")
+        anchor = f"card-{first}" if first else ""
+    target = f"/employee/drafts/{did}" + (f"#{anchor}" if anchor else "")
     return RedirectResponse(target, status_code=303)
+
+
+@router.get("/employee/drafts/{did}/files/{fid}")
+def draft_file(did: str, fid: str, request: Request):
+    """Serve one uploaded draft file to its owner. The path comes only from the stored name."""
+    emp = core.require_employee(request)
+    d = get_draft(did, emp)
+    f = next((x for c in d["cards"] for x in c["files"] if x["id"] == fid), None)
+    if not f:
+        raise HTTPException(404, f"Unknown file {fid}")
+    root = core.UPLOAD_DIR.resolve()
+    path = (root / f["stored"]).resolve()
+    if root not in path.parents or not path.is_file():
+        raise HTTPException(404, f"Unknown file {fid}")
+    media = FILE_TYPES.get(path.suffix.lower())
+    if not media:
+        raise HTTPException(404, f"Unknown file {fid}")
+    name = str(f["name"]).replace('"', "")
+    return FileResponse(path, media_type=media, headers={
+        "X-Content-Type-Options": "nosniff",
+        "Content-Disposition": f'inline; filename="{name}"',
+        "Cache-Control": "private, no-store",
+    })
 
 
 AWAITING = "Menunggu verifikasi finance"
