@@ -286,8 +286,9 @@ def test_nav_has_exactly_the_links_of_the_role(client, emp):
     assert 'id="signed-in"' in nav and 'id="logout"' in nav
     label = {"EMP-001": "Karyawan", "EMP-100": "Manager", "EMP-102": "Finance"}[emp]
     assert f"({label})" in nav
-    assert "Synthetic data. Simulation only." not in nav
-    assert 'id="footer-note"' in html and "Synthetic data. Simulation only." in html
+    assert "Data sintetis." not in nav
+    assert 'id="footer-note"' in html and "Data sintetis. Tidak ada email" in html  # ADR 0009 #17: Indonesian only
+    assert "Synthetic data" not in html
 
 
 def test_manager_lists_only_the_requests_addressed_to_them(client):

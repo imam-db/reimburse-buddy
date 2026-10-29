@@ -516,6 +516,8 @@ LABELS = {
     "ui_file_rejected_reupload": "Berkas sebelumnya tidak diterima finance. Unggah ulang.",
     "ui_file_not_accepted": "tidak diterima",
     "ui_msg_decisions_saved_counts": "Keputusan disimpan: {approved} disetujui, {rejected} ditolak.",
+    "ui_demo_tools": "Alat demo",
+    "ui_footer_note": "Data sintetis. Tidak ada email atau pesan sungguhan yang dikirim.",
 }
 
 

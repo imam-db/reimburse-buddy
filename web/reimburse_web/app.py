@@ -289,7 +289,7 @@ def page(title: str, body: str, status_code: int = 200) -> HTMLResponse:
 <link rel="stylesheet" href="{STATIC_URL}"></head><body>
 {ui.skip_link()}<header class="site-header">{nav_html()}</header>
 <main id="main" tabindex="-1"><h1>{escape(title)}</h1>{body}</main>
-<footer class="site-footer"><p class="note" id="footer-note">Synthetic data. Simulation only.</p></footer>
+<footer class="site-footer"><p class="note" id="footer-note">{e(label("ui_footer_note"))}</p></footer>
 <script>window.addEventListener('load',function(){{var a=document.querySelector('.alert');if(a&&!location.hash)a.focus();}});</script>
 </body></html>""", status_code=status_code)
 
@@ -517,17 +517,19 @@ def index():
     cid = demo_claim_id()
     owner = next((c["employee_id"] for c in store.claims if c["id"] == cid), "EMP-001")
     first_name = person(store, owner).split()[0]
+    reset = reset_form("Reset demo")  # "" in production
+    demo_tools = ui.details(label("ui_demo_tools"), reset, id="demo-tools") if reset else ""  # closed by default
     body = f"""<div class="cards">
-<div class="card"><h2>Finance</h2><p>Triage klaim masuk, tinjau pengecualian, dan setujui rencana.
+<div class="card"><h2><a href="/admin">Finance</a></h2><p>Triage klaim masuk, tinjau pengecualian, dan setujui rencana.
 Semua angka dan keputusan tetap di tangan Anda.</p></div>
-<div class="card"><h2>Karyawan</h2><p>Kirim klaim, unggah bukti, dan tanyakan status klaim Anda sendiri.</p></div>
+<div class="card"><h2><a href="/employee">Karyawan</a></h2><p>Kirim klaim, unggah bukti, dan tanyakan status klaim Anda sendiri.</p></div>
 </div>
 <div class="box"><h2>Panduan singkat</h2>
 <p><a class="btn" href="/admin">Lihat triage finance</a>
 <a class="btn" href="/admin/claims/{e(cid)}">Buka klaim contoh ({e(first_name)}, Surabaya)</a>
+<a class="btn" href="/employee/new">Kirim klaim sebagai karyawan</a>
 </p>
-{reset_form("Reset demo")}</div>
-<p class="note">Data sintetis. Tidak ada email atau pesan sungguhan yang dikirim.</p>"""
+{demo_tools}</div>"""
     return page("Selamat datang di reimburse-buddy", body)
 
 

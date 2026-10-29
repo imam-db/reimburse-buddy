@@ -188,6 +188,29 @@ def test_sending_the_request_flashes_the_employee_name(client):
     assert any(m["to"] == "EMP-001" and m.get("claim_id") == HERO for m in web.store.outbox)
 
 
+# --- item 17: landing page ------------------------------------------------------------------------
+def test_landing_cards_link_somewhere_and_the_guide_has_the_employee_path(client):
+    html = client.get("/").text
+    assert '<h2><a href="/admin">Finance</a></h2>' in html and '<h2><a href="/employee">Karyawan</a></h2>' in html
+    assert '<a class="btn" href="/employee/new">Kirim klaim sebagai karyawan</a>' in html
+    assert '<a class="btn" href="/admin">Lihat triage finance</a>' in html  # the finance links stay
+
+
+def test_reset_lives_in_a_closed_demo_tools_disclosure(client):
+    html = client.get("/").text
+    details = html.split('<details id="demo-tools">', 1)[1].split("</details>", 1)[0]
+    assert "<summary>Alat demo</summary>" in details and 'action="/admin/reset"' in details
+    assert "Reset demo" in details
+    assert "<details id=\"demo-tools\" open" not in html
+    assert 'action="/admin/reset"' not in html.split('<details id="demo-tools">', 1)[0]
+
+
+def test_only_the_indonesian_footer_remains(client):
+    html = client.get("/").text.split("<main", 1)[1]  # the meta description is not a footer
+    assert "Synthetic data" not in html and html.count("Data sintetis.") == 1
+    assert 'id="footer-note"' in html
+
+
 # --- item 4: Indonesian findings ---------------------------------------------------------------
 def visible_text(html: str) -> str:
     return re.sub(r"<[^>]+>", " ", html)  # tags (and so their title attributes) are dropped
