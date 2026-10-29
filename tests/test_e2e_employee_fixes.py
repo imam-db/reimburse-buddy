@@ -20,6 +20,14 @@ def client(tmp_path, monkeypatch):
     web.reset_all()
 
 
+def test_anchor_targets_clear_the_sticky_header():
+    css = (web.STATIC_DIR / "app.css").read_text(encoding="utf-8")
+    assert "--header-h:" in css
+    block = css.split('[id^="card-"],', 1)[1].split("}", 1)[0]
+    assert '[id^="item-"]' in block and "#draft-cards" in block
+    assert "scroll-margin-top: calc(var(--header-h)" in block
+
+
 def test_reasons_show_as_hints_before_the_first_save_and_as_errors_after(client, monkeypatch):
     d = drop(client, monkeypatch, {"bad.png": bad()})
     page = client.get(f"/employee/drafts/{d['id']}").text
