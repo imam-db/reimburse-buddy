@@ -590,7 +590,8 @@ main:focus {
   color: var(--ink);
   font-size: 0.78rem;
   line-height: 1.5;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   margin: 1px 2px 1px 0;
 }
 
@@ -735,6 +736,16 @@ input[type="radio"] {
   width: 18px;
   height: 18px;
   accent-color: var(--brand);
+}
+
+input[type="file"] {
+  max-width: 100%;
+}
+
+table a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
 }
 
 textarea {
@@ -941,6 +952,26 @@ tbody tr:hover {
   .card table:not(.responsive) table td:last-child {
     text-align: right;
     white-space: nowrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .card table:not(.responsive) table tr {
+    display: block;
+    padding: 6px 0;
+  }
+
+  .card table:not(.responsive) table td,
+  .card table:not(.responsive) table td:last-child {
+    display: block;
+    width: 100%;
+    text-align: left;
+  }
+}
+
+@media (max-width: 360px) {
+  h1 {
+    font-size: 1.5rem;
   }
 }
 

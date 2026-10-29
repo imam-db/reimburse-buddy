@@ -194,13 +194,12 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
                 + field("body", a["what"].get("body", ""), pre=True) + "</td></tr>"]
         if a.get("when"):
             w = a["when"]
+            req = directory.get(plan["requester"])
             loc = "".join(
                 f"<tr><td>{_person(directory, p)}</td><td><b>"
                 f"{e(_id_time(rules, R.parse_iso(w['start']), directory.get(p).tz) if directory.get(p) else w['local'][p])}"
                 f"</b></td></tr>" for p in w["local"])
-            alts = ", ".join(R.fmt_local(rules, R.parse_iso(x), directory.get(plan["requester"]).tz)
-                             for x in w.get("alternatives", []))
-            req = directory.get(plan["requester"])
+            alts = ", ".join(_id_time(rules, R.parse_iso(x), req.tz) for x in w.get("alternatives", [])) if req else ""
             main_time = _id_time(rules, R.parse_iso(w["start"]), req.tz) if req else ""
             rows.append(f"<tr><th scope=row>Waktu</th><td>{e(w['duration_min'])} menit"
                         + (f", <b>{e(main_time)}</b>" if main_time else "")
