@@ -735,8 +735,16 @@ def admin(batch: str = BATCH, msg: str = ""):
     est = t["time_saved_estimate"]
     summary = label("ui_triage_summary").format(claims=t["claims"], cleared=len(cleared),
                                                 exceptions=len(entries))
-    body = f"""{ui.alert(msg, tone="success") if msg else ''}
-<form method="get" class="filter"><label>{e(label('ui_batch'))} <select name="batch" aria-label="Pilih batch" onchange="this.form.submit()">{options([(BATCH, BATCH), (OWN_BATCH, OWN_BATCH), (WEB_BATCH, WEB_BATCH)], batch)}</select></label></form>
+    new_claims = [c for c in store.claims if c.get("batch") == WEB_BATCH and c["status"] == "submitted"]
+    new_notice = ""
+    if batch != WEB_BATCH and new_claims:
+        new_notice = (f'<div class="box" id="new-claims-notice" role="status">'
+                      f'{e(label("ui_new_claims_notice").format(n=len(new_claims)))} '
+                      f'<a href="/admin?batch={e(WEB_BATCH)}">{e(label("ui_new_claims_link"))}</a></div>')
+    batch_options = [(BATCH, BATCH), (OWN_BATCH, label("ui_batch_own").format(batch=OWN_BATCH)),
+                     (WEB_BATCH, label("ui_batch_web"))]
+    body = f"""{ui.alert(msg, tone="success") if msg else ''}{new_notice}
+<form method="get" class="filter"><label>{e(label('ui_batch'))} <select name="batch" aria-label="Pilih batch" onchange="this.form.submit()">{options(batch_options, batch)}</select></label></form>
 <h2 class="visually-hidden">{e(summary)}</h2>
 {ui.stats([ui.stat(label('ui_claims'), t['claims']), ui.stat(label('ui_cleared'), len(cleared)),
            ui.stat(label('ui_exceptions'), len(entries), tone='warn' if entries else ''),

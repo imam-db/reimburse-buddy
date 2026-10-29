@@ -43,3 +43,28 @@ def test_time_saved_assumption_is_indonesian(client):
     r = client.get("/admin")
     assert "15 menit tinjauan manual" in r.text
     assert "min of manual review" not in r.text and "Assumed average" not in r.text
+
+
+def _submit_web_claim():
+    web.store.claims.append({"id": "CLM-2026-W001", "employee_id": "EMP-001", "status": "submitted",
+                             "submitted_at": "2026-10-29", "purpose": "Demo", "batch": web.WEB_BATCH,
+                             "trip": {"origin": "Jakarta", "destination": "Surabaya",
+                                      "start_date": "2026-10-12", "end_date": "2026-10-13"},
+                             "items": [{"id": "IT-1", "category": "taxi", "date": "2026-10-12",
+                                        "description": "Taksi", "amount": "100000", "receipt": True}]})
+
+
+def test_new_employee_claims_notice_links_to_web_batch(client):
+    assert "klaim baru dari karyawan" not in client.get("/admin").text
+    _submit_web_claim()
+    r = client.get("/admin")
+    assert "1 klaim baru dari karyawan menunggu triage" in r.text
+    assert "/admin?batch=web-submissions" in r.text
+    assert "10 klaim, 7 bersih, 3 pengecualian" in r.text  # the default numbers do not change
+    assert "klaim baru dari karyawan" not in client.get("/admin?batch=web-submissions").text
+
+
+def test_batch_dropdown_has_readable_names_and_same_values(client):
+    r = client.get("/admin")
+    assert "2026-W44 (persetujuan sendiri)" in r.text and "Pengajuan karyawan" in r.text
+    assert 'value="web-submissions"' in r.text and 'value="2026-W44"' in r.text

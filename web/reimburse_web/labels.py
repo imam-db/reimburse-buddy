@@ -483,6 +483,10 @@ LABELS = {
     "ui_msg_stale_form": "Formulir sudah usang: rencana berubah",
     # --- ADR 0009 ---
     "ui_time_assumption": "Asumsi: {n} menit tinjauan manual per klaim yang lolos otomatis (perkiraan sintetis).",
+    "ui_new_claims_notice": "{n} klaim baru dari karyawan menunggu triage",
+    "ui_new_claims_link": "Lihat klaim baru",
+    "ui_batch_own": "{batch} (persetujuan sendiri)",
+    "ui_batch_web": "Pengajuan karyawan",
 }
 
 
