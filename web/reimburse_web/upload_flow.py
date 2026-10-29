@@ -133,6 +133,16 @@ try{el.focus({preventScroll:true});}catch(e){el.focus();}
 if(!matchMedia('(prefers-reduced-motion: reduce)').matches&&el.scrollIntoView)el.scrollIntoView({block:'nearest'});
 })();</script>"""
 
+CATEGORY_JS = """<script>(function(){
+document.querySelectorAll('[data-card]').forEach(function(card){
+var sel=card.querySelector("select[data-role=category]");if(!sel)return;
+function sync(){var cat=sel.value;
+card.querySelectorAll('.cat-field').forEach(function(f){
+var on=f.getAttribute('data-cat')===cat;f.hidden=!on;
+f.querySelectorAll('input,select,textarea').forEach(function(x){x.disabled=!on;});});}
+sel.addEventListener('change',sync);});
+})();</script>"""
+
 
 @router.get("/employee/new", response_class=HTMLResponse)
 def new_claim(request: Request):
@@ -208,23 +218,33 @@ def _err(f: dict) -> str:
             f'{e(label("ui_could_not_read"))} {e(label("ui_fill_manual"))}</div>')
 
 
-def _input(card: dict, k: str, allowed_cats: list[str]) -> str:
+CAT_FIELD = {"flight_no": "flight", "nights": "hotel"}
+
+
+def _input(card: dict, k: str, allowed_cats: list[str], cat) -> str:
     f = card["fields"][k]
     v = "" if f["value"] is None else str(f["value"])
     low = " class='low'" if f["source"] in EXTRACTED and f["confidence"] < LOW_CONFIDENCE and v else ""
     name = f"c_{card['id']}_{k}"
+    extra = CAT_FIELD.get(k)
+    applies = extra is None or cat == extra
+    off = "" if applies else " disabled"
     if k == "category":
-        ctl = f"<select name='{name}'{low}>{core.options([('', label('ui_choose'))] + [(c, label(c)) for c in allowed_cats], v)}</select>"
+        ctl = f"<select name='{name}' data-role='category'{low}>{core.options([('', label('ui_choose'))] + [(c, label(c)) for c in allowed_cats], v)}</select>"
     elif k == "date":
         ctl = f"<input type='date' name='{name}' value='{e(v)}'{low}>"
     elif k == "amount":
         shown = f"{int(v):,}".replace(",", ".") if v.isdigit() else v
-        ctl = f"<input name='{name}' value='{e(shown)}' size=12 inputmode='numeric' placeholder='1.350.000'{low}>"
+        ctl = (f"<span class='amount-field'><span class='prefix' aria-hidden='true'>{e(label('ui_currency_prefix'))}</span>"
+               f"<input name='{name}' value='{e(shown)}' size=12 inputmode='numeric' "
+               f"placeholder='{e(label('ui_amount_placeholder'))}'{low}></span>")
     elif k == "nights":
-        ctl = f"<input name='{name}' value='{e(v)}' size=3{low}>"
+        ctl = f"<input name='{name}' value='{e(v)}' size=3{low}{off}>"
     else:
-        ctl = f"<input name='{name}' value='{e(v)}' size=22{low}>"
-    return f"<label>{e(label('ui_field_' + k))} {_badge(f)}<br>{ctl}</label>"
+        ctl = f"<input name='{name}' value='{e(v)}' size=22{low}{off}>"
+    attrs = f" data-cat='{extra}'" if extra else ""
+    hidden = "" if applies else " hidden"
+    return f"<label class='cat-field'{attrs}{hidden}>{e(label('ui_field_' + k))} {_badge(f)}<br>{ctl}</label>"
 
 
 @router.get("/employee/drafts/{did}", response_class=HTMLResponse)
@@ -239,15 +259,13 @@ def draft_page(did: str, request: Request):
     cards_html = ""
     for n, c in enumerate(d["cards"]):
         cat = c["fields"]["category"]["value"]
-        keys = ["category", "date", "amount", "merchant"] + (["flight_no"] if cat == "flight" else []) + \
-               (["nights"] if cat == "hotel" else [])
+        keys = ["category", "date", "amount", "merchant", "flight_no", "nights"]
         files = ""
         moves = ""
         for f in c["files"]:
             files += (f"<li class='file-row'>{e(f['name'])} <select name='f_{f['id']}_doc_type' aria-label='Jenis dokumen untuk {e(f['name'])}'>{core.options([(t, label(t)) for t in DOC_TYPES], f['doc_type'])}</select>"
                       f" {_badge({'source': f['doc_type_source'], 'confidence': f['extract']['fields']['doc_type']['confidence']})}"
-                      f"{_err(f)}</li>")
-            if len(d["cards"]) > 1:
+                      f"{_err(f)}</li>")            if len(d["cards"]) > 1:
                 moves += (f"<div class='manage-row'><span class=note>{e(f['name'])}</span> "
                           f"<select name='move_{f['id']}' aria-label='Pindahkan berkas ke kartu lain'>{core.options([('', label('ui_move_to'))] + others(c['id']))}</select>"
                           f"<button name=action value='move:{f['id']}'>{e(label('ui_move'))}</button></div>")
@@ -259,7 +277,7 @@ def draft_page(did: str, request: Request):
                   f"<button class='btn quiet-danger' name=action value='delete:{c['id']}' onclick='return confirm(&quot;Hapus item ini?&quot;)'>{e(label('ui_delete'))}</button>"
                   f"</details>")
         errs = "".join(f"<div class=err>{e(x)}</div>" for x in c["errors"])
-        cards_html += (f"<div class='card' id='card-{e(c['id'])}' tabindex='-1'><b>{e(label('ui_card'))} {n + 1}</b>{errs}{''.join(_input(c, k, allowed) for k in keys)}"
+        cards_html += (f"<div class='card' id='card-{e(c['id'])}' data-card='{e(c['id'])}' tabindex='-1'><b>{e(label('ui_card'))} {n + 1}</b>{errs}{''.join(_input(c, k, allowed, cat) for k in keys)}"
                        f"<div class=note>{e(label('ui_col_files'))}</div><ul>{files or '<li class=note>' + e(label('ui_no_file_yet')) + '</li>'}</ul>"
                        f"{manage}</div>")
     errs = "".join(f"<p class=err>{e(x)}</p>" for x in d["errors"])
@@ -271,7 +289,7 @@ def draft_page(did: str, request: Request):
 <form method="post" action="/employee/drafts/{e(did)}" id="draft-form"><div class="cards" id="draft-cards" tabindex="-1">{cards_html}</div>
 <p class="draft-add">{ui.button(label("ui_add_item"), variant="secondary", name="action", value="add")}</p>
 {_submit_bar(d)}</form>
-<div class="draft-spacer" aria-hidden="true"></div>{BUSY_SUBMIT_JS}{FOCUS_JS}"""
+<div class="draft-spacer" aria-hidden="true"></div>{BUSY_SUBMIT_JS}{FOCUS_JS}{CATEGORY_JS}"""
     return core.page(label("ui_check_title"), body)
 
 

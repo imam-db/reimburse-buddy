@@ -281,3 +281,31 @@ def test_move_merge_split_and_delete_return_to_their_anchor(client, monkeypatch)
     r = client.post(f"/employee/drafts/{d['id']}",
                     data=dict(form_of(d), action=f"delete:{first}"), follow_redirects=False)
     assert r.headers["location"] == f"/employee/drafts/{d['id']}#draft-cards"
+
+
+# --- P2.9: category fields follow the select -----------------------------------
+def test_category_fields_are_rendered_and_toggled(client, monkeypatch):
+    d = drop(client, monkeypatch, {
+        "taxi.png": good(doc_type="taxi_receipt", date="2026-10-03", amount=150000, merchant="Taksi"),
+        "hotel.png": good(doc_type="hotel_receipt", date="2026-10-02", amount=900000,
+                          merchant="Hotel", nights=2),
+    })
+    taxi, hotel = (c["id"] for c in d["cards"])
+    markup = client.get(f"/employee/drafts/{d['id']}").text
+    taxi_nights = re.search(rf"name='c_{taxi}_nights'[^>]*>", markup).group(0)
+    taxi_flight = re.search(rf"name='c_{taxi}_flight_no'[^>]*>", markup).group(0)
+    hotel_nights = re.search(rf"name='c_{hotel}_nights'[^>]*>", markup).group(0)
+    assert "disabled" in taxi_nights and "disabled" in taxi_flight
+    assert "disabled" not in hotel_nights
+    assert "data-cat='hotel' hidden" in markup
+    assert "data-role='category'" in markup
+    assert "x.disabled=!on" in markup
+
+
+def test_hotel_validation_still_requires_nights(client, monkeypatch):
+    d = drop(client, monkeypatch, {"hotel.png": good(doc_type="hotel_receipt", date="2026-10-02",
+                                                     amount=900000, merchant="Hotel")})
+    r = client.post(f"/employee/drafts/{d['id']}", data=dict(form_of(d), action="submit"),
+                    follow_redirects=False)
+    assert r.status_code == 303 and d["id"] in web.DRAFTS
+    assert "Jumlah malam wajib diisi untuk hotel." in d["cards"][0]["errors"]

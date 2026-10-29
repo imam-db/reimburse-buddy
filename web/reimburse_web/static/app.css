@@ -1295,6 +1295,10 @@ details > summary + * {
   max-width: 220px;
 }
 
+.cat-field[hidden] {
+  display: none;
+}
+
 @media (max-width: 720px) {
   .draft-bar {
     flex-wrap: nowrap;

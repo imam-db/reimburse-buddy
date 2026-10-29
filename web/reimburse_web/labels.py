@@ -214,6 +214,8 @@ LABELS = {
     "ui_field_category": "Kategori",
     "ui_field_date": "Tanggal",
     "ui_field_amount": "Nominal",
+    "ui_amount_placeholder": "contoh: 1.350.000",
+    "ui_currency_prefix": "Rp",
     "ui_field_merchant": "Merchant",
     "ui_field_flight_no": "Nomor penerbangan",
     "ui_field_nights": "Jumlah malam",
