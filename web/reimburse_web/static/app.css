@@ -1403,6 +1403,10 @@ tr:target {
   margin-top: 2px;
 }
 
+.claims-wide td:first-child a {
+  white-space: nowrap;
+}
+
 @media (max-width: 720px) {
   .claims-wide {
     display: none;

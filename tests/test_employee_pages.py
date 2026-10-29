@@ -178,6 +178,15 @@ def test_a_message_owned_by_someone_else_never_shows_its_attachments(client):
     assert "someone_elses.pdf" not in cell
 
 
+def test_documents_declared_at_submission_are_named_instead_of_none(client):
+    page = client.get(f"/employee/claims/{HERO}").text
+    rows = dict(zip([i["id"] for i in web.store.get_claim(HERO)["items"]], _rows(page)))
+    assert "Struk dan boarding pass dilampirkan saat pengajuan" in rows["IT-2"]  # receipt and pass declared
+    assert "Struk dilampirkan saat pengajuan" in rows["IT-1"]  # receipt only; the pass is still missing
+    assert "dilampirkan saat pengajuan" not in rows["IT-5"]  # no receipt declared
+    assert "Tidak ada" in rows["IT-5"]
+
+
 # --- item 4: descriptions ---------------------------------------------------------
 def test_description_equal_to_the_category_code_is_not_repeated(client, monkeypatch):
     cid = submit_new_claim(client, monkeypatch)

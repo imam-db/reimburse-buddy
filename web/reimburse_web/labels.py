@@ -249,6 +249,8 @@ LABELS = {
     "ui_no_file_chosen": "Belum ada berkas dipilih",
     "ui_file_for_item": "Berkas bukti untuk {item}",
     "ui_state_complete": "Bukti lengkap",
+    "ui_with_submission_receipt": "Struk dilampirkan saat pengajuan",
+    "ui_with_submission_receipt_bp": "Struk dan boarding pass dilampirkan saat pengajuan",
     "ui_state_awaiting": "Menunggu verifikasi finance",
     "ui_state_decision": "Menunggu keputusan finance",
     "ui_file_pending": "menunggu verifikasi",

@@ -690,11 +690,12 @@ def upload_control(cid: str, iid: str, primary: bool) -> str:
             f"{ui.button(label('ui_upload'), variant='primary' if primary else 'secondary')}</form>")
 
 
-def item_files(emp: str, cid: str, iid: str, res, state: ItemState, pending: dict) -> str:
+def item_files(emp: str, cid: str, iid: str, res, state: ItemState, pending: dict, item: dict | None = None) -> str:
     """The files cell: web uploads for the item, plus the attachments of the mailbox messages the engine
     used as its evidence. Only messages the signed-in employee owns, and never mailbox files for a masked
     item (its uploads stay, in the neutral tone). Chip tone: ok = used by the engine, warn = awaiting a
-    reviewer, neutral = anything else."""
+    reviewer, neutral = anything else. With no file, an item whose receipt / boarding pass was declared
+    at submission says so instead of "none"."""
     origin = core.review(cid).get("origin", {})
     used, waiting = set(res.evidence_used), set(pending.get(iid, []))
     rank = {"ok": 0, "warn": 1, "": 2}
@@ -718,6 +719,11 @@ def item_files(emp: str, cid: str, iid: str, res, state: ItemState, pending: dic
             for a in atts:
                 add(a["name"], "ok")
     if not found:
+        item = item or {}
+        if item.get("receipt") and item.get("boarding_pass"):
+            return f"<span class=note>{e(label('ui_with_submission_receipt_bp'))}</span>"
+        if item.get("receipt"):
+            return f"<span class=note>{e(label('ui_with_submission_receipt'))}</span>"
         return f"<span class=note>{e(label('none'))}</span>"
     chips = [ui.badge(f"{n} ({label('ui_file_pending')})" if t == "warn" else n, t) for n, t in found.items()]
     return f'<div class="chips">{"".join(chips)}</div>'
@@ -785,7 +791,7 @@ def employee_claim(cid: str, request: Request = None, msg: str = "", item: str =
         status, cls = state.text, state.tone
         form = upload_control(cid, it["id"], primary=state.key == "action")
         add = form if state.key == "action" else ui.details(label("ui_add_file"), form)
-        files_cell = item_files(emp, cid, it["id"], res, state, pending)
+        files_cell = item_files(emp, cid, it["id"], res, state, pending, it)
         desc = str(it["description"] or "").strip()
         note = "" if desc.lower() == str(it["category"]).strip().lower() else f"<div class=note>{e(desc)}</div>"
         rows.append([f"{e(label(it['category']))}{note}", core.date_html(it["date"]),
