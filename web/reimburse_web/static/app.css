@@ -1299,6 +1299,10 @@ details > summary + * {
   display: none;
 }
 
+.cards .card label.cat-field[hidden] {
+  display: none;
+}
+
 .amount-field {
   display: flex;
   align-items: center;
@@ -1391,18 +1395,20 @@ textarea::placeholder {
 
 @media (max-width: 720px) {
   .draft-bar {
-    flex-wrap: nowrap;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 6px;
     padding: 8px;
   }
 
   .draft-bar .bar-summary {
-    flex: 1 1 auto;
-    min-width: 0;
-    font-size: 0.8rem;
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: 0.82rem;
   }
 
   .draft-bar button {
+    width: 100%;
     padding: 0 10px;
     font-size: 0.85rem;
     white-space: nowrap;
