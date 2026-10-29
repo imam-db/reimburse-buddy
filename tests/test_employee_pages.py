@@ -1,0 +1,105 @@
+"""ADR 0008: honest item states, one next step and a shorter portal for the employee pages.
+
+No test here needs Tesseract: claims and evidence are built in the store, or go through a stub extractor.
+"""
+
+from __future__ import annotations
+
+import html
+import re
+from decimal import Decimal
+
+import pytest
+from fastapi.testclient import TestClient
+
+from reimburse_buddy.models import ItemResult, ItemStatus
+from reimburse_web import app as web
+from reimburse_web import upload_flow
+from reimburse_web.extract import Draft, Field
+
+HERO = "CLM-2026-0110"
+FIELDS = ("doc_type", "date", "amount", "merchant", "flight_no", "nights", "passenger")
+TRIP = dict(purpose="Client visit", destination="Surabaya", start_date="2026-10-02", end_date="2026-10-04")
+
+
+class StubExtractor:
+    name = "stub"
+
+    def extract(self, path):
+        d = Draft(fields={k: Field() for k in FIELDS})
+        d.error = "Could not read this file (stub); fill in the card by hand."
+        return d
+
+
+@pytest.fixture
+def client(tmp_path, monkeypatch):
+    monkeypatch.setattr(web, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", "EMP-001")
+    monkeypatch.delenv("EMPLOYEE_QA", raising=False)
+    web.reset_all()
+    yield TestClient(web.app)
+    web.reset_all()
+
+
+def visible(markup: str) -> str:
+    markup = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", markup, flags=re.S | re.I)
+    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", markup))).strip()
+
+
+def submit_new_claim(client, monkeypatch) -> str:
+    """A claim through the real new-claim flow: two unreadable files, so both wait for a reviewer."""
+    monkeypatch.setattr(upload_flow, "get_extractor", lambda: StubExtractor())
+    files = [("files", (n, b"\x89PNG\r\n\x1a\n")) for n in ("taxi.png", "meal.png")]
+    r = client.post("/employee/drafts", data=TRIP, files=files, follow_redirects=False)
+    d = web.DRAFTS[r.headers["location"].rsplit("/", 1)[1]]
+    data = {}
+    for c, (cat, amount) in zip(d["cards"], (("taxi", "150000"), ("meal", "80000"))):
+        data.update({f"c_{c['id']}_category": cat, f"c_{c['id']}_date": "2026-10-03",
+                     f"c_{c['id']}_amount": amount, f"c_{c['id']}_merchant": "",
+                     **{f"f_{f['id']}_doc_type": f["doc_type"] for f in c["files"]}})
+    r = client.post(f"/employee/drafts/{d['id']}", data=dict(data, action="submit"), follow_redirects=False)
+    assert r.status_code == 303 and "/employee/claims/" in r.headers["location"], r.text
+    return r.headers["location"].split("?")[0].rsplit("/", 1)[1]
+
+
+def res(gaps=(), status=ItemStatus.NEEDS_EVIDENCE, iid="IT-1") -> ItemResult:
+    return ItemResult(item_id=iid, category="hotel", claimed=Decimal(1), approvable=Decimal(0),
+                      status=status, gaps=list(gaps))
+
+
+# --- item 1: four honest states --------------------------------------------------
+def test_item_state_precedence():
+    st = upload_flow.item_state
+    assert st(res(status=ItemStatus.REJECTED, gaps=["hotel_over_cap"]), {}).text == "✕ Ditolak"
+    masked = st(res(gaps=["duplicate_suspected", "receipt_missing"]), {"IT-1": ["m"]})
+    assert masked.text == "◷ " + upload_flow.REVIEWING and masked.masked and masked.key == "review"
+    assert st(res(gaps=["receipt_amount_mismatch"]), {}).masked  # B-only gap
+    assert st(res(gaps=["receipt_missing"]), {"IT-1": ["m"]}).text == "◷ Menunggu verifikasi finance"
+    action = st(res(gaps=["boarding_pass_missing", "hotel_over_cap"]), {})
+    assert action.key == "action" and action.tone == "warn"
+    assert action.text == "! Perlu tindakan: Boarding pass belum ada"
+    wait = st(res(gaps=["hotel_over_cap"]), {})
+    assert wait.key == "wait" and wait.tone == "info"
+    assert wait.text == "◷ Menunggu keputusan finance: Hotel di atas plafon"
+    done = st(res(status=ItemStatus.OK), {})
+    assert done.key == "done" and done.text == "✓ Bukti lengkap" and done.tone == "ok"
+
+
+def test_masked_item_never_names_a_gap_or_counts_as_action():
+    s = upload_flow.item_state(res(gaps=["duplicate_suspected", "receipt_missing"]), {})
+    assert s.key == "review" and "Struk" not in s.text and "uplikat" not in s.text
+    r = upload_flow.item_state(res(gaps=["duplicate_suspected"], status=ItemStatus.REJECTED), {})
+    assert r.text == "✕ Ditolak" and r.masked  # rejected shows no gap, and the item stays masked for files
+
+
+def test_new_claim_with_pending_files_asks_nothing_of_the_employee(client, monkeypatch):
+    cid = submit_new_claim(client, monkeypatch)
+    page = client.get(f"/employee/claims/{cid}").text
+    assert "! Perlu tindakan" not in page
+    assert page.count("◷ Menunggu verifikasi finance") == 2
+    assert "Beres" not in page
+
+
+def test_hero_claim_still_asks_for_the_boarding_pass(client):
+    page = client.get(f"/employee/claims/{HERO}").text
+    assert "! Perlu tindakan: Boarding pass belum ada" in page

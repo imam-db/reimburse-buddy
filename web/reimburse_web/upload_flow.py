@@ -12,6 +12,7 @@ import json
 import os
 import re
 import uuid
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -627,8 +628,44 @@ def draft_file(did: str, fid: str, request: Request):
     })
 
 
-AWAITING = "Menunggu verifikasi finance"
+AWAITING = label("ui_state_awaiting")
 REVIEWING = UNDER_REVIEW["note_id"].rstrip(".")
+
+
+@dataclass(frozen=True)
+class ItemState:
+    """What the employee sees for one claim item. `key` is rejected | review | wait | action | done."""
+    key: str
+    tone: str
+    text: str  # the whole tag text, icon included
+    masked: bool  # sensitive finding or B-only gap: nothing more specific than REVIEWING, no mailbox files
+    pending: bool  # an uploaded file still awaits a reviewer
+
+
+def item_state(res, pending: dict) -> ItemState:
+    """The one place that decides the employee-facing state of an item (claim page and portal).
+
+    `res` is the item's ItemResult, `pending` is core.pending_items(cid). Only document gaps are
+    "action": uploading a file is the only thing the employee can do. A masked item never gets more
+    specific than REVIEWING. A rejected item shows only "Ditolak", never a gap, and stays masked for files
+    (a reviewer's rejection is itself a sensitive finding in the Q&A masking)."""
+    gaps = [str(g) for g in res.gaps]
+    masked = is_sensitive_item(to_jsonable(res)) or any(g in B_ONLY for g in gaps)
+    waiting = res.item_id in pending
+    if res.status.value == "rejected":
+        return ItemState("rejected", "bad", "✕ " + label("rejected"), masked, waiting)
+    if masked:
+        return ItemState("review", "info", "◷ " + REVIEWING, True, waiting)
+    if waiting:
+        return ItemState("wait", "info", "◷ " + AWAITING, False, True)
+    docs = [g for g in gaps if g in core.DOCUMENT_GAPS]
+    if docs:
+        names = ", ".join(dict.fromkeys(label(g) for g in docs))
+        return ItemState("action", "warn", "! " + label("ui_needs_action") + ": " + names, False, False)
+    if gaps:
+        names = ", ".join(dict.fromkeys(label(g) for g in gaps))
+        return ItemState("wait", "info", "◷ " + label("ui_state_decision") + ": " + names, False, False)
+    return ItemState("done", "ok", "✓ " + label("ui_state_complete"), False, False)
 
 
 @router.get("/employee/claims/{cid}", response_class=HTMLResponse)
@@ -652,17 +689,8 @@ def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: i
     rows: list[list[str]] = []
     for it, res in zip(claim["items"], chk.items):
         have = list(dict.fromkeys(files_by_item.get(it["id"], [])))
-        missing = list(dict.fromkeys(REVIEWING if str(g) in B_ONLY else label(str(g)) for g in res.gaps))
-        if is_sensitive_item(to_jsonable(res)):  # fraud/suspicion signals: never detailed to the employee
-            missing = [REVIEWING]
-        if it["id"] in pending:
-            missing = [AWAITING]
-        if res.status.value == "rejected":
-            status, cls = "✕ " + label("rejected"), "bad"
-        elif missing:
-            status, cls = "! " + label("ui_needs_action") + ": " + ", ".join(missing), "warn"
-        else:
-            status, cls = "✓ " + label("ui_status_done"), "ok"
+        state = item_state(res, pending)
+        status, cls = state.text, state.tone
         add = (f"<details><summary>{e(label('ui_add_file'))}</summary>"
                f"<form method=post action='/employee/claims/{e(cid)}/items/{e(it['id'])}/files' enctype='multipart/form-data'>"
                f"<input type=file name=file aria-label='Berkas bukti untuk {e(it['id'])}' accept='.pdf,.png,.jpg,.jpeg' required> "

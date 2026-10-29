@@ -241,7 +241,9 @@ LABELS = {
     "ui_err_no_item": "Tambah minimal satu item.",
     # claim page for the employee (upload_flow.employee_claim)
     "ui_add_file": "Tambah berkas",
-    "ui_status_done": "Beres",
+    "ui_state_complete": "Bukti lengkap",
+    "ui_state_awaiting": "Menunggu verifikasi finance",
+    "ui_state_decision": "Menunggu keputusan finance",
     "ui_needs_action": "Perlu tindakan",
     "ui_finance_note": ("Finance meninjau setiap klaim. Nominal yang tampil adalah yang Anda ajukan; "
                         "finance yang memutuskan apa yang disetujui."),

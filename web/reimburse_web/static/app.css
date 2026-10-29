@@ -614,6 +614,12 @@ main:focus {
   color: var(--danger);
 }
 
+.tag.info {
+  background: var(--brand-soft);
+  border-color: #c4d8f2;
+  color: var(--brand);
+}
+
 .tag.low {
   outline: 1px solid #e0a800;
 }
@@ -1660,6 +1666,10 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 
   .tag.bad {
     border-color: #5a2a2d;
+  }
+
+  .tag.info {
+    border-color: #2f4a70;
   }
 
   .login-error {

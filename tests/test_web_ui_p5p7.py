@@ -63,7 +63,7 @@ def test_status_tag_is_not_colour_only():
 def test_employee_evidence_status_uses_icons(client, monkeypatch):
     monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", web.store.get_claim("CLM-2026-0102")["employee_id"])
     complete = client.get("/employee/claims/CLM-2026-0102").text
-    assert "✓ Beres" in complete
+    assert "✓ Bukti lengkap" in complete
 
     monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", web.store.get_claim(HERO)["employee_id"])
     missing = client.get(f"/employee/claims/{HERO}").text
