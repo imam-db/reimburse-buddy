@@ -190,6 +190,8 @@ LABELS = {
     "ui_field_end_date": "Tanggal selesai",
     "ui_destination_placeholder": "mis. Surabaya",
     "ui_purpose_placeholder": "mis. Kunjungan klien PT Contoh",
+    "ui_file_bad_type": "Jenis berkas tidak didukung",
+    "ui_file_too_big": "Lebih dari 5 MB",
     "ui_step_trip": "Perjalanan",
     "ui_step_drop": "Unggah struk dan boarding pass",
     "ui_step_upload": "Unggah berkas",

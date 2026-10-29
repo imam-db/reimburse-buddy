@@ -97,15 +97,37 @@ def get_draft(did: str, emp: str) -> dict:
 
 
 # --- pages ---------------------------------------------------------------------
-DROP_JS = """<script>
+DROP_JS = """<script>(function(){
 const z=document.getElementById('drop'),i=document.getElementById('files'),l=document.getElementById('picked');
-function show(){l.textContent=i.files.length?Array.from(i.files).map(f=>f.name).join(', '):'';}
-z.addEventListener('dragover',ev=>{ev.preventDefault();z.classList.add('over');});
-z.addEventListener('dragleave',()=>z.classList.remove('over'));
-z.addEventListener('drop',ev=>{ev.preventDefault();z.classList.remove('over');i.files=ev.dataTransfer.files;show();});
-const p=document.getElementById('pick-files');if(p)p.addEventListener('click',()=>i.click());
-i.addEventListener('change',show);
-</script>"""
+const pick=document.getElementById('pick-files'),submit=document.getElementById('read-files');
+if(!z||!i||!l)return;
+const MAX=__MAX__, MAXB=__MAXB__, OK=/\.(pdf|png|jpe?g)$/i;
+let files=[];
+function size(n){return n>=1048576?(n/1048576).toFixed(1)+' MB':Math.max(1,Math.round(n/1024))+' KB';}
+function bad(f){if(!OK.test(f.name))return "__BADTYPE__";if(f.size>MAXB)return "__TOOBIG__";return "";}
+function render(){
+l.innerHTML='';
+files.forEach(function(f,idx){
+const li=document.createElement('li'),why=bad(f);
+li.appendChild(document.createTextNode(f.name+' ('+size(f.size)+') '));
+if(why){const e=document.createElement('span');e.className='err';e.textContent=why;li.appendChild(e);}
+const b=document.createElement('button');b.type='button';b.textContent="__REMOVE__";
+b.addEventListener('click',function(){files.splice(idx,1);sync();});
+li.appendChild(b);l.appendChild(li);
+});
+submit.disabled=files.length>MAX||files.some(function(f){return bad(f);});
+}
+function sync(){const dt=new DataTransfer();files.forEach(function(f){dt.items.add(f);});i.files=dt.files;render();}
+function add(list){Array.from(list).forEach(function(f){files.push(f);});sync();}
+z.addEventListener('dragover',function(ev){ev.preventDefault();z.classList.add('over');});
+z.addEventListener('dragleave',function(){z.classList.remove('over');});
+z.addEventListener('drop',function(ev){ev.preventDefault();z.classList.remove('over');add(ev.dataTransfer.files);});
+if(pick)pick.addEventListener('click',function(){i.click();});
+i.addEventListener('change',function(){add(i.files);});
+})();</script>"""
+DROP_JS = (DROP_JS.replace("__MAXB__", str(core.MAX_UPLOAD_BYTES)).replace("__MAX__", str(MAX_FILES))
+           .replace("__BADTYPE__", label("ui_file_bad_type")).replace("__TOOBIG__", label("ui_file_too_big"))
+           .replace("__REMOVE__", label("ui_delete")))
 
 BUSY_READ_JS = """<script>(function(){
 var f=document.getElementById('drop-form'),b=document.getElementById('read-files'),i=document.getElementById('files');
@@ -172,7 +194,7 @@ def new_claim(request: Request):
 <label id="drop" class="drop">{e(label('ui_drop_hint').format(max=MAX_FILES))}
 <input id="files" class="visually-hidden" type="file" name="files" multiple accept=".pdf,.png,.jpg,.jpeg"></label>
 <p><button type="button" id="pick-files">{e(label('ui_pick_files'))}</button></p>
-<div id="picked" class="note"></div>
+<ul id="picked" class="picked"></ul>
 <p class="note">{e(label('ui_extraction_note'))}</p>
 <button type="submit" id="read-files">{e(label('ui_read_files'))}</button></div></form>{DROP_JS}{BUSY_READ_JS}{DATE_MIN_JS}"""
     return core.page(label("ui_new_claim"), body)

@@ -327,3 +327,20 @@ def test_amount_field_has_a_prefix_and_a_hint_placeholder(client, monkeypatch):
     form = dict(form_of(d), **{f"c_{good_id}_amount": "95.000"})
     client.post(f"/employee/drafts/{d['id']}", data=dict(form, action="save"))
     assert d["cards"][1]["fields"]["amount"]["value"] == 95000
+
+
+# --- P3.12/P3.13: trip dates, destination and purpose --------------------------
+def test_trip_form_labels_placeholders_and_date_min(client):
+    markup = client.get("/employee/new").text
+    assert "Tanggal mulai" in markup and "Tanggal selesai" in markup
+    assert 'value="Surabaya"' not in markup
+    assert 'placeholder="mis. Surabaya"' in markup
+    assert 'placeholder="mis. Kunjungan klien PT Contoh"' in markup
+    assert 'id="start-date"' in markup and 'id="end-date"' in markup
+    assert "e.min=s.value" in markup
+    assert 'class="date-row"' in markup
+
+    r = client.post("/employee/drafts", data={"purpose": "p", "destination": "Bandung",
+                                              "start_date": "2026-10-04", "end_date": "2026-10-02"},
+                    follow_redirects=False)
+    assert r.status_code == 400
