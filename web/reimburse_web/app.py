@@ -571,6 +571,18 @@ def employee_page(request: Request, msg: str = ""):
              f"&rarr; {date_html(c['trip']['end_date'])}",
              e(rupiah(sum(Decimal(i["amount"]) for i in c["items"]))), status_cell(c)]
             for c in claims]
+    cards = "".join(
+        f"<li class='claim-card'><div class='line1'><a href='/employee/claims/{e(c['id'])}'>{e(c['purpose'])}</a> "
+        f"{status_cell(c)}</div>"
+        f"<div class='line2'>{e(c['trip']['destination'])} {date_html(c['trip']['start_date'])} "
+        f"&rarr; {date_html(c['trip']['end_date'])}</div>"
+        f"<div class='line3 note'>{e(rupiah(sum(Decimal(i['amount']) for i in c['items'])))} &middot; {e(c['id'])}</div></li>"
+        for c in claims)
+    claims_html = ui.table([label('ui_col_id'), label('ui_col_purpose'), label('ui_col_trip'), label('ui_col_claimed'),
+                            label('ui_col_status')], rows, num=(3,), caption=label('ui_my_claims'),
+                           empty=label('ui_no_claims'))
+    if rows:  # a table on wide screens, one compact block per claim below 720 px
+        claims_html = f"<div class='claims-wide'>{claims_html}</div><ul class='claims-compact'>{cards}</ul>"
     inbox = [m for m in store.outbox if m["to"] == emp]
     msgs = [[e(m["claim_id"]), e(m["subject"]), e(m["body"])] for m in inbox]
     fwd = [m for m in store.inbox if m.get("owner_id") == emp]
@@ -580,9 +592,7 @@ def employee_page(request: Request, msg: str = ""):
 {ui.alert(flash_text(msg), tone="success") if msg else ''}
 {ui.page_header("", label('ui_new_claim_hint'), '<a class="btn primary" href="/employee/new">' + e(label('ui_start_new_claim')) + '</a>')}
 <h2>{e(label('ui_my_claims'))}</h2>
-{ui.table([label('ui_col_id'), label('ui_col_purpose'), label('ui_col_trip'), label('ui_col_claimed'),
-           label('ui_col_status')], rows, num=(3,), caption=label('ui_my_claims'),
-          empty=label('ui_no_claims'))}
+{claims_html}
 {portal_box(request)}
 <h2>{e(label('ui_messages_from_finance'))}</h2>
 {ui.table([label('ui_col_claim'), label('ui_col_subject'), label('ui_col_body')], msgs,

@@ -314,3 +314,32 @@ def test_masked_item_never_counts_as_needing_action():
     assert upload_flow.action_count(dup) == 0
     states = [upload_flow.item_state(r, web.pending_items(dup)) for r in web.run_check(dup).items]
     assert any(s.key == "review" for s in states) and all(s.key != "action" for s in states)
+
+
+# --- item 10: compact claims on mobile --------------------------------------------
+def test_each_claim_also_has_a_three_line_block_and_the_table_stays(client):
+    page = client.get("/employee").text
+    mine = [c for c in web.store.claims if c["employee_id"] == "EMP-001"]
+    assert page.count("<li class='claim-card'>") == len(mine)
+    assert "<div class='claims-wide'><div class=\"table-wrap\">" in page
+    block = re.search(r"<li class='claim-card'>.*?</li>", page, flags=re.S).group(0)
+    assert block.count("<div class='line") == 3
+    assert re.search(r"class='line1'><a href='/employee/claims/CLM-[^']+'>[^<]+</a> <span class=", block)
+    assert re.search(r"class='line3 note'>Rp[\d.]+ &middot; CLM-", block)
+    css = client.get("/static/app.css").text.replace("\r\n", "\n")
+    assert "@media (max-width: 720px) {\n  .claims-wide {\n    display: none;" in css
+
+
+def test_compact_blocks_escape_the_purpose(client):
+    web.store.get_claim("CLM-2026-0116")["purpose"] = "<script>x</script>"
+    page = client.get("/employee").text
+    assert "<script>x</script>" not in page and "&lt;script&gt;x&lt;/script&gt;" in page
+
+
+def test_no_claims_shows_the_empty_state_without_blocks(client, monkeypatch):
+    monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", "EMP-005")
+    for c in list(web.store.claims):
+        if c["employee_id"] == "EMP-005":
+            web.store.claims.remove(c)
+    page = client.get("/employee").text
+    assert "Belum ada klaim." in page and "<li class='claim-card'>" not in page
