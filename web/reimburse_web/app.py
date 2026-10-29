@@ -24,7 +24,7 @@ from urllib.parse import quote
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -799,6 +799,71 @@ def reset():
     return RedirectResponse(f"/admin?msg={quote(label('ui_msg_demo_reset'), safe='')}", status_code=303)
 
 
+EVIDENCE_TYPES = {".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
+
+
+def claim_file(cid: str, mid: str) -> tuple[Path, str, str] | None:
+    """(path, media type, display name) of the stored file behind message `mid` for claim `cid`, else None.
+
+    The message must be in the mailbox and carry an attachment linked to this claim with a stored name.
+    The path is built from that stored name only and must stay inside UPLOAD_DIR."""
+    for m in store.inbox:
+        if m["id"] != mid:
+            continue
+        for a in m.get("attachments") or []:
+            stored = a.get("stored_as")
+            if not stored or (a.get("linked_claim") or a.get("claim_id")) != cid:
+                continue
+            media = EVIDENCE_TYPES.get(Path(str(stored)).suffix.lower())
+            root = UPLOAD_DIR.resolve()
+            path = (root / str(stored)).resolve()
+            if media and root in path.parents and path.is_file():
+                return path, media, str(a.get("name") or stored)
+    return None
+
+
+def file_url(cid: str, mid: str) -> str:
+    """The finance link for an evidence message with a stored file, else ''."""
+    return f"/admin/claims/{quote(cid, safe='')}/files/{quote(mid, safe='')}" if claim_file(cid, mid) else ""
+
+
+def evidence_chips(cid: str, ids: list[str], tone: str = "ok") -> str:
+    """Evidence chips; one with a stored file is a link that opens it in a new tab, a seed message stays plain."""
+    out = []
+    for mid in ids:
+        url = file_url(cid, mid)
+        out.append(f'<a class="tag {e(tone)}" href="{e(url)}" target="_blank" rel="noopener" '
+                   f'title="{e(label("ui_open_file"))}">{e(mid)}</a>' if url else ui.badge(mid, tone))
+    return f'<div class="chips">{"".join(out)}</div>'
+
+
+def evidence_preview(cid: str, mid: str) -> str:
+    """A thumbnail (image) or a PDF mark next to the accept / reject buttons; '' without a stored file."""
+    found = claim_file(cid, mid)
+    if not found:
+        return ""
+    _, media, name = found
+    url = file_url(cid, mid)
+    inner = (f'<img class="evidence-thumb" src="{e(url)}" alt="{e(label("ui_file_preview").format(name=name))}" '
+             f'loading="lazy">' if media.startswith("image/")
+             else f'<span class="evidence-pdf" aria-hidden="true">PDF</span> {e(name)}')
+    return f'<a class="evidence-link" href="{e(url)}" target="_blank" rel="noopener">{inner}</a>'
+
+
+@app.get("/admin/claims/{cid}/files/{mid}")
+def claim_evidence_file(cid: str, mid: str):
+    """Serve one stored evidence file to finance (the /admin guard in the login middleware applies)."""
+    found = claim_file(cid, mid)
+    if not found:
+        raise HTTPException(404, f"Unknown file {mid}")
+    path, media, _ = found
+    return FileResponse(path, media_type=media, headers={
+        "X-Content-Type-Options": "nosniff",
+        "Content-Disposition": "inline",
+        "Cache-Control": "private, no-store",
+    })
+
+
 def manager_cell(cid: str, item_id: str, owner: str) -> str:
     """The manager's answers for one item, and the form to ask when nothing is pending (docs/adr/0003)."""
     reqs = [r for r in manager.requests_for(cid) if r["item_id"] == item_id]
@@ -865,13 +930,14 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
                 why = ", ".join(label(x) for x in (p.get("reasons") or [p["reason"]]))
                 dec = (f"<form method=post action='/admin/claims/{e(cid)}/evidence/{e(mid)}/review' style='display:inline'>"
                        f"<div class=note>{e(mid)}: <span title='{e(p['reason'])}'>{e(why)}</span></div>"
+                       f"{evidence_preview(cid, mid)}"
                        f"<button name=verdict value=accept>{e(label('ui_accept_evidence'))}</button> "
                        f"<button name=verdict value=reject>{e(label('ui_reject_evidence'))}</button></form>") + dec
         if self_blocked:  # UX only: the server refuses these requests anyway
             dec = f"<div class=note id='self-approval'>{e(label('self_approval_note'))}</div>"
         if decision_gaps or document_only:  # one action row, only when the item needs a decision
             dec += manager_cell(cid, it.item_id, emp)
-        evidence = (ui.chips(list(it.evidence_used), tone="ok") if it.evidence_used
+        evidence = (evidence_chips(cid, list(it.evidence_used)) if it.evidence_used
                     else f"<span class=note>{e(label('ui_none_attached'))}</span>")
         item_cards.append(
             f"<article class='item-card' id='item-{e(it.item_id)}' tabindex='-1'>"

@@ -68,3 +68,73 @@ def test_batch_dropdown_has_readable_names_and_same_values(client):
     r = client.get("/admin")
     assert "2026-W44 (persetujuan sendiri)" in r.text and "Pengajuan karyawan" in r.text
     assert 'value="web-submissions"' in r.text and 'value="2026-W44"' in r.text
+
+
+# --- item 3: finance opens uploaded evidence ---------------------------------------------------
+PNG = (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+       b"\x00\x00\x00\rIDATx\x9cc\xf8\xff\xff?\x00\x05\xfe\x02\xfe\xa7\x9a\xa0\xa0\x00\x00\x00\x00IEND\xaeB`\x82")
+
+
+def add_file_message(tmp_path, mid="MSG-W901", cid=HERO, name="MSG-W901_struk.png", **extra):
+    (tmp_path / name).write_bytes(PNG)
+    att = {"name": "struk.png", "type": "receipt", "claim_id": cid, "item_id": "IT-5", "stored_as": name,
+           "linked_claim": cid, "linked_item": "IT-5", **extra}
+    web.store.inbox.append({"id": mid, "owner_id": "EMP-001", "from": "x@y.example", "date": "2026-10-29",
+                            "subject": "s", "body": "", "attachments": [att], "mailbox": web.MAILBOX})
+
+
+def test_finance_file_route_serves_with_safe_headers(client, tmp_path):
+    add_file_message(tmp_path)
+    r = client.get(f"/admin/claims/{HERO}/files/MSG-W901")
+    assert r.status_code == 200 and r.content == PNG and r.headers["content-type"] == "image/png"
+    assert r.headers["x-content-type-options"] == "nosniff"
+    assert r.headers["content-disposition"] == "inline"
+    assert r.headers["cache-control"] == "private, no-store"
+
+
+def test_finance_file_route_404s(client, tmp_path):
+    add_file_message(tmp_path)
+    assert client.get(f"/admin/claims/{HERO}/files/MSG-NOPE").status_code == 404
+    assert client.get("/admin/claims/CLM-2026-0101/files/MSG-W901").status_code == 404  # message of another claim
+    assert client.get("/admin/claims/CLM-NOPE/files/MSG-W901").status_code == 404
+    assert client.get(f"/admin/claims/{HERO}/files/MSG-5201").status_code == 404  # seed message, no stored file
+
+
+def test_finance_file_route_stays_inside_upload_dir_and_allowlist(client, tmp_path):
+    outside = tmp_path.parent / "secret.png"
+    outside.write_bytes(PNG)
+    add_file_message(tmp_path, mid="MSG-W902", name="../secret.png")
+    assert client.get(f"/admin/claims/{HERO}/files/MSG-W902").status_code == 404
+    add_file_message(tmp_path, mid="MSG-W903", name="MSG-W903_notes.txt")
+    assert client.get(f"/admin/claims/{HERO}/files/MSG-W903").status_code == 404
+
+
+def test_claim_page_links_evidence_and_shows_thumbnail(client, tmp_path):
+    add_file_message(tmp_path)
+    web.review(HERO)["pending"]["MSG-W901"] = {"item_id": "IT-5", "reason": "self_declared_only",
+                                              "reasons": ["self_declared_only"], "state": "pending"}
+    page = client.get(f"/admin/claims/{HERO}").text
+    assert f'href="/admin/claims/{HERO}/files/MSG-W901"' in page and "evidence-thumb" in page
+    web.review(HERO)["pending"]["MSG-W901"]["state"] = "accepted"
+    web.review(HERO)["evidence"].append("MSG-W901")
+    page = client.get(f"/admin/claims/{HERO}").text
+    assert 'class="tag ok" href="/admin/claims/' in page
+
+
+def test_employee_and_manager_cannot_open_finance_file_route(tmp_path, monkeypatch):
+    from conftest import install_test_users, login_as
+    monkeypatch.setattr(web, "UPLOAD_DIR", tmp_path)
+    web.reset_all()
+    install_test_users()
+    add_file_message(tmp_path)
+    c = TestClient(web.app)
+    url = f"/admin/claims/{HERO}/files/MSG-W901"
+    assert c.get(url, follow_redirects=False).status_code == 303  # not signed in: the login form
+    for emp in ("EMP-001", "EMP-100"):
+        login_as(c, emp, "/")
+        denied = c.get(url, follow_redirects=False)
+        assert denied.status_code == 303 and denied.headers["location"] != url and denied.content != PNG
+        assert c.post(url).status_code == 403
+    login_as(c, "EMP-102")
+    assert c.get(url).status_code == 200
+    web.reset_all()

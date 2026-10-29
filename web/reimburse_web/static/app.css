@@ -1745,3 +1745,34 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
     background: var(--surface);
   }
 }
+
+/* --- ADR 0009 ----------------------------------------------------------------------------- */
+a.tag {
+  text-decoration: underline;
+}
+
+.evidence-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0;
+}
+
+.evidence-thumb {
+  display: block;
+  max-width: 96px;
+  max-height: 96px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+
+.evidence-pdf {
+  display: inline-block;
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  font-size: 12px;
+  font-weight: 700;
+}

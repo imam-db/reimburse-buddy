@@ -487,6 +487,8 @@ LABELS = {
     "ui_new_claims_link": "Lihat klaim baru",
     "ui_batch_own": "{batch} (persetujuan sendiri)",
     "ui_batch_web": "Pengajuan karyawan",
+    "ui_open_file": "Buka berkas di tab baru",
+    "ui_file_preview": "Pratinjau {name}",
 }
 
 
