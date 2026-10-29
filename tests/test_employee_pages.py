@@ -191,3 +191,41 @@ def test_a_real_description_is_still_shown_and_escaped(client):
     web.store.get_claim(HERO)["items"][4]["description"] = "Taksi <b>bandara</b>"
     page = client.get(f"/employee/claims/{HERO}").text
     assert "<div class=note>Taksi &lt;b&gt;bandara&lt;/b&gt;</div>" in page
+
+
+# --- item 5: upload control -------------------------------------------------------
+def _rows(page: str) -> list[str]:
+    return re.findall(r"<tr[^>]*>.*?</tr>", page.split("<tbody>", 1)[1], flags=re.S)
+
+
+def test_action_rows_show_the_upload_control_and_the_others_keep_it_in_a_details(client):
+    rows = _rows(client.get(f"/employee/claims/{HERO}").text)
+    acting = [r for r in rows if "! Perlu tindakan" in r]
+    assert acting and len(acting) < len(rows)
+    for r in rows:
+        assert r.count("type=file") == 1 and r.count("name=file") == 1
+        assert "<form class='upload'" in r
+        if r in acting:
+            assert "<details" not in r
+            assert 'class="btn primary"' in r
+        else:
+            assert "<summary>Tambah berkas</summary><form class='upload'" in r
+            assert 'class="btn primary"' not in r
+            assert 'class="btn"' in r  # the secondary Unggah button
+
+
+def test_the_raw_file_input_is_visually_hidden_and_has_no_inline_style(client):
+    page = client.get(f"/employee/claims/{HERO}").text
+    for tag in re.findall(r"<input[^>]*type=file[^>]*>", page):
+        assert "class='visually-hidden'" in tag and "name=file" in tag and "accept='.pdf,.png,.jpg,.jpeg'" in tag
+    assert "Pilih berkas" in page and "Belum ada berkas dipilih" in page
+    assert " style=" not in page and "<style" not in page
+
+
+def test_old_upload_post_still_works(client, monkeypatch):
+    cid = submit_new_claim(client, monkeypatch)
+    before = len([m for m in web.store.inbox if m.get("owner_id") == "EMP-001"])
+    r = client.post(f"/employee/claims/{cid}/items/IT-1/files", files={"file": ("again.png", b"\x89PNG\r\n\x1a\n")},
+                    follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].startswith(f"/employee/claims/{cid}?msg=")
+    assert len([m for m in web.store.inbox if m.get("owner_id") == "EMP-001"]) == before + 1

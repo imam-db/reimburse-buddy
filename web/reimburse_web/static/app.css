@@ -1374,6 +1374,27 @@ textarea::placeholder {
   display: block;
 }
 
+.upload {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.file-pick {
+  position: relative;
+}
+
+.file-pick:focus-within {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.upload .file-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .picked {
   list-style: none;
   padding: 0;

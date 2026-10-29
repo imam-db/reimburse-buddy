@@ -668,6 +668,27 @@ def item_state(res, pending: dict) -> ItemState:
     return ItemState("done", "ok", "✓ " + label("ui_state_complete"), False, False)
 
 
+UPLOAD_JS = """<script>(function(){
+document.querySelectorAll('form.upload input[type=file]').forEach(function(i){
+var n=i.closest('form').querySelector('.file-name');if(!n)return;
+i.addEventListener('change',function(){n.textContent=i.files.length?i.files[0].name:n.dataset.empty;});
+});
+})();</script>"""
+
+
+def upload_control(cid: str, iid: str, primary: bool) -> str:
+    """The upload form of one item. The real file input is visually hidden inside a button-styled label;
+    the chosen file name is filled in by UPLOAD_JS when scripts run, and the form works without it."""
+    empty = label("ui_no_file_chosen")
+    return (f"<form class='upload' method=post action='/employee/claims/{e(cid)}/items/{e(iid)}/files' "
+            f"enctype='multipart/form-data'>"
+            f"<label class='btn file-pick'>{e(label('ui_pick_file'))}"
+            f"<input class='visually-hidden' type=file name=file accept='.pdf,.png,.jpg,.jpeg' required "
+            f"aria-label='{e(label('ui_file_for_item').format(item=iid))}'></label>"
+            f"<span class='note file-name' data-empty='{e(empty)}'>{e(empty)}</span>"
+            f"{ui.button(label('ui_upload'), variant='primary' if primary else 'secondary')}</form>")
+
+
 def item_files(emp: str, cid: str, iid: str, res, state: ItemState, pending: dict) -> str:
     """The files cell: web uploads for the item, plus the attachments of the mailbox messages the engine
     used as its evidence. Only messages the signed-in employee owns, and never mailbox files for a masked
@@ -744,10 +765,8 @@ def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: i
     states = [item_state(res, pending) for res in chk.items]
     for it, res, state in zip(claim["items"], chk.items, states):
         status, cls = state.text, state.tone
-        add = (f"<details><summary>{e(label('ui_add_file'))}</summary>"
-               f"<form method=post action='/employee/claims/{e(cid)}/items/{e(it['id'])}/files' enctype='multipart/form-data'>"
-               f"<input type=file name=file aria-label='Berkas bukti untuk {e(it['id'])}' accept='.pdf,.png,.jpg,.jpeg' required> "
-               f"<button>{e(label('ui_add_file'))}</button></form></details>")
+        form = upload_control(cid, it["id"], primary=state.key == "action")
+        add = form if state.key == "action" else ui.details(label("ui_add_file"), form)
         files_cell = item_files(emp, cid, it["id"], res, state, pending)
         desc = str(it["description"] or "").strip()
         note = "" if desc.lower() == str(it["category"]).strip().lower() else f"<div class=note>{e(desc)}</div>"
@@ -760,7 +779,7 @@ def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: i
 {claim_summary(claim, claim["items"], states)}
 {ui.table([label('ui_col_item'), label('ui_col_date'), label('ui_col_claimed'), label('ui_col_files'),
            label('ui_col_evidence'), ''], rows, num=(2,), caption=label('ui_claim'))}
-<p class="note">{e(label('ui_finance_note'))}</p>"""
+<p class="note">{e(label('ui_finance_note'))}</p>{UPLOAD_JS}"""
     return core.page(f"{label('ui_claim')} {cid}", qa_top + body + qa_box)
 
 
