@@ -415,6 +415,7 @@ LABELS = {
     "ui_qa_quota": "Sisa pertanyaan: {left} dari {total}",
     "ui_qa_limit_prefix": "Batas pertanyaan untuk sesi ini sudah tercapai. Hubungi",
     "ui_qa_new": "Percakapan baru",
+    "ui_qa_examples": "Contoh pertanyaan:",
     "ui_qa_ask": "Tanya",
     "ui_qa_placeholder": "Tulis pertanyaan",
     "ui_qa_sources": "Sumber:",

@@ -275,7 +275,8 @@ def test_new_conversation_clears_only_the_visible_history(client):
     r = client.post("/employee/qa/new", data={"claim_id": "CLM-2026-0101"}, follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/employee/claims/CLM-2026-0101#qa"
     box = client.get("/employee/claims/CLM-2026-0101").text.split("id='qa'", 1)[1]
-    assert "Percakapan baru" in box and "Belum ada pertanyaan" in box and "POL-4" not in box
+    assert "Belum ada pertanyaan" in box and "POL-4" not in box
+    assert "action='/employee/qa/new'" not in box  # nothing left to clear
     assert "Sisa pertanyaan: 9 dari 10" in box
     assert len(plans.log().list()) == before
 
@@ -309,3 +310,24 @@ def test_cap_then_new_conversation_shows_the_limit_hint_not_the_try_hint(client)
     assert "Batas pertanyaan sesi ini sudah tercapai" in box
     assert "Percakapan dikosongkan" in box
     assert "Coba:" not in box
+
+
+def test_new_conversation_control_only_with_history_and_in_header(client):
+    login(client, "EMP-001")
+    empty = client.get("/employee/claims/CLM-2026-0101").text
+    assert "action='/employee/qa/new'" not in empty
+    client.post("/employee/qa", data={"question": "Berapa plafon hotel?", "claim_id": "CLM-2026-0101"})
+    html = client.get("/employee/claims/CLM-2026-0101").text
+    assert "action='/employee/qa/new'" in html and "Percakapan baru" in html
+    assert "name='claim_id' value='CLM-2026-0101'" in html.split("action='/employee/qa/new'", 1)[1].split("</form>", 1)[0]
+    assert html.index("action='/employee/qa/new'") < html.index("id='qa-log'")
+    assert "aria-hidden='true'" in html
+
+
+def test_chips_label_and_order(client):
+    login(client, "EMP-001")
+    client.post("/employee/qa", data={"question": "Berapa plafon hotel?", "claim_id": ""})
+    html = client.get("/employee").text
+    assert "Contoh pertanyaan:" in html
+    log, quick, ask = html.index("id='qa-log'"), html.index("class='quick'"), html.index("class='ask'")
+    assert log < quick < html.index("Contoh pertanyaan:") < ask

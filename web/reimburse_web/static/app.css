@@ -1252,7 +1252,45 @@ details > summary + * {
 }
 
 .qa h2 {
+  margin: 0;
+}
+
+.qa-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-1) var(--sp-3);
   margin-bottom: var(--sp-1);
+}
+
+.qa-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
+}
+
+.qa-meta form.new {
+  margin: 0;
+}
+
+.qa button.ghost {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding: 2px var(--sp-2);
+  min-height: 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--brand);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+.qa button.ghost:hover {
+  background: var(--brand-soft);
+  color: var(--brand-hover);
 }
 
 .qa-log {
@@ -1319,9 +1357,35 @@ details > summary + * {
   min-width: 0;
 }
 
-.qa form.quick,
-.qa form.new {
+.qa form.quick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
   margin: var(--sp-2) 0 0;
+}
+
+.qa .chips-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.qa form.quick button {
+  background: transparent;
+  color: var(--brand);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 3px var(--sp-3);
+  min-height: 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.qa form.quick button:hover:not([disabled]) {
+  background: var(--brand-soft);
+  border-color: var(--brand);
 }
 
 .qa button[disabled] {
@@ -1332,6 +1396,9 @@ details > summary + * {
 .qa .quota {
   font-size: 0.85rem;
   color: var(--muted);
+}
+
+.qa p.quota {
   margin: var(--sp-1) 0;
 }
 

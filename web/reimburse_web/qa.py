@@ -140,21 +140,25 @@ def _qa_box(sess: Session, cid: str) -> str:
     left, total = service().remaining_questions(sess), service().config.max_questions
     empty = LIMIT_EMPTY_HINT if not left else EMPTY_HINT
     log = f"<div class='qa-log' id='qa-log' role='log' aria-live='polite'>{turns or empty}</div>"
-    quota = f"<p class='quota'>{escape(label('ui_qa_quota').format(left=left, total=total))}</p>"
-    if not left:
-        quota += (f"<p class='quota limit'>{escape(label('ui_qa_limit_prefix'))} "
-                  f"{_finance_link(cid)}.</p>")
+    quota = f"<span class='quota'>{escape(label('ui_qa_quota').format(left=left, total=total))}</span>"
+    limit = (f"<p class='quota limit'>{escape(label('ui_qa_limit_prefix'))} {_finance_link(cid)}.</p>"
+             if not left else "")
     off = "" if left else " disabled"
+    hidden = f"<input type='hidden' name='claim_id' value='{escape(cid)}'>"
+    # State-changing, so a POST form; only shown when there is history to clear.
+    new = (f"<form method='post' action='/employee/qa/new' class='new'>{hidden}"
+           f"<button type='submit' class='ghost'><span aria-hidden='true'>\u21ba</span> {escape(label('ui_qa_new'))}</button></form>"
+           if turns else "")
     quick = "".join(f"<button name='quick' value='{escape(q)}'{off}>{escape(q)}</button> "
                     for q in (QUICK_CLAIM if cid else QUICK_PORTAL))
     title = label("ui_qa_title_claim") if cid else label("ui_qa_title_portal")
-    return (f"<div class='qa' id='qa'><h2>{escape(title)}</h2>"
-            f"<p class='note'>{escape(label('ui_qa_scope'))}</p>{quota}{log}"
-            f"<form method='post' action='/employee/qa/new' class='new'><input type='hidden' name='claim_id' value='{escape(cid)}'>"
-            f"<button>{escape(label('ui_qa_new'))}</button></form>"
+    return (f"<div class='qa' id='qa'><div class='qa-head'><h2>{escape(title)}</h2>"
+            f"<div class='qa-meta'>{quota}{new}</div></div>"
+            f"<p class='note'>{escape(label('ui_qa_scope'))}</p>{limit}{log}"
             # Two forms: pressing Enter in the text box must submit the text, not the first quick button.
-            f"<form method='post' action='/employee/qa' class='quick'><input type='hidden' name='claim_id' value='{escape(cid)}'>{quick}</form>"
-            f"<form method='post' action='/employee/qa' class='ask'><input type='hidden' name='claim_id' value='{escape(cid)}'>"
+            f"<form method='post' action='/employee/qa' class='quick'>{hidden}"
+            f"<span class='chips-label'>{escape(label('ui_qa_examples'))}</span>{quick}</form>"
+            f"<form method='post' action='/employee/qa' class='ask'>{hidden}"
             f"<input type='text' name='question' aria-label='{escape(label('ui_qa_placeholder'))}' maxlength='500' placeholder='{escape(label('ui_qa_placeholder'))}'{off}>"
             f"<button{off}>{escape(label('ui_qa_ask'))}</button></form>{JS}</div>")
 
