@@ -160,6 +160,7 @@ LABELS = {
     "ui_new_claim": "Klaim baru",
     "ui_new_claim_hint": "Unggah semua struk dan boarding pass sekaligus; kami yang menyusun itemnya untuk Anda.",
     "ui_start_new_claim": "Mulai klaim baru",
+    "ui_forwarded_history": "Riwayat berkas yang diteruskan ({n})",
     "ui_forwarded_mailbox": "Diteruskan ke mailbox reimburse",
     "ui_employee_footer": "Karyawan:",
     "ui_flash_submitted": "Klaim diajukan",

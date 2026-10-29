@@ -357,3 +357,17 @@ def test_messages_section_follows_my_claims(client):
     page = client.get("/employee").text
     assert page.index("<h2>Klaim saya</h2>") < page.index("<h2>Pesan dari finance</h2>")
     assert "Unggah struk taksi &lt;b&gt;ya&lt;/b&gt;" in page
+
+
+# --- item 11 (history): forwarded mail in a closed details at the bottom -----------
+def test_forwarded_history_is_a_closed_details_with_its_count(client):
+    n = len([m for m in web.store.inbox if m.get("owner_id") == "EMP-001"])
+    assert n
+    page = client.get("/employee").text
+    m = re.search(rf"<details><summary>Riwayat berkas yang diteruskan \({n}\)</summary>(.*?)</details>", page,
+                  flags=re.S) or re.search(rf"<details[^>]*><summary>Riwayat berkas yang diteruskan \({n}\)</summary>(.*?)</details>",
+                                           page, flags=re.S)
+    assert m and "<table" in m.group(1) and "boarding_pass_GA312.pdf" in m.group(1)
+    assert "<details open" not in page and re.search(r"<details[^>]* open", page) is None
+    assert "<h2>Diteruskan ke mailbox reimburse</h2>" not in page
+    assert page.index("<h2>Klaim saya</h2>") < page.index("Riwayat berkas yang diteruskan")

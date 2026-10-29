@@ -593,6 +593,8 @@ def employee_page(request: Request, msg: str = ""):
     fwd = [m for m in store.inbox if m.get("owner_id") == emp]
     fwd_rows = [[date_html(m["date"]), e(m["subject"]),
                  e(", ".join(a["name"] for a in m.get("attachments", [])))] for m in fwd]
+    history_table = ui.table([label('ui_col_date'), label('ui_col_subject'), label('ui_col_attachments')], fwd_rows,
+                             caption=label('ui_forwarded_mailbox'), empty=label('ui_no_forwarded'))
     body = f"""
 {ui.alert(flash_text(msg), tone="success") if msg else ''}
 {ui.page_header("", label('ui_new_claim_hint'), '<a class="btn primary" href="/employee/new">' + e(label('ui_start_new_claim')) + '</a>')}
@@ -600,9 +602,7 @@ def employee_page(request: Request, msg: str = ""):
 {claims_html}
 {messages_html}
 {portal_box(request)}
-<h2>{e(label('ui_forwarded_mailbox'))}</h2>
-{ui.table([label('ui_col_date'), label('ui_col_subject'), label('ui_col_attachments')], fwd_rows,
-          caption=label('ui_forwarded_mailbox'), empty=label('ui_no_forwarded'))}
+{ui.details(label('ui_forwarded_history').format(n=len(fwd_rows)), history_table)}
 <p class="note">{e(label('ui_employee_footer'))} {e(me['name'])} &middot; {e(me['email'])}</p>"""
     return page(label("ui_portal_title"), body)
 
