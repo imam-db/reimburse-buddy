@@ -229,3 +229,20 @@ def test_old_upload_post_still_works(client, monkeypatch):
                     follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"].startswith(f"/employee/claims/{cid}?msg=")
     assert len([m for m in web.store.inbox if m.get("owner_id") == "EMP-001"]) == before + 1
+
+
+# --- item 6: row anchors ----------------------------------------------------------
+def test_every_item_row_has_an_anchor_and_the_summary_link_points_at_one(client):
+    page = client.get(f"/employee/claims/{HERO}").text
+    for it in web.store.get_claim(HERO)["items"]:
+        assert f"<tr id='item-{it['id']}'>" in page
+    target = re.search(r"<a href='#(item-[^']+)'>Ke item pertama</a>", page).group(1)
+    assert f"id='{target}'" in page
+
+
+def test_redirect_after_an_upload_lands_on_the_item_row(client, monkeypatch):
+    cid = submit_new_claim(client, monkeypatch)
+    r = client.post(f"/employee/claims/{cid}/items/IT-2/files", files={"file": ("again.png", b"\x89PNG\r\n\x1a\n")},
+                    follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == f"/employee/claims/{cid}?msg=File+added#item-IT-2"

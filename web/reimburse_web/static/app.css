@@ -1374,6 +1374,10 @@ textarea::placeholder {
   display: block;
 }
 
+tr:target {
+  background: var(--brand-soft);
+}
+
 .upload {
   display: flex;
   flex-wrap: wrap;

@@ -12,6 +12,7 @@ import json
 import os
 import re
 import uuid
+from urllib.parse import quote
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -778,7 +779,8 @@ def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: i
 {core.date_html(claim['trip']['end_date'])}</p>
 {claim_summary(claim, claim["items"], states)}
 {ui.table([label('ui_col_item'), label('ui_col_date'), label('ui_col_claimed'), label('ui_col_files'),
-           label('ui_col_evidence'), ''], rows, num=(2,), caption=label('ui_claim'))}
+           label('ui_col_evidence'), ''], rows, num=(2,), caption=label('ui_claim'),
+           row_ids=[f"item-{i['id']}" for i in claim['items']])}
 <p class="note">{e(label('ui_finance_note'))}</p>{UPLOAD_JS}"""
     return core.page(f"{label('ui_claim')} {cid}", qa_top + body + qa_box)
 
@@ -791,4 +793,4 @@ async def add_file(cid: str, iid: str, request: Request, file: UploadFile = File
         raise HTTPException(404, f"Unknown item {iid}")
     entry = await _save_and_extract(file, cid)
     forward_files(claim["employee_id"], cid, claim["trip"], [(item, entry)])
-    return RedirectResponse(f"/employee/claims/{cid}?msg=File+added", status_code=303)
+    return RedirectResponse(f"/employee/claims/{cid}?msg=File+added#item-{quote(iid)}", status_code=303)
