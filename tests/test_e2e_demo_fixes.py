@@ -36,7 +36,10 @@ def test_triage_qa_and_claim_page_agree_after_review(client):
     qa_gaps = {g for i in qa._Data().check(HERO)["items"] for g in i["gaps"]}
     page = client.get(f"/admin/claims/{HERO}").text
     page_gaps = set(re.findall(r"<span class='tag warn' title='([a-z_]+)'>", page))
-    assert triage == qa_gaps == page_gaps == reviewed
+    assert qa_gaps == page_gaps == reviewed
+    # Triage lists only open work: the hotel cap was decided, so its chip is gone from the card.
+    assert "hotel_over_cap" in reviewed and "hotel_over_cap" not in triage
+    assert triage == {g for i in web.run_check(HERO).items for g in web.open_gaps(i)}
 
 
 def test_time_saved_assumption_is_indonesian(client):
@@ -237,3 +240,11 @@ def test_provenance_tags_use_indonesian_names():
     for word in ("Kategori: OCR", "Tanggal: OCR", "Nominal: Dideklarasikan sendiri", "Merchant: Teks PDF",
                  "Malam: OCR", "No. penerbangan: OCR"):
         assert word in text, word
+
+
+def test_document_request_for_a_flight_asks_for_the_ticket(client):
+    web.store.get_claim(HERO)["items"][0]["receipt"] = False  # IT-1 flight: no ticket and no boarding pass
+    page = client.get(f"/admin/claims/{HERO}").text
+    flight = page.split("id='item-IT-1'", 1)[1].split("</article>", 1)[0]
+    assert "Mohon kirim tiket pesawat (e-ticket) dan boarding pass untuk Penerbangan (IT-1)" in flight
+    assert "Mohon kirim struk" not in flight

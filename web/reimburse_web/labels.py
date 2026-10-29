@@ -502,6 +502,7 @@ LABELS = {
     "ui_request_doc_body": "Mohon kirim {documents} untuk {item} tanggal {date}.",
     "ui_doc_name_receipt_missing": "struk",
     "ui_doc_name_boarding_pass_missing": "boarding pass",
+    "ui_doc_name_ticket": "tiket pesawat (e-ticket)",
     "ui_msg_sent_to": "Pesan terkirim ke {name}.",
     "ui_err_amount_empty": "Isi nominal.",
     "ui_err_amount_boarding_pass": "Boarding pass tidak memuat harga. Tambahkan e-ticket atau isi harga tiket.",

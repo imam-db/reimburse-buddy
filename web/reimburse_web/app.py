@@ -400,6 +400,11 @@ def gap_tag(g: str, cls: str = "") -> str:
     return f'<span class="tag {cls}" title="{e(g)}">{e(label(g))}</span>'
 
 
+def open_gaps(item) -> list[str]:
+    """The item's gaps that still need someone: a decision gap the reviewer already decided is closed."""
+    return [str(g) for g in item.gaps if not (item.human_decision and str(g) in DECISION_GAPS)]
+
+
 STATUS_ICON = {"approved": "✓ ", "rejected": "✕ ", "on_hold": "! ", "partially_approved": "! ",
                "needs_action": "! "}
 
@@ -737,7 +742,7 @@ def admin(batch: str = BATCH, msg: str = ""):
         # Chips and rejected items come from the reviewed state (ADR 0009 #1); membership, the injection
         # flag and needs_review stay as triage reports them.
         chk = run_check(x["claim_id"])
-        gap_codes = ({g for i in chk.items for g in i.gaps} | {w.gap for w in chk.warnings if w.gap}
+        gap_codes = ({g for i in chk.items for g in open_gaps(i)} | {w.gap for w in chk.warnings if w.gap}
                      | ({"embedded_instructions"} if x.get("needs_review") else set()))
         gaps = "".join(gap_tag(g) for g in sorted(gap_codes))
         rejected_ids = [i.item_id for i in chk.items if i.status.value == "rejected"]
@@ -968,7 +973,9 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
         ask = ""
         open_docs = [g for g in it.gaps if g in DOCUMENT_GAPS]
         if open_docs:  # ask the employee right where the gap is; finance edits the text before sending
-            docs = " dan ".join(label("ui_doc_name_" + g) for g in open_docs)
+            # Same words as the employee page: a flight lacks its ticket, not a receipt.
+            docs = " dan ".join(label("ui_doc_name_ticket") if g == "receipt_missing" and it.category == "flight"
+                                else label("ui_doc_name_" + g) for g in open_docs)
             ask_body = label("ui_request_doc_body").format(
                 documents=docs, item=f"{label(it.category)} ({it.item_id})", date=fmt_date(src["date"]))
             ask = ui.details(label("ui_request_doc"), (
