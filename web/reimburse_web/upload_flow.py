@@ -17,7 +17,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from reimburse_buddy.amounts import normalize_attachment
 from reimburse_buddy.gaps import B_ONLY
@@ -44,6 +44,7 @@ CARD_FIELDS = ("category",) + tuple(f for f in FIELDS if f not in ("doc_type", "
 PLAUSIBLE_MAX = {"taxi": 1_000_000, "meal": 1_000_000, "hotel": 5_000_000, "flight": 15_000_000,
                  "per_diem": 2_000_000, "late_checkout": 3_000_000}
 MAX_FILES = 20
+FILE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".pdf": "application/pdf"}
 
 
 # --- draft model -------------------------------------------------------------
@@ -295,7 +296,17 @@ def draft_page(did: str, request: Request):
         files = ""
         moves = ""
         for f in c["files"]:
-            files += (f"<li class='file-row'>{e(f['name'])} <select name='f_{f['id']}_doc_type' aria-label='Jenis dokumen untuk {e(f['name'])}'>{core.options([(t, label(t)) for t in DOC_TYPES], f['doc_type'])}</select>"
+            url = f"/employee/drafts/{e(did)}/files/{e(f['id'])}"
+            ext = Path(f["name"]).suffix.lower()
+            if ext in (".png", ".jpg", ".jpeg"):
+                preview = (f"<a class='file-preview' href='{url}' target='_blank' rel='noopener'>"
+                           f"<img class='thumb' loading='lazy' src='{url}' alt='Pratinjau {e(f['name'])}'></a>")
+            elif ext == ".pdf":
+                preview = (f"<a class='file-preview' href='{url}' target='_blank' rel='noopener'>"
+                           f"<span class='doc-icon' aria-hidden='true'>PDF</span></a>")
+            else:
+                preview = ""
+            files += (f"<li class='file-row'>{preview}{e(f['name'])} <select name='f_{f['id']}_doc_type' aria-label='Jenis dokumen untuk {e(f['name'])}'>{core.options([(t, label(t)) for t in DOC_TYPES], f['doc_type'])}</select>"
                       f" {_badge({'source': f['doc_type_source'], 'confidence': f['extract']['fields']['doc_type']['confidence']})}"
                       f"{_err(f)}</li>")
             if len(d["cards"]) > 1:
@@ -591,6 +602,29 @@ async def update_draft(did: str, request: Request):
         anchor = f"card-{first}" if first else ""
     target = f"/employee/drafts/{did}" + (f"#{anchor}" if anchor else "")
     return RedirectResponse(target, status_code=303)
+
+
+@router.get("/employee/drafts/{did}/files/{fid}")
+def draft_file(did: str, fid: str, request: Request):
+    """Serve one uploaded draft file to its owner. The path comes only from the stored name."""
+    emp = core.require_employee(request)
+    d = get_draft(did, emp)
+    f = next((x for c in d["cards"] for x in c["files"] if x["id"] == fid), None)
+    if not f:
+        raise HTTPException(404, f"Unknown file {fid}")
+    root = core.UPLOAD_DIR.resolve()
+    path = (root / f["stored"]).resolve()
+    if root not in path.parents or not path.is_file():
+        raise HTTPException(404, f"Unknown file {fid}")
+    media = FILE_TYPES.get(path.suffix.lower())
+    if not media:
+        raise HTTPException(404, f"Unknown file {fid}")
+    name = str(f["name"]).replace('"', "")
+    return FileResponse(path, media_type=media, headers={
+        "X-Content-Type-Options": "nosniff",
+        "Content-Disposition": f'inline; filename="{name}"',
+        "Cache-Control": "private, no-store",
+    })
 
 
 AWAITING = "Menunggu verifikasi finance"

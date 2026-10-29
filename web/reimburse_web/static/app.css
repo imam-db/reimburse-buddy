@@ -1325,6 +1325,34 @@ textarea::placeholder {
   flex-basis: 100%;
 }
 
+.file-preview {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.thumb {
+  display: block;
+  max-height: 120px;
+  width: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+
+.doc-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
 .date-row {
   display: grid;
   grid-template-columns: 1fr;

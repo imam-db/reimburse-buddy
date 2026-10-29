@@ -358,3 +358,55 @@ def test_picked_files_are_a_list_with_size_and_remove(client):
     r = client.post("/employee/drafts", data=TRIP, files=[("files", ("x.txt", b"hello"))],
                     follow_redirects=False)
     assert r.status_code == 400
+
+
+# --- P4.15: owner-only file route ---------------------------------------------
+def first_file(d: dict) -> dict:
+    return d["cards"][0]["files"][0]
+
+
+def test_draft_file_route_serves_the_owner_with_safe_headers(client, monkeypatch):
+    d = drop(client, monkeypatch, {"ok.png": good(doc_type="taxi_receipt", date="2026-10-03",
+                                                  amount=150000, merchant="Taksi")})
+    f = first_file(d)
+    raw = (web.UPLOAD_DIR / f["stored"]).read_bytes()
+    r = client.get(f"/employee/drafts/{d['id']}/files/{f['id']}")
+    assert r.status_code == 200 and r.content == raw
+    assert r.headers["content-type"].startswith("image/png")
+    assert r.headers["x-content-type-options"] == "nosniff"
+    assert "inline" in r.headers["content-disposition"]
+    assert r.headers["cache-control"] == "private, no-store"
+
+    pdf = drop(client, monkeypatch, {"doc.pdf": good(doc_type="flight_receipt", date="2026-10-03",
+                                                     amount=500000, merchant="Airlines",
+                                                     flight_no="QZ 7520")})
+    pf = first_file(pdf)
+    r = client.get(f"/employee/drafts/{pdf['id']}/files/{pf['id']}")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("application/pdf")
+
+
+def test_draft_file_route_is_owner_only_and_rejects_unknown_paths(client, monkeypatch):
+    d = drop(client, monkeypatch, {"ok.png": good(doc_type="taxi_receipt", date="2026-10-03",
+                                                  amount=150000, merchant="Taksi")})
+    f = first_file(d)
+    url = f"/employee/drafts/{d['id']}/files/{f['id']}"
+    unknown = client.get("/employee/drafts/nope")
+
+    monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", "EMP-003")
+    other = client.get(url)
+    assert other.status_code == 404
+    assert other.json()["detail"].replace(d["id"], "X") == \
+        unknown.json()["detail"].replace("nope", "X")
+
+    monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", "EMP-001")
+    assert client.get(f"/employee/drafts/{d['id']}/files/nope").status_code == 404
+    f["stored"] = "../escape.png"
+    assert client.get(url).status_code == 404
+
+
+def test_draft_file_route_needs_an_employee(client, monkeypatch):
+    d = drop(client, monkeypatch, {"ok.png": good(doc_type="taxi_receipt", date="2026-10-03",
+                                                  amount=150000, merchant="Taksi")})
+    f = first_file(d)
+    monkeypatch.delenv("REIMBURSE_DEV_EMPLOYEE")
+    assert client.get(f"/employee/drafts/{d['id']}/files/{f['id']}").status_code == 401
