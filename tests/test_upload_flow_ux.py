@@ -344,3 +344,17 @@ def test_trip_form_labels_placeholders_and_date_min(client):
                                               "start_date": "2026-10-04", "end_date": "2026-10-02"},
                     follow_redirects=False)
     assert r.status_code == 400
+
+
+# --- P3.14: picked-file list ---------------------------------------------------
+def test_picked_files_are_a_list_with_size_and_remove(client):
+    markup = client.get("/employee/new").text
+    assert '<ul id="picked" class="picked">' in markup
+    assert "DataTransfer" in markup and "MAX=20" in markup
+    assert "Lebih dari 5 MB" in markup and "Jenis berkas tidak didukung" in markup
+    assert "submit.disabled=files.length>MAX" in markup
+    assert "textContent=\"Hapus\"" in markup
+
+    r = client.post("/employee/drafts", data=TRIP, files=[("files", ("x.txt", b"hello"))],
+                    follow_redirects=False)
+    assert r.status_code == 400

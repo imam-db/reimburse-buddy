@@ -97,7 +97,7 @@ def get_draft(did: str, emp: str) -> dict:
 
 
 # --- pages ---------------------------------------------------------------------
-DROP_JS = """<script>(function(){
+DROP_JS = r"""<script>(function(){
 const z=document.getElementById('drop'),i=document.getElementById('files'),l=document.getElementById('picked');
 const pick=document.getElementById('pick-files'),submit=document.getElementById('read-files');
 if(!z||!i||!l)return;

@@ -1336,6 +1336,25 @@ textarea::placeholder {
   display: block;
 }
 
+.picked {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0;
+}
+
+.picked li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.picked li .err {
+  margin-left: auto;
+}
+
 @media (min-width: 480px) {
   .date-row {
     grid-template-columns: 1fr 1fr;
