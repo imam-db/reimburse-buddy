@@ -1037,21 +1037,24 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
 <button>{e(label('ui_send'))}</button></form>{f'<ul>{sent_rows}</ul>' if sent_rows else ''}"""
     body = f"""<p><a href="/admin">&larr; {e(label('ui_back_to_triage'))}</a></p>{ui.alert(msg, tone="success") if msg else ''}
 <section class="claim-summary" id="claim-summary" aria-label="{e(label('ui_claim_summary'))}">
-<div class="summary-body">
-<h2>{e(label('ui_rule_engine').format(decision=label(c.decision.value)))}</h2>
-<p class="note"><span class="tag">{e(cid)}</span> <span title="{e(emp)}">{e(person(store, emp))}</span> &middot; {e(claim['purpose'])} &middot; {e(trip['destination'])}
-{date_html(trip['start_date'])} &rarr; {date_html(trip['end_date'])} &middot; {e(label('ui_status'))} {status_tag(claim['status'])}</p>
-<p>{engine_amounts}</p>
-<p class="note">{e(label('ui_engine_note'))} {e(label('ui_evidence_attached').format(evidence=', '.join(r['evidence']) or label('ui_none_attached')))}</p>
-</div>
+<div class="summary-line">
+<span class="summary-id"><span class="tag">{e(cid)}</span> {status_tag(claim['status'])}</span>
+<span class="summary-money">{engine_amounts}</span>
 <div class="summary-actions">
 <form method=post action="/admin/claims/{e(cid)}/investigate"><button class="primary">{e(label('ui_action_investigate'))}</button></form>
 <a class="btn" href="#claim-items">{e(label('ui_view_items'))}</a>
-<a class="btn" href="/admin/claims/{e(cid)}/audit">{e(label('ui_audit_link'))}</a>
 </div>
+</div>
+<div class="summary-rest">
+<h2>{e(label('ui_rule_engine').format(decision=label(c.decision.value)))}</h2>
+<p class="note"><span title="{e(emp)}">{e(person(store, emp))}</span> &middot; {e(claim['purpose'])} &middot; {e(trip['destination'])}
+{date_html(trip['start_date'])} &rarr; {date_html(trip['end_date'])}</p>
+<p class="note">{e(label('ui_engine_note'))} {e(label('ui_evidence_attached').format(evidence=', '.join(r['evidence']) or label('ui_none_attached')))}
+<a href="/admin/claims/{e(cid)}/audit">{e(label('ui_audit_link'))}</a></p>
 {needs_you}
+</div>
 </section>
-<div class="item-list" id="claim-items">{''.join(item_cards)}</div>
+<div class="item-list sticky-offset" id="claim-items">{''.join(item_cards)}</div>
 {ui.details(label('ui_investigate_manual'), manual, id='manual')}
 <div class="box" id="decision-note-box"><h2>{e(label('ui_decision_note'))}</h2>
 <p class="btn-row"><button type="button" class="btn" id="copy-note">{e(label('ui_copy_note'))}</button></p>

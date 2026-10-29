@@ -154,6 +154,21 @@ def test_item_with_only_a_decision_gap_says_perlu_keputusan(client):
     assert "Disetujui: Rp2.400.000" in hotel  # amounts do not change
 
 
+# --- item 6: compact sticky summary -------------------------------------------------------------
+def test_sticky_summary_is_one_line_and_the_rest_scrolls(client):
+    page = client.get(f"/admin/claims/{HERO}").text
+    section = page.split('<section class="claim-summary"', 1)[1].split("</section>", 1)[0]
+    line, rest = section.split('<div class="summary-rest">', 1)
+    line_text = visible_text(line)
+    assert HERO in line_text and "Disetujui" in line_text and "tertunda" in line_text
+    assert "Selidiki dengan agent" in line_text
+    assert "Mesin aturan" not in line_text and web.store.get_claim(HERO)["purpose"] not in line_text
+    assert web.store.get_claim(HERO)["purpose"] in rest
+    assert "Bukti terlampir" in rest and "id='needs-you'" in rest
+    css = (web.STATIC_DIR / "app.css").read_text(encoding="utf-8")
+    assert ".summary-line" in css and "--header-h" in css and "scroll-margin-top" in css
+
+
 # --- item 4: Indonesian findings ---------------------------------------------------------------
 def visible_text(html: str) -> str:
     return re.sub(r"<[^>]+>", " ", html)  # tags (and so their title attributes) are dropped
