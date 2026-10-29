@@ -225,7 +225,7 @@ def draft_page(did: str, request: Request):
     errs = "".join(f"<p class=err>{e(x)}</p>" for x in d["errors"])
     body = f"""<p>{e(h['purpose'])} &middot; {e(h['destination'])} {core.date_html(h['start_date'])} &rarr; {core.date_html(h['end_date'])}</p>
 <p class="note">{e(label('ui_check_note').format(flag=label('self_declared')))}</p>{errs}
-<form method="post" action="/employee/drafts/{e(did)}"><div class="cards">{cards_html}</div>
+<form method="post" action="/employee/drafts/{e(did)}"><div class="cards" id="draft-cards" tabindex="-1">{cards_html}</div>
 <p><button name=action value="save">{e(label('ui_save_changes'))}</button> <button name=action value="add">{e(label('ui_add_item'))}</button>
 <button name=action value="submit" style="font-weight:bold">{e(label('ui_submit_claim'))}</button></p></form>"""
     return core.page(label("ui_check_title"), body)
@@ -441,7 +441,8 @@ async def update_draft(did: str, request: Request):
         if _validate(d):
             cid = _submit(d)
             return RedirectResponse(f"/employee/claims/{cid}?msg=Submitted", status_code=303)
-    return RedirectResponse(f"/employee/drafts/{did}", status_code=303)
+    target = f"/employee/drafts/{did}" + ("#draft-cards" if verb in ("add", "delete") else "")
+    return RedirectResponse(target, status_code=303)
 
 
 AWAITING = "Menunggu verifikasi finance"

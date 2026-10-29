@@ -401,7 +401,7 @@ def login_page(next: str = "", error: str = "", email: str = ""):
 
 
 def login_card(target: str, error: str, email: str, status_code: int) -> HTMLResponse:
-    err = f'<p class="login-error" id="login-error" role="alert">{e(error)}</p>' if error else ""
+    err = f'<p class="login-error" id="login-error" role="alert" tabindex="-1">{e(error)}</p>' if error else ""
     show, hide = e(label("show_password")), e(label("hide_password"))
     html = f"""<!doctype html><html lang="id"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>{e(label("sign_in"))} · Reimburse Buddy</title>
@@ -424,6 +424,7 @@ def login_card(target: str, error: str, email: str, status_code: int) -> HTMLRes
 var pw=document.getElementById("password"),tg=document.getElementById("toggle-password");
 tg.addEventListener("click",function(){{var on=pw.type==="password";pw.type=on?"text":"password";
 tg.textContent=on?"{hide}":"{show}";tg.setAttribute("aria-pressed",on?"true":"false");}});
+var er=document.getElementById("login-error");if(er)er.focus();
 </script></body></html>"""
     return HTMLResponse(html, status_code=status_code)
 
@@ -815,11 +816,12 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
                        f"<button name=verdict value=reject>{e(label('ui_reject_evidence'))}</button></form>") + dec
         if self_blocked:  # UX only: the server refuses these requests anyway
             dec = f"<div class=note id='self-approval'>{e(label('self_approval_note'))}</div>"
-        dec += manager_cell(cid, it.item_id, emp)
+        if decision_gaps or document_only:  # one action row, only when the item needs a decision
+            dec += manager_cell(cid, it.item_id, emp)
         evidence = (ui.chips(list(it.evidence_used), tone="ok") if it.evidence_used
                     else f"<span class=note>{e(label('ui_none_attached'))}</span>")
         item_cards.append(
-            f"<article class='item-card' id='item-{e(it.item_id)}'>"
+            f"<article class='item-card' id='item-{e(it.item_id)}' tabindex='-1'>"
             f"<div class='item-head'><div><span class='item-title'>{e(label(it.category))}</span>"
             f"<div class='note'>{e(src['description'])}</div></div>"
             f"<div class='amount'>{e(rupiah(it.claimed))}</div></div>"
@@ -897,7 +899,7 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
 <section class="claim-summary" id="claim-summary" aria-label="{e(label('ui_claim_summary'))}">
 <div class="summary-body">
 <h2>{e(label('ui_rule_engine').format(decision=label(c.decision.value)))}</h2>
-<p><span title="{e(emp)}">{e(person(store, emp))}</span> &middot; {e(claim['purpose'])} &middot; {e(trip['destination'])}
+<p class="note"><span class="tag">{e(cid)}</span> <span title="{e(emp)}">{e(person(store, emp))}</span> &middot; {e(claim['purpose'])} &middot; {e(trip['destination'])}
 {date_html(trip['start_date'])} &rarr; {date_html(trip['end_date'])} &middot; {e(label('ui_status'))} {status_tag(claim['status'])}</p>
 <p>{engine_amounts}</p>
 <p class="note">{e(label('ui_engine_note'))} {e(label('ui_evidence_attached').format(evidence=', '.join(r['evidence']) or label('ui_none_attached')))}</p>
@@ -1004,7 +1006,7 @@ def decide(cid: str, request: Request, item_id: str = Form(...), choice: str = F
     except ValueError as ex:
         review(cid)["decisions"].pop(item_id, None)
         raise HTTPException(400, str(ex))
-    return RedirectResponse(f"/admin/claims/{cid}", status_code=303)
+    return RedirectResponse(f"/admin/claims/{cid}#item-{item_id}", status_code=303)
 
 
 @app.post("/admin/claims/{cid}/message")
@@ -1243,7 +1245,7 @@ def investigation_page(rid: str, request: Request):
             f"<option value=reject>{e(label('reject'))}</option></select></td></tr>" for i in q.get("items", []))
         pending_html += f"""<div class="box" id=question><h2>{e(label('ui_agent_asking'))}</h2><pre>{e(q['text'])}</pre>
 <form method=post action="/admin/investigations/{e(rid)}/reply"><input type=hidden name=question_id value="{e(q['question_id'])}">
-<div class="table-wrap"><table>{sel}</table></div><p><label>{e(label('ui_reply'))} <textarea name=reply aria-label="{e(label('ui_reply'))}" rows=3 cols=60 placeholder="{e(label('ui_reply_placeholder'))}"></textarea></label></p>
+<div class="table-wrap"><table><caption class=visually-hidden>{e(label('ui_item_decisions'))}</caption><tr><th scope=col>{e(label('ui_item'))}</th><th scope=col>{e(label('ui_missing'))}</th><th scope=col>{e(label('ui_reviewer_decision'))}</th></tr>{sel}</table></div><p><label>{e(label('ui_reply'))} <textarea name=reply aria-label="{e(label('ui_reply'))}" rows=3 cols=60 placeholder="{e(label('ui_reply_placeholder'))}"></textarea></label></p>
 <p class=note>{e(label('ui_decisions_note'))}</p>
 <button>{e(label('ui_send_resume'))}</button></form></div>"""
     final = next((x for x in evs if x["type"] == "final"), None)
