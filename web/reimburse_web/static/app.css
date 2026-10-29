@@ -1813,3 +1813,20 @@ a.tag {
   font-size: 12px;
   font-weight: 700;
 }
+
+.ask-form {
+  display: grid;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0;
+}
+
+.ask-form label {
+  display: grid;
+  gap: var(--sp-1);
+}
+
+.ask-form textarea,
+.ask-form input {
+  width: 100%;
+  font: inherit;
+}

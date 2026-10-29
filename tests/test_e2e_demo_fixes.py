@@ -169,6 +169,25 @@ def test_sticky_summary_is_one_line_and_the_rest_scrolls(client):
     assert ".summary-line" in css and "--header-h" in css and "scroll-margin-top" in css
 
 
+# --- item 7: ask for the document where the gap is ----------------------------------------------
+def test_item_with_a_document_gap_has_a_prefilled_request_form(client):
+    page = client.get(f"/admin/claims/{HERO}").text
+    taxi = page.split("id='item-IT-5'", 1)[1].split("</article>", 1)[0]
+    assert "Minta dokumen ke karyawan" in taxi and f"action='/admin/claims/{HERO}/message'" in taxi
+    assert "Klaim CLM-2026-0110: dokumen kurang" in taxi
+    assert "Mohon kirim struk untuk Taksi (IT-5) tanggal 3 Okt 2026." in taxi
+    hotel = page.split("id='item-IT-3'", 1)[1].split("</article>", 1)[0]
+    assert "Minta dokumen" not in hotel  # only a decision is open there
+    assert "struk taksi tanggal 3 Okt (IT-5)" not in page.split('id="manual"', 1)[1]  # no hero placeholder
+
+
+def test_sending_the_request_flashes_the_employee_name(client):
+    r = client.post(f"/admin/claims/{HERO}/message", data={"subject": "s", "body": "Mohon kirim struk."})
+    assert "Pesan terkirim ke Rina Wulandari." in r.text
+    assert "OUT-" not in r.text.split("<main", 1)[1].split("Pesan terkirim", 1)[0]
+    assert any(m["to"] == "EMP-001" and m.get("claim_id") == HERO for m in web.store.outbox)
+
+
 # --- item 4: Indonesian findings ---------------------------------------------------------------
 def visible_text(html: str) -> str:
     return re.sub(r"<[^>]+>", " ", html)  # tags (and so their title attributes) are dropped

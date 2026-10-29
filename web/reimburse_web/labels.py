@@ -497,6 +497,12 @@ LABELS = {
     "prov_flight_no": "No. penerbangan",
     "prov_doc_type": "Jenis dokumen",
     "ui_needs_decision": "Perlu keputusan",
+    "ui_request_doc": "Minta dokumen ke karyawan",
+    "ui_request_doc_note": "Pesan masuk ke kotak keluar simulasi; tidak ada email sungguhan yang dikirim.",
+    "ui_request_doc_body": "Mohon kirim {documents} untuk {item} tanggal {date}.",
+    "ui_doc_name_receipt_missing": "struk",
+    "ui_doc_name_boarding_pass_missing": "boarding pass",
+    "ui_msg_sent_to": "Pesan terkirim ke {name}.",
 }
 
 

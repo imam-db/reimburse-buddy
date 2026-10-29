@@ -958,6 +958,20 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
             dec = f"<div class=note id='self-approval'>{e(label('self_approval_note'))}</div>"
         if decision_gaps or document_only:  # one action row, only when the item needs a decision
             dec += manager_cell(cid, it.item_id, emp)
+        ask = ""
+        open_docs = [g for g in it.gaps if g in DOCUMENT_GAPS]
+        if open_docs:  # ask the employee right where the gap is; finance edits the text before sending
+            docs = " dan ".join(label("ui_doc_name_" + g) for g in open_docs)
+            ask_body = label("ui_request_doc_body").format(
+                documents=docs, item=f"{label(it.category)} ({it.item_id})", date=fmt_date(src["date"]))
+            ask = ui.details(label("ui_request_doc"), (
+                f"<form method=post action='/admin/claims/{e(cid)}/message' class='ask-form'>"
+                f"<label>{e(label('ui_subject'))} <input name=subject aria-label='{e(label('ui_subject'))}' "
+                f"value='{e(label('ui_default_subject').format(cid=cid))}' required></label>"
+                f"<label>{e(label('ui_body'))} <textarea name=body rows=3 aria-label='{e(label('ui_body'))}' "
+                f"required>{e(ask_body)}</textarea></label>"
+                f"<button>{e(label('ui_send'))}</button></form>"
+                f"<p class='note'>{e(label('ui_request_doc_note'))}</p>"), id=f"ask-{it.item_id}")
         evidence = (evidence_chips(cid, list(it.evidence_used)) if it.evidence_used
                     else f"<span class=note>{e(label('ui_none_attached'))}</span>")
         item_cards.append(
@@ -970,7 +984,7 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
             f"<div class='chips'>{gaps}</div>"
             f"<p class='note'>{e(label('ui_evidence'))}: {evidence}</p>"
             + (f"<div class='btn-row'>{dec}</div>" if dec else "")
-            + "</article>")
+            + ask + "</article>")
     needs = [(it, [g for g in it.gaps if g in DECISION_GAPS]) for it in c.items
              if any(g in DECISION_GAPS for g in it.gaps) and not it.human_decision
              and it.item_id not in pending]
@@ -1033,7 +1047,7 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
 <h3>{e(label('ui_memos').format(destination=trip['destination']))}</h3>{ui.table(['ID', label('ui_signature'), label('ui_col_reason'), ''], memo_rows, caption=label('ui_memos').format(destination=trip['destination']), empty=label('ui_memos_empty'))}
 <h3>{e(label('ui_ask_employee'))}</h3><form method=post action="/admin/claims/{e(cid)}/message">
 <label>{e(label('ui_subject'))} <input name=subject aria-label="{e(label('ui_subject'))}" size=40 value="{e(label('ui_default_subject').format(cid=cid))}"></label>
-<label>{e(label('ui_body'))} <input name=body aria-label="{e(label('ui_body'))}" size=60 placeholder="Mohon kirim struk taksi tanggal 3 Okt (IT-5)." required></label>
+<label>{e(label('ui_body'))} <input name=body aria-label="{e(label('ui_body'))}" size=60 required></label>
 <button>{e(label('ui_send'))}</button></form>{f'<ul>{sent_rows}</ul>' if sent_rows else ''}"""
     body = f"""<p><a href="/admin">&larr; {e(label('ui_back_to_triage'))}</a></p>{ui.alert(msg, tone="success") if msg else ''}
 <section class="claim-summary" id="claim-summary" aria-label="{e(label('ui_claim_summary'))}">
@@ -1156,7 +1170,7 @@ def decide(cid: str, request: Request, item_id: str = Form(...), choice: str = F
 def message(cid: str, subject: str = Form(...), body: str = Form(...)):
     claim = store.get_claim(cid)
     res = store.send_message(claim["employee_id"], body, subject, cid)
-    msg = label("ui_msg_sent").format(ref=res["message_id"], replies=res["replies_received"])
+    msg = label("ui_msg_sent_to").format(name=person(store, claim["employee_id"]))  # simulated outbox only
     return RedirectResponse(f"/admin/claims/{cid}?msg={quote(msg, safe='')}", status_code=303)
 
 
