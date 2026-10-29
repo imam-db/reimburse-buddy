@@ -220,11 +220,12 @@ def _nav_link(href: str, text: str, path: str = "") -> str:
 def nav_html() -> str:
     """The nav for the signed-in role (docs/adr/0001-three-roles.md); the full dev nav when nobody is signed in.
 
-    Below 720 px the links live in a details/summary menu; the account block stays visible. The nav
-    markup itself stays a bare `<nav>` element (tests read it by that tag)."""
+    Below 720 px the links live behind a CSS-only checkbox disclosure; the account block stays visible.
+    The nav markup itself stays a bare `<nav>` element (tests read it by that tag)."""
     path = CURRENT_PATH.get()
     cur = auth.current_session()
     account = ""
+    home = "/"
     if not cur:
         links = (_nav_link("/", label("ui_nav_home"), path)
                  + _nav_link("/employee", label("ui_nav_employee"), path)
@@ -234,12 +235,15 @@ def nav_html() -> str:
     else:
         emp, role = cur
         if users.is_finance(role):
+            home = "/admin"
             links = (_nav_link("/admin", label("ui_nav_triage"), path)
                      + _nav_link("/admin/intake", label("ui_nav_intake"), path)
                      + _pending_nav(path) + _budget_nav())
         elif users.is_manager(role):
+            home = "/manager"
             links = _nav_link("/manager", label("ui_nav_approvals"), path)
         else:
+            home = "/employee"
             links = (_nav_link("/employee", label("ui_nav_my_claims"), path)
                      + _nav_link("/employee/new", label("ui_nav_submit_claim"), path))
         account = (f'<div class="nav-account">'
@@ -247,9 +251,11 @@ def nav_html() -> str:
                    f'<b>{e(auth.reviewer_name(emp))}</b> ({e(users.ROLE_LABELS.get(role, role))})</span>'
                    f'<form method="post" action="/logout">'
                    f'<button type="submit" id="logout">{e(label("ui_nav_sign_out"))}</button></form></div>')
-    return (f'<nav><span class="brand">reimburse-buddy</span>'
-            f'<details class="nav-disclosure"><summary>{e(label("ui_nav_menu"))}</summary>'
-            f'<div class="nav-links">{links}</div></details>{account}</nav>')
+    return (f'<nav><a class="brand" href="{e(home)}">reimburse-buddy</a>'
+            f'<input type="checkbox" id="nav-toggle" class="nav-toggle">'
+            f'<label for="nav-toggle" class="nav-toggle-label">'
+            f'{e(label("ui_nav_menu"))} <span aria-hidden="true">▾</span></label>'
+            f'<div class="nav-links">{links}</div>{account}</nav>')
 
 
 def _budget_nav() -> str:
@@ -695,7 +701,7 @@ def admin(batch: str = BATCH, msg: str = ""):
     summary = label("ui_triage_summary").format(claims=t["claims"], cleared=len(cleared),
                                                 exceptions=len(entries))
     body = f"""{ui.alert(msg, tone="success") if msg else ''}
-<form method="get"><label>{e(label('ui_batch'))} <select name="batch" aria-label="Pilih batch" onchange="this.form.submit()">{options([(BATCH, BATCH), (OWN_BATCH, OWN_BATCH), (WEB_BATCH, WEB_BATCH)], batch)}</select></label></form>
+<form method="get" class="filter"><label>{e(label('ui_batch'))} <select name="batch" aria-label="Pilih batch" onchange="this.form.submit()">{options([(BATCH, BATCH), (OWN_BATCH, OWN_BATCH), (WEB_BATCH, WEB_BATCH)], batch)}</select></label></form>
 <h2 class="visually-hidden">{e(summary)}</h2>
 {ui.stats([ui.stat(label('ui_claims'), t['claims']), ui.stat(label('ui_cleared'), len(cleared)),
            ui.stat(label('ui_exceptions'), len(entries), tone='warn' if entries else ''),
@@ -790,7 +796,7 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
         if document_only and not pend:
             dec = (f"<form method=post action='/admin/claims/{e(cid)}/decide' style='display:inline'>"
                    f"<input type=hidden name=item_id value='{e(it.item_id)}'>"
-                   f"<button name=choice value='reject'{' disabled' if it.human_decision == 'reject' else ''}>"
+                   f"<button name=choice value='reject'{' disabled' if it.human_decision == 'reject' else ''} class='btn quiet-danger'>"
                    f"{e(label('ui_action_reject'))}</button></form>"
                    f"<div class=note>{e(label('ui_needs_document').format(documents=', '.join(label(g) for g in it.gaps)))}</div>")
             if it.human_decision:
@@ -798,8 +804,12 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
         elif (decision_gaps or it.human_decision) and not pend:
             dec = (f"<form method=post action='/admin/claims/{e(cid)}/decide' style='display:inline'>"
                    f"<input type=hidden name=item_id value='{e(it.item_id)}'>"
-                   + "".join(f"<button name=choice value='{ch}'{' disabled' if it.human_decision == ch else ''}>{e(label(ch))}</button> "
-                             for ch in CHOICES) + "</form>")
+                   + "".join(
+                       f"<button name=choice value='{ch}'"
+                       + (" disabled" if it.human_decision == ch else "")
+                       + (" class='btn quiet-danger'" if ch == "reject" else "")
+                       + f">{e(label(ch))}</button> "
+                       for ch in CHOICES) + "</form>")
             if it.human_decision:
                 dec += f"<div class=note>{e(label('ui_reviewer_said').format(decision=label(it.human_decision)))}</div>"
         elif it.gaps and not pend:

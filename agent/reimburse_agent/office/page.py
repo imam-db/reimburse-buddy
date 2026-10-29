@@ -194,8 +194,10 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
                 + field("body", a["what"].get("body", ""), pre=True) + "</td></tr>"]
         if a.get("when"):
             w = a["when"]
-            loc = "".join(f"<tr><td>{_person(directory, p)}</td><td><b>{e(t)}</b></td></tr>"
-                          for p, t in w["local"].items())
+            loc = "".join(
+                f"<tr><td>{_person(directory, p)}</td><td><b>"
+                f"{e(_id_time(rules, R.parse_iso(w['start']), directory.get(p).tz) if directory.get(p) else w['local'][p])}"
+                f"</b></td></tr>" for p in w["local"])
             alts = ", ".join(R.fmt_local(rules, R.parse_iso(x), directory.get(plan["requester"]).tz)
                              for x in w.get("alternatives", []))
             req = directory.get(plan["requester"])
@@ -243,6 +245,7 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
                    f"<button type=button id='approve-all'>Setujui semua</button>"
                    f"<button type=button id='reject-all'>Tolak semua</button>"
                    f"<button type=submit class='primary'>Kirim keputusan</button></div></form>")
+        out.append("<div class='submit-spacer' aria-hidden='true'></div>")
         out.append("""<script>(function(){var f=document.getElementById('plan-form'),c=document.getElementById('decision-counts');
 if(!f||!c)return;function refresh(){var a=f.querySelectorAll("input[value=approve]:checked").length,
 r=f.querySelectorAll("input[value=reject]:checked").length;c.textContent=a+' disetujui, '+r+' ditolak';}

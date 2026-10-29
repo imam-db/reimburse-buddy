@@ -88,8 +88,8 @@ def test_handbook_example_1_clarify_answer_then_plan(client):
     page = c.get(f"/admin/plans/{run_id}")
     assert "EMP-202" in page.text and "Budi Hartono" in page.text
     # The resolved "Jumat siang" slot with the time-zone label of each participant.
-    assert "Fri 30 Oct 2026 13:00 WIB" in page.text
-    assert "Fri 30 Oct 2026 15:00 WIT" in page.text
+    assert "Jumat, 30 Okt 13.00 WIB" in page.text
+    assert "Jumat, 30 Okt 15.00 WIT" in page.text
     assert "Setujui" in page.text
 
     evs = events(run_id)

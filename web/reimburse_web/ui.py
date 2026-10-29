@@ -83,7 +83,7 @@ def table(headers: list[str], rows: list[list[str]], *, caption: str = "", num: 
 
     `rows` holds markup cells: the caller escapes. `num` lists the column indexes that hold money
     or counts and should be right-aligned. `row_ids` puts a stable DOM anchor on each row."""
-    caption_html = f"<caption{' class=visually-hidden' if not caption else ''}>{e(caption)}</caption>" if caption else ""
+    caption_html = f'<caption class="visually-hidden">{e(caption)}</caption>' if caption else ""
     if not rows:
         if empty:
             return empty_state(empty)
@@ -98,7 +98,7 @@ def table(headers: list[str], rows: list[list[str]], *, caption: str = "", num: 
     for index, row in enumerate(rows):
         cells = "".join(
             f'<td{_attrs(data_label=headers[i] if i < len(headers) else "", cls="num" if i in num else None)}>'
-            f'{cell}</td>' for i, cell in enumerate(row))
+            f'<div class="cell">{cell}</div></td>' for i, cell in enumerate(row))
         rid = (row_ids or [])[index] if row_ids and index < len(row_ids) else ""
         body.append(f"<tr id='{e(rid)}'>{cells}</tr>" if rid else f"<tr>{cells}</tr>")
     classes = f"table {cls}".strip()

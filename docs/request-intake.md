@@ -106,7 +106,7 @@ change, now stated on the page instead of a silent "decisions saved".
 ## Time and time zones
 
 The plan page shows the resolved slot produced by the operating-rules tool and the local time of every
-participant, for example `Fri 30 Oct 2026 13:00 WIB` for the requester and `Fri 30 Oct 2026 15:00 WIT`
+participant, for example `Jumat, 30 Okt 13.00 WIB` for the requester and `Jumat, 30 Okt 15.00 WIT`
 for an attendee in Jayapura. The slot is computed from the frozen `run_started_at`, so a resume never
 recomputes or shifts it.
 

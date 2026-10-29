@@ -11,6 +11,7 @@
   --muted: #5b6573;
   --line: #dfe3ea;
   --line-strong: #c3cad5;
+  --control-line: #8a93a3;
   --surface: #ffffff;
   --surface-2: #f1f3f7;
   --bg: #f5f6f9;
@@ -75,19 +76,27 @@ h3 {
 }
 
 h1 {
-  font-size: 1.6rem;
+  font-size: 1.75rem;
 }
 
 h2 {
-  font-size: 1.15rem;
+  font-size: 1.25rem;
 }
 
 h3 {
-  font-size: 1rem;
+  font-size: 1.0625rem;
 }
 
 p {
   margin: 0 0 var(--sp-3);
+}
+
+main p {
+  max-width: 72ch;
+}
+
+time {
+  white-space: nowrap;
 }
 
 a {
@@ -163,15 +172,23 @@ nav {
 }
 
 nav .brand {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   font-weight: 700;
   letter-spacing: -0.01em;
   white-space: nowrap;
+  color: var(--ink);
+  text-decoration: none;
 }
 
 nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   color: var(--ink);
   text-decoration: none;
-  padding: 6px 8px;
+  padding: 0 10px;
   border-radius: var(--r-sm);
 }
 
@@ -185,26 +202,25 @@ nav a[aria-current="page"] {
   font-weight: 600;
 }
 
-.nav-disclosure {
-  flex: 1 1 auto;
-}
-
-.nav-disclosure > summary {
-  cursor: pointer;
-  padding: 6px 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-sm);
-  width: max-content;
-  list-style: none;
-}
-
-.nav-disclosure > summary::-webkit-details-marker {
+.nav-toggle {
   display: none;
 }
 
-.nav-disclosure > summary::after {
-  content: " ▾";
-  color: var(--muted);
+.nav-toggle-label {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 1px solid var(--control-line);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+#nav-toggle:focus-visible + .nav-toggle-label {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .nav-links {
@@ -227,30 +243,39 @@ nav a[aria-current="page"] {
 }
 
 .nav-account button {
-  min-height: 36px;
+  min-height: 44px;
   padding: 4px 12px;
   font-size: 0.9rem;
 }
 
-@media (min-width: 721px) {
-  .nav-disclosure > summary {
-    display: none;
-  }
-
-  .nav-disclosure > .nav-links {
-    display: flex;
-  }
-}
-
 @media (max-width: 720px) {
-  .nav-disclosure:not([open]) > .nav-links {
-    display: none;
+  .nav-toggle {
+    display: block;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
   }
 
-  .nav-disclosure > .nav-links {
+  .nav-toggle-label {
+    display: inline-flex;
+  }
+
+  .nav-links {
+    display: none;
     flex-direction: column;
     align-items: stretch;
+    flex-basis: 100%;
     padding-top: var(--sp-2);
+  }
+
+  #nav-toggle:checked ~ .nav-links {
+    display: flex;
   }
 
   .nav-account {
@@ -620,7 +645,7 @@ button,
   gap: 6px;
   min-height: 44px;
   padding: 8px 16px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--control-line);
   border-radius: var(--r-sm);
   background: var(--surface);
   color: var(--ink);
@@ -697,7 +722,7 @@ textarea {
   width: 100%;
   min-height: 44px;
   padding: 8px 12px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--control-line);
   border-radius: var(--r-sm);
   background: var(--surface);
   color: var(--ink);
@@ -738,6 +763,25 @@ textarea {
 .field.invalid select,
 .field.invalid textarea {
   border-color: var(--danger);
+}
+
+.filter {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-3);
+}
+
+.filter label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+}
+
+.filter select {
+  width: auto;
+  min-width: 180px;
 }
 
 /* --- tables ------------------------------------------------------------------ */
@@ -814,9 +858,10 @@ tbody tr:hover {
   }
 
   table.responsive td {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(88px, 36%) minmax(0, 1fr);
     gap: var(--sp-3);
+    align-items: start;
     border: 0;
     padding: 4px 0;
     text-align: left;
@@ -825,7 +870,6 @@ tbody tr:hover {
 
   table.responsive td::before {
     content: attr(data-label);
-    flex: 0 0 42%;
     color: var(--muted);
     font-size: 0.8rem;
     font-weight: 600;
@@ -833,16 +877,70 @@ tbody tr:hover {
     letter-spacing: 0.03em;
   }
 
+  table.responsive td > .cell {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    text-align: right;
+  }
+
+  table.responsive td[data-label=""] {
+    display: block;
+  }
+
   table.responsive td[data-label=""]::before {
     content: none;
   }
 
-  table.responsive td:empty {
+  table.responsive td[data-label=""] > .cell {
+    text-align: left;
+  }
+
+  table.responsive td > .cell:empty {
     display: none;
   }
 
   table.responsive td .chips {
     justify-content: flex-end;
+  }
+
+  /* The plan confirmation card holds a definition table and a nested per-person table. */
+  .card table:not(.responsive) tr,
+  .card table:not(.responsive) th[scope="row"],
+  .card table:not(.responsive) td {
+    display: block;
+    width: 100%;
+  }
+
+  .card table:not(.responsive) th[scope="row"],
+  .card table:not(.responsive) td {
+    border: 0;
+    padding: 2px 0;
+    background: none;
+  }
+
+  .card table:not(.responsive) th[scope="row"] {
+    color: var(--muted);
+    font-size: 0.8rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    white-space: normal;
+  }
+
+  .card table:not(.responsive) table tr {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--sp-3);
+  }
+
+  .card table:not(.responsive) table td {
+    display: block;
+    width: auto;
+    padding: 4px 0;
+  }
+
+  .card table:not(.responsive) table td:last-child {
+    text-align: right;
+    white-space: nowrap;
   }
 }
 
@@ -892,7 +990,7 @@ details > summary + * {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--control-line);
   background: var(--surface);
   font-size: 0.8rem;
   font-weight: 700;
@@ -920,7 +1018,7 @@ details > summary + * {
 
 .drop {
   display: block;
-  border: 2px dashed var(--line-strong);
+  border: 2px dashed var(--control-line);
   border-radius: var(--r-lg);
   padding: var(--sp-6) var(--sp-4);
   text-align: center;
@@ -1053,7 +1151,7 @@ details > summary + * {
   justify-content: center;
   min-height: 44px;
   padding: 8px 18px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--control-line);
   border-radius: var(--r-sm);
   font-size: 0.95rem;
   background: var(--surface);
@@ -1105,6 +1203,10 @@ details > summary + * {
   margin-right: auto;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+
+.submit-spacer {
+  height: 72px;
 }
 
 /* --- employee Q&A ------------------------------------------------------------ */
@@ -1232,6 +1334,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
     --muted: #a2abba;
     --line: #2b3240;
     --line-strong: #3d4657;
+    --control-line: #7d8aa0;
     --surface: #171c25;
     --surface-2: #1f2631;
     --bg: #0f1319;
