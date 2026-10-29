@@ -22,6 +22,8 @@ def _attrs(**items) -> str:
         if value is None or value is False:
             continue
         key = key.rstrip("_").replace("_", "-")
+        if key == "cls":
+            key = "class"
         if value is True:
             out.append(f" {key}")
         else:
@@ -75,11 +77,12 @@ def badge(text, tone: str = "", *, title: str = "", id: str = "") -> str:
 
 
 def table(headers: list[str], rows: list[list[str]], *, caption: str = "", num: tuple[int, ...] = (),
-          empty: str = "", id: str = "", cls: str = "responsive", head: bool = True) -> str:
+          empty: str = "", id: str = "", cls: str = "responsive", head: bool = True,
+          row_ids: list[str] | None = None) -> str:
     """A table with a hidden caption and `data-label` on every cell (stacked cards below 720 px).
 
     `rows` holds markup cells: the caller escapes. `num` lists the column indexes that hold money
-    or counts and should be right-aligned."""
+    or counts and should be right-aligned. `row_ids` puts a stable DOM anchor on each row."""
     caption_html = f"<caption{' class=visually-hidden' if not caption else ''}>{e(caption)}</caption>" if caption else ""
     if not rows:
         if empty:
@@ -92,13 +95,15 @@ def table(headers: list[str], rows: list[list[str]], *, caption: str = "", num: 
             for i, text in enumerate(headers))
         head_html = f"<thead><tr>{cells}</tr></thead>"
     body = []
-    for row in rows:
+    for index, row in enumerate(rows):
         cells = "".join(
             f'<td{_attrs(data_label=headers[i] if i < len(headers) else "", cls="num" if i in num else None)}>'
             f'{cell}</td>' for i, cell in enumerate(row))
-        body.append(f"<tr>{cells}</tr>")
+        rid = (row_ids or [])[index] if row_ids and index < len(row_ids) else ""
+        body.append(f"<tr id='{e(rid)}'>{cells}</tr>" if rid else f"<tr>{cells}</tr>")
     classes = f"table {cls}".strip()
-    return (f'<div class="table-wrap"><table{_attrs(id=id, cls=classes)}>{caption_html}{head_html}'
+    id_attr = f' id="{e(id)}"' if id else ""
+    return (f'<div class="table-wrap"><table{id_attr}{_attrs(cls=classes)}>{caption_html}{head_html}'
             f'<tbody>{"".join(body)}</tbody></table></div>')
 
 

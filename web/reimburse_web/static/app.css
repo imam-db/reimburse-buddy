@@ -432,6 +432,60 @@ main:focus {
   margin: 0 0 var(--sp-3);
 }
 
+.item-list {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  margin: 0 0 var(--sp-4);
+}
+
+.item-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--sp-4);
+  box-shadow: var(--shadow-sm);
+}
+
+.item-card .item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.item-card .amount {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.item-card form {
+  margin: 0;
+}
+
+.item-card .btn-row {
+  margin-top: auto;
+  padding-top: var(--sp-2);
+}
+
+.item-card details {
+  margin: 0;
+}
+
+.item-card .item-title {
+  font-weight: 600;
+}
+
+.item-card ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
 .alert {
   border: 1px solid var(--line);
   border-left: 4px solid var(--brand);

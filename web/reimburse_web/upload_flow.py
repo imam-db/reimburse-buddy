@@ -26,6 +26,7 @@ from reimburse_buddy.rules import check_claim
 from . import app as core
 from . import auth
 from . import plans  # noqa: F401  # puts agent/ on sys.path
+from . import ui
 from .labels import label
 from reimburse_agent.qa.tools import UNDER_REVIEW, is_sensitive_item  # noqa: E402  # same masking as Q&A
 from reimburse_buddy.models import to_jsonable  # noqa: E402
@@ -465,7 +466,7 @@ def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: i
             if a.get("claim_id") == cid and a.get("item_id"):
                 files_by_item.setdefault(a["item_id"], []).append(a["name"])
     pending = core.pending_items(cid)
-    rows = ""
+    rows: list[list[str]] = []
     for it, res in zip(claim["items"], chk.items):
         have = list(dict.fromkeys(files_by_item.get(it["id"], [])))
         missing = list(dict.fromkeys(REVIEWING if str(g) in B_ONLY else label(str(g)) for g in res.gaps))
@@ -479,17 +480,20 @@ def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: i
             status, cls = "! " + label("ui_needs_action") + ": " + ", ".join(missing), "warn"
         else:
             status, cls = "✓ " + label("ui_status_done"), "ok"
-        add = (f"<form method=post action='/employee/claims/{e(cid)}/items/{e(it['id'])}/files' enctype='multipart/form-data'>"
+        add = (f"<details><summary>{e(label('ui_add_file'))}</summary>"
+               f"<form method=post action='/employee/claims/{e(cid)}/items/{e(it['id'])}/files' enctype='multipart/form-data'>"
                f"<input type=file name=file aria-label='Berkas bukti untuk {e(it['id'])}' accept='.pdf,.png,.jpg,.jpeg' required> "
-               f"<button>{e(label('ui_add_file'))}</button></form>")
-        rows += (f"<tr><td>{e(label(it['category']))}<div class=note>{e(it['description'])}</div></td><td>{e(it['date'])}</td>"
-                 f"<td class=num>{e(rupiah(res.claimed))}</td><td>{e(', '.join(have)) or '<span class=note>' + e(label('none')) + '</span>'}</td>"
-                 f"<td><span class='tag {cls}'>{e(status)}</span></td><td>{add}</td></tr>")
+               f"<button>{e(label('ui_add_file'))}</button></form></details>")
+        files_cell = (ui.chips(have, tone="ok") if have
+                      else f"<span class=note>{e(label('none'))}</span>")
+        rows.append([f"{e(label(it['category']))}<div class=note>{e(it['description'])}</div>", e(it["date"]),
+                     e(rupiah(res.claimed)), files_cell, f"<span class='tag {cls}'>{e(status)}</span>", add])
     body = f"""<p><a href="/employee">&larr; {e(label('ui_my_claims'))}</a></p>
-{f'<p class="tag ok">{e(label("ui_forwarded_note").format(flash=core.flash_text(msg), mailbox=core.MAILBOX))}</p>' if msg else ''}
+{ui.alert(label("ui_forwarded_note").format(flash=core.flash_text(msg), mailbox=core.MAILBOX), tone="success") if msg else ''}
 <p>{e(claim['purpose'])} &middot; {e(claim['trip']['destination'])} {e(claim['trip']['start_date'])} &rarr;
-{e(claim['trip']['end_date'])} &middot; status {core.status_tag(claim['status'])}</p>
-<div class="table-wrap"><table><tr><th>{e(label('ui_col_item'))}</th><th>{e(label('ui_col_date'))}</th><th class=num>{e(label('ui_col_claimed'))}</th><th>{e(label('ui_col_files'))}</th><th>{e(label('ui_col_evidence'))}</th><th></th></tr>{rows}</table></div>
+{e(claim['trip']['end_date'])} &middot; {e(label('ui_status'))} {core.status_tag(claim['status'])}</p>
+{ui.table([label('ui_col_item'), label('ui_col_date'), label('ui_col_claimed'), label('ui_col_files'),
+           label('ui_col_evidence'), ''], rows, num=(2,), caption=label('ui_claim'))}
 <p class="note">{e(label('ui_finance_note'))}</p>"""
     return core.page(f"{label('ui_claim')} {cid}", qa_top + body + qa_box)
 

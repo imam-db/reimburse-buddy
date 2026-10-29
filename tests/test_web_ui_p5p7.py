@@ -259,34 +259,55 @@ def test_progress_box_maps_steps_and_counts_seconds(client, monkeypatch, tmp_pat
 
 
 # --- P7 triage ----------------------------------------------------------------
-ROW = re.compile(r"<tr><td><a href='/admin/claims/(CLM-[^']+)'.*?</tr>", re.S)
+CARD = re.compile(r'<article class="item-card" id="exception-(CLM-[^"]+)" data-held="(\d+)"(.*?)</article>', re.S)
 
 
-def _exception_rows(html: str) -> list[tuple[str, str]]:
-    section = html.split("<h3>Pengecualian</h3>", 1)[1].split("</table>", 1)[0]
-    return [(m.group(1), m.group(0)) for m in ROW.finditer(section)]
+def _exception_cards(html: str) -> list[tuple[str, int, str]]:
+    return [(m.group(1), int(m.group(2)), m.group(0)) for m in CARD.finditer(html)]
 
 
 def test_triage_exceptions_sorted_by_held_money_and_show_engine_amounts(client):
     html = client.get("/admin").text
-    rows = _exception_rows(html)
-    assert "Uang tertahan" in html and "Yang kurang" in html
-    ids = [cid for cid, _ in rows]
+    cards = _exception_cards(html)
+    assert "Uang tertahan" in html and "Pengecualian" in html
+    ids = [cid for cid, _, _ in cards]
     assert ids == [HERO, "CLM-2026-0101", "CLM-2026-0104"]  # 2.05m, 1.45m, 0.57m held
 
     held = {cid: web.run_check(cid).total_pending for cid in ids}
-    assert ids == sorted(ids, key=lambda cid: held[cid], reverse=True)
+    assert [value for _, value, _ in cards] == [int(held[cid]) for cid in ids]
 
     from reimburse_buddy.models import rupiah
 
-    for cid, row in rows:
-        shown = re.search(r"<td class=num>(Rp[^<]+)</td>", row).group(1)
+    for cid, _, card in cards:
+        shown = re.search(r'<div class="amount">(Rp[^<]+)</div>', card).group(1)
         assert shown == rupiah(held[cid]), cid
-        assert f'action="/admin/claims/{cid}/investigate"' in row
-        assert "Selidiki dengan agent" in row
+        assert f'action="/admin/claims/{cid}/investigate"' in card
+        assert "Selidiki dengan agent" in card
 
 
 def test_triage_keeps_counts_and_reset(client):
     html = client.get("/admin").text
     assert "10 klaim, 7 bersih, 3 pengecualian" in html
     assert 'action="/admin/reset"' in html
+
+
+# --- P2 responsive lists -------------------------------------------------------
+def test_every_data_table_cell_has_a_label_for_the_stacked_view(client):
+    for url in ("/employee", "/admin", f"/admin/claims/{HERO}", f"/admin/claims/{HERO}/audit"):
+        html = client.get(url).text
+        missing = re.findall(r"<td(?![^>]*data-label=)[^>]*>", html)
+        assert missing == [], (url, missing[:3])
+
+
+def test_triage_summary_is_stats_and_exceptions_are_cards(client):
+    html = client.get("/admin").text
+    assert 'id="triage-stats"' in html and html.count('class="stat"') == 4
+    assert 'class="item-card" id="exception-' in html
+
+
+def test_employee_claim_has_one_styled_file_control_per_item(client):
+    html = client.get(f"/employee/claims/{HERO}").text
+    items = web.store.get_claim(HERO)["items"]
+    assert html.count("<details><summary>Tambah berkas</summary>") == len(items)
+    for chunk in html.split("<details><summary>Tambah berkas</summary>")[1:]:
+        assert "type=file" in chunk.split("</details>", 1)[0]

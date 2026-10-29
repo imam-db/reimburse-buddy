@@ -469,25 +469,30 @@ def employee_page(request: Request, msg: str = ""):
         return page(label("ui_portal_title"), auth.sign_in_notice())
     me = store.get_employee(emp)
     claims = [c for c in store.claims if c["employee_id"] == emp]
-    rows = "".join(
-        f"<tr><td><a href='/employee/claims/{e(c['id'])}'>{e(c['id'])}</a></td><td>{e(c['purpose'])}</td><td>{e(c['trip']['destination'])} "
-        f"{e(c['trip']['start_date'])} &rarr; {e(c['trip']['end_date'])}</td>"
-        f"<td class=num>{e(rupiah(sum(Decimal(i['amount']) for i in c['items'])))}</td><td>{status_tag(c['status'])}</td></tr>"
-        for c in claims)
+    rows = [[f"<a href='/employee/claims/{e(c['id'])}'>{e(c['id'])}</a>", e(c["purpose"]),
+             f"{e(c['trip']['destination'])} {e(c['trip']['start_date'])} &rarr; {e(c['trip']['end_date'])}",
+             e(rupiah(sum(Decimal(i["amount"]) for i in c["items"]))), status_tag(c["status"])]
+            for c in claims]
     inbox = [m for m in store.outbox if m["to"] == emp]
-    msgs = "".join(f"<tr><td>{e(m['claim_id'])}</td><td>{e(m['subject'])}</td><td>{e(m['body'])}</td></tr>"
-                   for m in inbox) or ""
+    msgs = [[e(m["claim_id"]), e(m["subject"]), e(m["body"])] for m in inbox]
     fwd = [m for m in store.inbox if m.get("owner_id") == emp]
-    fwd_rows = "".join(f"<tr><td>{e(m['date'])}</td><td>{e(m['subject'])}</td>"
-                       f"<td>{e(', '.join(a['name'] for a in m.get('attachments', [])))}</td></tr>" for m in fwd)
+    fwd_rows = [[e(m["date"]), e(m["subject"]),
+                 e(", ".join(a["name"] for a in m.get("attachments", [])))] for m in fwd]
     body = f"""
-{f'<p class="tag ok">{e(flash_text(msg))}</p>' if msg else ''}
-<h2>{e(label('ui_my_claims'))}</h2><div class="table-wrap"><table><tr><th>{e(label('ui_col_id'))}</th><th>{e(label('ui_col_purpose'))}</th><th>{e(label('ui_col_trip'))}</th><th class=num>{e(label('ui_col_claimed'))}</th><th>{e(label('ui_col_status'))}</th></tr>{rows}</table></div>
+{ui.alert(flash_text(msg), tone="success") if msg else ''}
+<h2>{e(label('ui_my_claims'))}</h2>
+{ui.table([label('ui_col_id'), label('ui_col_purpose'), label('ui_col_trip'), label('ui_col_claimed'),
+           label('ui_col_status')], rows, num=(3,), caption=label('ui_my_claims'),
+          empty=label('ui_no_claims'))}
 {portal_box(request)}
-<h2>{e(label('ui_messages_from_finance'))}</h2>{'<div class="table-wrap"><table><tr><th>' + e(label('ui_col_claim')) + '</th><th>' + e(label('ui_col_subject')) + '</th><th>' + e(label('ui_col_body')) + '</th></tr>' + msgs + '</table></div>' if msgs else '<p class=note>' + e(label('ui_no_messages')) + '</p>'}
+<h2>{e(label('ui_messages_from_finance'))}</h2>
+{ui.table([label('ui_col_claim'), label('ui_col_subject'), label('ui_col_body')], msgs,
+          caption=label('ui_messages_from_finance'), empty=label('ui_no_messages'))}
 <div class="box"><h2>{e(label('ui_new_claim'))}</h2><p>{e(label('ui_new_claim_hint'))}</p>
-<p><a class="btn" href="/employee/new">{e(label('ui_start_new_claim'))}</a></p></div>
-<h2>{e(label('ui_forwarded_mailbox'))}</h2><div class="table-wrap"><table><tr><th>{e(label('ui_col_date'))}</th><th>{e(label('ui_col_subject'))}</th><th>{e(label('ui_col_attachments'))}</th></tr>{fwd_rows}</table></div>
+<p><a class="btn primary" href="/employee/new">{e(label('ui_start_new_claim'))}</a></p></div>
+<h2>{e(label('ui_forwarded_mailbox'))}</h2>
+{ui.table([label('ui_col_date'), label('ui_col_subject'), label('ui_col_attachments')], fwd_rows,
+          caption=label('ui_forwarded_mailbox'), empty=label('ui_no_forwarded'))}
 <p class="note">{e(label('ui_employee_footer'))} {e(me['name'])} &middot; {e(me['email'])}</p>"""
     return page(label("ui_portal_title"), body)
 
@@ -590,35 +595,48 @@ async def forward_evidence(request: Request, subject: str = Form(...), claim_id:
 @app.get("/admin", response_class=HTMLResponse)
 def admin(batch: str = BATCH, msg: str = ""):
     t = triage_claims(store, batch)
-    rows = []
-    for x in t["exceptions"]:
-        held = run_check(x["claim_id"]).total_pending
-        row = (f"<tr><td><a href='/admin/claims/{e(x['claim_id'])}'>{e(x['claim_id'])}</a></td>"
-               f"<td title='{e(x['employee_id'])}'>{e(person(store, x['employee_id']))}</td>"
-               f"<td class=num>{e(rupiah(held))}</td>"
-               f"<td>{''.join(gap_tag(g) for g in x['gaps'])}</td>"
-               f"<td>{e(', '.join(x['rejected_items']))}</td>"
-                f"<td><form method=post action=\"/admin/claims/{e(x['claim_id'])}/investigate\">"
-                f"<button>{e(label('ui_action_investigate'))}</button></form></td></tr>")
-        rows.append((held, row))
-    exc = "".join(row for _, row in sorted(rows, key=lambda r: r[0], reverse=True))
+    entries = [(run_check(x["claim_id"]).total_pending, x) for x in t["exceptions"]]
+    entries.sort(key=lambda entry: entry[0], reverse=True)  # held money, descending (P7)
+    held_total = sum((held for held, _ in entries), Decimal("0"))
+    cards = []
+    for held, x in entries:
+        gaps = "".join(gap_tag(g) for g in x["gaps"])
+        rejected = (f'<p class="note">{e(label("ui_rejected_items"))}: {e(", ".join(x["rejected_items"]))}</p>'
+                    if x["rejected_items"] else "")
+        cards.append(
+            f'<article class="item-card" id="exception-{e(x["claim_id"])}" data-held="{int(held)}">'
+            f'<div class="item-head"><a href="/admin/claims/{e(x["claim_id"])}">{e(x["claim_id"])}</a>'
+            f'<span class="note" title="{e(x["employee_id"])}">{e(person(store, x["employee_id"]))}</span></div>'
+            f'<div class="amount">{e(rupiah(held))}</div>'
+            f'<div class="chips">{gaps}</div>{rejected}'
+            f'<form method=post action="/admin/claims/{e(x["claim_id"])}/investigate">'
+            f'<button class="primary">{e(label("ui_action_investigate"))}</button></form></article>')
     cleared = t["auto_cleared"]
     hidden = "".join(f'<input type="hidden" name="claim_ids" value="{e(c)}">' for c in cleared)
-    others = "".join(f"<tr><td><a href='/admin/claims/{e(c['id'])}'>{e(c['id'])}</a></td>"
-                     f"<td title='{e(c['employee_id'])}'>{e(person(store, c['employee_id']))}</td>"
-                     f"<td>{e(c.get('batch', ''))}</td><td>{status_tag(c['status'])}</td></tr>" for c in store.claims)
+    others = [[f"<a href='/admin/claims/{e(c['id'])}'>{e(c['id'])}</a>",
+               f'<span title="{e(c["employee_id"])}">{e(person(store, c["employee_id"]))}</span>',
+               e(c.get("batch", "")), status_tag(c["status"])] for c in store.claims]
     est = t["time_saved_estimate"]
+    summary = label("ui_triage_summary").format(claims=t["claims"], cleared=len(cleared),
+                                                exceptions=len(entries))
     body = f"""{ui.alert(msg, tone="success") if msg else ''}
 <form method="get"><label>{e(label('ui_batch'))} <select name="batch" aria-label="Pilih batch" onchange="this.form.submit()">{options([(BATCH, BATCH), (OWN_BATCH, OWN_BATCH), (WEB_BATCH, WEB_BATCH)], batch)}</select></label></form>
-<div class="box"><h2>{e(label('ui_triage_summary').format(claims=t['claims'], cleared=len(cleared), exceptions=len(t['exceptions'])))}</h2>
-<p>{e(label('ui_time_saved'))}: {e(label('ui_minutes').format(n=est['minutes']))} <span class="tag warn">{e(label('ui_estimate'))}</span> <span class="note">{e(est['assumption'])}</span></p>
+<h2 class="visually-hidden">{e(summary)}</h2>
+{ui.stats([ui.stat(label('ui_claims'), t['claims']), ui.stat(label('ui_cleared'), len(cleared)),
+           ui.stat(label('ui_exceptions'), len(entries), tone='warn' if entries else ''),
+           ui.stat(label('ui_held_money'), rupiah(held_total), tone='warn' if held_total else '')],
+          id='triage-stats')}
+<div class="box"><p>{e(label('ui_time_saved'))}: {e(label('ui_minutes').format(n=est['minutes']))} <span class="tag warn">{e(label('ui_estimate'))}</span> <span class="note">{e(est['assumption'])}</span></p>
 <p class="note">{e(label('ui_triage_readonly'))}</p>
 <h3>{e(label('ui_cleared'))}</h3><p>{''.join(f'<span class=tag>{e(c)}</span>' for c in cleared) or '<span class=note>' + e(label('ui_cleared_none')) + '</span>'}</p>
 {f'''<form method="post" action="/admin/batch/approve"><input type="hidden" name="batch" value="{e(batch)}">{hidden}
 <label><input type="checkbox" name="reviewer_confirmed" value="true"> {e(label('ui_reviewed_approve').format(n=len(cleared)))}</label>
 <button type="submit">{e(label('ui_approve_cleared'))}</button></form>''' if cleared else ''}
-<h3>{e(label('ui_exceptions'))}</h3><div class="table-wrap"><table><tr><th>{e(label('ui_claims'))}</th><th>{e(label('ui_employee'))}</th><th class=num>{e(label('ui_held_money'))}</th><th>{e(label('ui_missing'))}</th><th>{e(label('ui_rejected_items'))}</th><th></th></tr>{exc}</table></div></div>
-<h2>{e(label('ui_all_claims'))}</h2><div class="table-wrap"><table><tr><th>{e(label('ui_claims'))}</th><th>{e(label('ui_employee'))}</th><th>{e(label('ui_batch'))}</th><th>{e(label('ui_status'))}</th></tr>{others}</table></div>
+<h3>{e(label('ui_exceptions'))}</h3>
+<div class="item-list" id="exceptions">{''.join(cards) or ui.empty_state(label('ui_exceptions_none'))}</div></div>
+<h2>{e(label('ui_all_claims'))}</h2>
+{ui.table([label('ui_claims'), label('ui_employee'), label('ui_batch'), label('ui_status')], others,
+          caption=label('ui_all_claims'))}
 {reset_form(label("ui_demo_reset"))}"""
     return page(label("ui_triage_title"), body)
 
@@ -684,7 +702,8 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
     r = review(cid)
     c = investigate(cid)
     pending = pending_items(cid)
-    item_rows = ""
+    item_rows: list[list[str]] = []
+    item_ids: list[str] = []
     for it in c.items:
         src = next(x for x in claim["items"] if x["id"] == it.item_id)
         finds = "<br>".join(f"<span class=tag title='{e(f.rule)}'>{e(label(f.rule))}</span> {e(f.message)}"
@@ -724,10 +743,13 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
         if self_blocked:  # UX only: the server refuses these requests anyway
             dec = f"<div class=note id='self-approval'>{e(label('self_approval_note'))}</div>"
         dec += manager_cell(cid, it.item_id, emp)
-        item_rows += (f"<tr id='item-{e(it.item_id)}'><td>{e(it.item_id)}</td>"
-                      f"<td>{e(label(it.category))}<div class=note>{e(src['description'])}</div></td>"
-                      f"<td class=num>{e(rupiah(it.claimed))}</td><td class=num>{e(rupiah(it.approvable))}</td>"
-                      f"<td>{status_cell}</td><td>{provenance_badges(src)}{finds}<div>{gaps}</div></td><td>{e(', '.join(it.evidence_used))}</td><td>{dec}</td></tr>")
+        item_ids.append(f"item-{it.item_id}")
+        item_rows.append([
+            e(it.item_id),
+            f"{e(label(it.category))}<div class=note>{e(src['description'])}</div>",
+            e(rupiah(it.claimed)), e(rupiah(it.approvable)), status_cell,
+            f"{provenance_badges(src)}{finds}<div>{gaps}</div>",
+            e(", ".join(it.evidence_used)), dec])
     needs = [(it, [g for g in it.gaps if g in DECISION_GAPS]) for it in c.items
              if any(g in DECISION_GAPS for g in it.gaps) and not it.human_decision
              and it.item_id not in pending]
@@ -755,14 +777,14 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
                 f"<input type=hidden name=evidence_id value='{e(eid)}'><input type=hidden name=q value='{e(q)}'><button>{e(label('ui_attach'))}</button></form>")
 
     hits = store.search_reimburse_mailbox(emp, q) if q else []
-    hit_rows = "".join(f"<tr><td>{e(h['id'])}</td><td>{e(h['date'])}</td><td>{e(h['subject'])}<div class=note>{e(h['snippet'])}</div></td>"
-                       f"<td>{e(', '.join(h['attachments']))}</td><td>{attach_btn(h['id'])}</td></tr>" for h in hits)
+    hit_rows = [[e(h["id"]), e(h["date"]), f"{e(h['subject'])}<div class=note>{e(h['snippet'])}</div>",
+                 e(", ".join(h["attachments"])), attach_btn(h["id"])] for h in hits]
     cal = store.get_calendar(emp, trip["start_date"], trip["end_date"])
-    cal_rows = "".join(f"<tr><td>{e(x['id'])}</td><td>{e(x['date'])} {e(x['start'])}-{e(x['end'])}</td><td>{e(x['title'])}</td>"
-                       f"<td>{e(x['location'])}</td><td>{attach_btn(x['id'])}</td></tr>" for x in cal)
+    cal_rows = [[e(x["id"]), f"{e(x['date'])} {e(x['start'])}-{e(x['end'])}", e(x["title"]),
+                 e(x["location"]), attach_btn(x["id"])] for x in cal]
     memos = store.find_approval_memo(emp, trip["destination"])
-    memo_rows = "".join(f"<tr><td>{e(m['id'])}</td><td>{SIGNED if m.get('signed') else UNSIGNED}</td>"
-                        f"<td>{e(m.get('reason', ''))}</td><td>{attach_btn(m['id'])}</td></tr>" for m in memos)
+    memo_rows = [[e(m["id"]), SIGNED if m.get("signed") else UNSIGNED, e(m.get("reason", "")),
+                  attach_btn(m["id"])] for m in memos]
     sent = [m for m in store.outbox if m.get("claim_id") == cid]
     sent_rows = "".join(f"<li>{e(m['id'])} {e(label('ui_to')).lower()} {e(m['to'])}: {e(m['subject'])}</li>" for m in sent)
     note = re.sub(r"\b[a-z]+(?:_[a-z]+)+\b", lambda m: label(m.group(0)),
@@ -786,16 +808,18 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
 <p>{label('ui_engine_amounts').format(approvable=rupiah(c.total_approvable), claimed=rupiah(c.total_claimed), pending=rupiah(c.total_pending))}</p>
 <p class="note">{e(label('ui_engine_note'))} {e(label('ui_evidence_attached').format(evidence=', '.join(r['evidence']) or label('ui_none_attached')))}</p>
 {needs_you}
-<div class="table-wrap"><table><tr><th>{e(label('ui_item'))}</th><th>{e(label('ui_category'))}</th><th class=num>{e(label('ui_claimed'))}</th><th class=num>{e(label('ui_approvable'))}</th><th>{e(label('ui_status'))}</th><th>{e(label('ui_findings'))}</th><th>{e(label('ui_evidence'))}</th><th>{e(label('ui_reviewer_decision'))}</th></tr>{item_rows}</table></div>
+{ui.table([label('ui_item'), label('ui_category'), label('ui_claimed'), label('ui_approvable'),
+           label('ui_status'), label('ui_findings'), label('ui_evidence'), label('ui_reviewer_decision')],
+          item_rows, num=(2, 3), caption=label('ui_claim_title').format(cid=cid), row_ids=item_ids)}
 {f'<h3>' + e(label('ui_evidence_review_log')) + f'</h3><ul>{log_rows}</ul>' if log_rows else ''}{f'<h3>' + e(label('ui_ignored_evidence')) + f'</h3><ul>{ignored}</ul>' if ignored else ''}{f'<h3>' + e(label('ui_warnings')) + f'</h3><ul>{warns}</ul>' if warns else ''}</div>
 <div class="box"><h2>{e(label('ui_investigate'))}</h2>
 <form method=post action="/admin/claims/{e(cid)}/investigate"><button>{e(label('ui_action_investigate'))}</button>
 <span class="note">{e(label('ui_investigate_note'))}</span></form>
 <p class="note">{e(label('ui_investigate_manual'))}</p>
 <h3>{e(label('ui_search_mailbox'))}</h3><form method=get><label>{e(label('ui_search_mailbox'))} <input name=q aria-label="{e(label('ui_search_mailbox'))}" value="{e(q)}" size=40 placeholder="{e(label('ui_mailbox_placeholder'))}"></label><button>{e(label('ui_search'))}</button></form>
-{f'<div class="table-wrap"><table><tr><th>ID</th><th>{e(label("ui_col_date"))}</th><th>{e(label("ui_col_subject"))}</th><th>{e(label("ui_col_attachments"))}</th><th></th></tr>{hit_rows}</table></div>' if hits else ''}
-<h3>{e(label('ui_calendar_trip'))}</h3><div class="table-wrap"><table><tr><th>ID</th><th>{e(label("ui_col_date"))}</th><th>{e(label("ui_col_subject"))}</th><th>{e(label("ui_field_destination"))}</th><th></th></tr>{cal_rows}</table></div>
-<h3>{e(label('ui_memos').format(destination=trip['destination']))}</h3><div class="table-wrap"><table><tr><th>ID</th><th>{e(label('ui_signature'))}</th><th>{e(label('ui_col_reason'))}</th><th></th></tr>{memo_rows}</table></div>
+{ui.table(['ID', label('ui_col_date'), label('ui_col_subject'), label('ui_col_attachments'), ''], hit_rows, caption=label('ui_search_mailbox')) if hits else ''}
+<h3>{e(label('ui_calendar_trip'))}</h3>{ui.table(['ID', label('ui_col_date'), label('ui_col_subject'), label('ui_field_destination'), ''], cal_rows, caption=label('ui_calendar_trip'), empty=label('ui_calendar_empty'))}
+<h3>{e(label('ui_memos').format(destination=trip['destination']))}</h3>{ui.table(['ID', label('ui_signature'), label('ui_col_reason'), ''], memo_rows, caption=label('ui_memos').format(destination=trip['destination']), empty=label('ui_memos_empty'))}
 <h3>{e(label('ui_ask_employee'))}</h3><form method=post action="/admin/claims/{e(cid)}/message">
 <label>{e(label('ui_subject'))} <input name=subject aria-label="{e(label('ui_subject'))}" size=40 value="{e(label('ui_default_subject').format(cid=cid))}"></label>
 <label>{e(label('ui_body'))} <input name=body aria-label="{e(label('ui_body'))}" size=60 placeholder="Mohon kirim struk taksi tanggal 3 Okt (IT-5)." required></label>
@@ -815,31 +839,19 @@ def claim_audit(cid: str):
     except KeyError:
         raise HTTPException(404, f"Unknown claim {cid}")
     r = review(cid)
-    status_rows = "".join(
-        f"<tr><td>{e(x.get('claim_id'))}</td><td>{e(x.get('from'))}</td><td>{e(x.get('to'))}</td>"
-        f"<td>{e(x.get('note', ''))}</td></tr>"
-        for x in store.status_log if x.get("claim_id") == cid)
-    evidence_rows = "".join(
-        f"<tr><td>{e(x.get('at'))}</td><td>{e(x.get('evidence_id'))}</td><td>{e(x.get('item_id'))}</td>"
-        f"<td>{e(x.get('reason'))}</td><td>{e(x.get('verdict'))}</td></tr>" for x in r["evidence_log"])
-    decision_rows = "".join(f"<tr><td>{e(item_id)}</td><td>{e(choice)}</td></tr>"
-                            for item_id, choice in r["decisions"].items())
-    outbox_rows = "".join(
-        f"<tr><td>{e(m.get('id'))}</td><td>{e(m.get('to'))}</td><td>{e(m.get('subject'))}</td>"
-        f"<td>{e(m.get('body'))}</td></tr>" for m in store.outbox if m.get("claim_id") == cid)
-
-    def table(head: list[str], rows: str, empty: str) -> str:
-        if not rows:
-            return f"<p class=note>{empty}</p>"
-        return ("<div class='table-wrap'><table><tr>"
-                + "".join(f"<th>{h}</th>" for h in head) + f"</tr>{rows}</table></div>")
-
+    status_rows = [[e(x.get("claim_id")), e(x.get("from")), e(x.get("to")), e(x.get("note", ""))]
+                   for x in store.status_log if x.get("claim_id") == cid]
+    evidence_rows = [[e(x.get("at")), e(x.get("evidence_id")), e(x.get("item_id")),
+                      e(x.get("reason")), e(x.get("verdict"))] for x in r["evidence_log"]]
+    decision_rows = [[e(item_id), e(choice)] for item_id, choice in r["decisions"].items()]
+    outbox_rows = [[e(m.get("id")), e(m.get("to")), e(m.get("subject")), e(m.get("body"))]
+                   for m in store.outbox if m.get("claim_id") == cid]
     body = f"""<p><a href="/admin/claims/{e(cid)}">&larr; {e(label('ui_back_to_claim'))}</a></p>
 <p class="note">{e(label('ui_audit_note').format(cid=cid))}</p>
-<div class="box"><h2>{e(label('ui_status_history'))}</h2>{table([label('ui_claims'), 'Dari', label('ui_to'), label('ui_note')], status_rows, label('ui_no_status_changes'))}</div>
-<div class="box"><h2>{e(label('ui_evidence_log'))}</h2>{table(['Waktu', label('ui_evidence'), label('ui_item'), label('ui_col_reason'), label('ui_verdict')], evidence_rows, label('ui_no_evidence_records'))}</div>
-<div class="box"><h2>{e(label('ui_item_decisions'))}</h2>{table([label('ui_item'), label('ui_reviewer_decision')], decision_rows, label('ui_no_item_decisions'))}</div>
-<div class="box"><h2>{e(label('ui_outbound'))}</h2>{table(['ID', label('ui_to'), label('ui_subject'), label('ui_body')], outbox_rows, label('ui_no_outbound'))}</div>"""
+<div class="box"><h2>{e(label('ui_status_history'))}</h2>{ui.table([label('ui_claims'), 'Dari', label('ui_to'), label('ui_note')], status_rows, caption=label('ui_status_history'), empty=label('ui_no_status_changes'))}</div>
+<div class="box"><h2>{e(label('ui_evidence_log'))}</h2>{ui.table(['Waktu', label('ui_evidence'), label('ui_item'), label('ui_col_reason'), label('ui_verdict')], evidence_rows, caption=label('ui_evidence_log'), empty=label('ui_no_evidence_records'))}</div>
+<div class="box"><h2>{e(label('ui_item_decisions'))}</h2>{ui.table([label('ui_item'), label('ui_reviewer_decision')], decision_rows, caption=label('ui_item_decisions'), empty=label('ui_no_item_decisions'))}</div>
+<div class="box"><h2>{e(label('ui_outbound'))}</h2>{ui.table(['ID', label('ui_to'), label('ui_subject'), label('ui_body')], outbox_rows, caption=label('ui_outbound'), empty=label('ui_no_outbound'))}</div>"""
     return page(label("ui_audit_title").format(cid=cid), body)
 
 

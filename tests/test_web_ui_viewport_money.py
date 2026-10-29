@@ -3,6 +3,7 @@ the rule engine or the claim data (the same invented-Rp check the eval and the Q
 import html
 import json
 import re
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,7 +12,7 @@ from reimburse_web import app as web
 from reimburse_web import plans  # noqa: F401  # puts agent/ on sys.path
 from reimburse_agent.money import invented_rp  # noqa: E402
 from reimburse_buddy.decision import draft_decision  # noqa: E402
-from reimburse_buddy.models import to_jsonable  # noqa: E402
+from reimburse_buddy.models import rupiah, to_jsonable  # noqa: E402
 
 VIEWPORT = '<meta name="viewport" content="width=device-width, initial-scale=1">'
 
@@ -67,6 +68,10 @@ def _engine_texts() -> list[str]:
     for c in web.store.claims:
         chk = web.run_check(c["id"])
         out += [json.dumps(to_jsonable(chk)), draft_decision(web.store, chk, language="both"), json.dumps(c)]
+    # The triage page also shows the engine's own sum of held money across the exceptions.
+    held = sum((web.run_check(x["claim_id"]).total_pending
+                for x in web.triage_claims(web.store, web.BATCH)["exceptions"]), Decimal("0"))
+    out.append(rupiah(held))
     return out
 
 
