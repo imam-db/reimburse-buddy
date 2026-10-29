@@ -176,3 +176,18 @@ def test_a_message_owned_by_someone_else_never_shows_its_attachments(client):
     res_.evidence_used = ["MSG-X1"]
     cell = upload_flow.item_files("EMP-001", HERO, "IT-1", res_, upload_flow.item_state(res_, {}), {})
     assert "someone_elses.pdf" not in cell
+
+
+# --- item 4: descriptions ---------------------------------------------------------
+def test_description_equal_to_the_category_code_is_not_repeated(client, monkeypatch):
+    cid = submit_new_claim(client, monkeypatch)
+    assert [i["description"] for i in web.store.get_claim(cid)["items"]] == ["taxi", "meal"]
+    page = client.get(f"/employee/claims/{cid}").text
+    assert "<div class=note>taxi</div>" not in page and "<div class=note>meal</div>" not in page
+    assert "Taksi" in page  # the Indonesian category label is still there
+
+
+def test_a_real_description_is_still_shown_and_escaped(client):
+    web.store.get_claim(HERO)["items"][4]["description"] = "Taksi <b>bandara</b>"
+    page = client.get(f"/employee/claims/{HERO}").text
+    assert "<div class=note>Taksi &lt;b&gt;bandara&lt;/b&gt;</div>" in page

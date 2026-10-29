@@ -749,7 +749,9 @@ def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: i
                f"<input type=file name=file aria-label='Berkas bukti untuk {e(it['id'])}' accept='.pdf,.png,.jpg,.jpeg' required> "
                f"<button>{e(label('ui_add_file'))}</button></form></details>")
         files_cell = item_files(emp, cid, it["id"], res, state, pending)
-        rows.append([f"{e(label(it['category']))}<div class=note>{e(it['description'])}</div>", core.date_html(it["date"]),
+        desc = str(it["description"] or "").strip()
+        note = "" if desc.lower() == str(it["category"]).strip().lower() else f"<div class=note>{e(desc)}</div>"
+        rows.append([f"{e(label(it['category']))}{note}", core.date_html(it["date"]),
                      e(rupiah(res.claimed)), files_cell, f"<span class='tag {cls}'>{e(status)}</span>", add])
     body = f"""<p><a href="/employee">&larr; {e(label('ui_my_claims'))}</a></p>
 {ui.alert(label("ui_forwarded_note").format(flash=core.flash_text(msg), mailbox=core.MAILBOX), tone="success") if msg else ''}
