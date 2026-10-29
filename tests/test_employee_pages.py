@@ -280,3 +280,37 @@ def test_start_new_claim_comes_before_my_claims(client):
     assert 'class="btn primary" href="/employee/new">Mulai klaim baru</a>' in page
     assert 'class="page-head"' in page and "Klaim baru</h2>" not in page
     assert page.count("<h1") == 1
+
+
+# --- item 9: which claim needs me -------------------------------------------------
+def _claim_ids_in_order(page: str) -> list[str]:
+    body = page.split("<tbody>", 1)[1].split("</tbody>", 1)[0]
+    return re.findall(r"<a href='/employee/claims/([^']+)'>", body)
+
+
+def test_hero_claim_carries_the_action_badge_and_the_newest_claim_leads_the_rest(client, monkeypatch):
+    cid = submit_new_claim(client, monkeypatch)
+    page = client.get("/employee").text
+    assert re.search(rf"<a href='/employee/claims/{HERO}'>(?:(?!</tr>).)*?2 perlu tindakan", page, flags=re.S)
+    order = _claim_ids_in_order(page)
+    mine = [c["id"] for c in web.store.claims if c["employee_id"] == "EMP-001"]
+    assert sorted(order) == sorted(mine) and order[0] in ("CLM-2026-0101", HERO)
+    quiet = [c for c in order if c not in ("CLM-2026-0101", HERO)]
+    assert quiet[0] == cid  # the new claim has no action and was submitted last
+    dated = [web.store.get_claim(c)["submitted_at"] for c in quiet]
+    assert dated == sorted(dated, reverse=True)
+
+
+def test_new_claim_with_only_pending_files_has_no_badge(client, monkeypatch):
+    cid = submit_new_claim(client, monkeypatch)
+    page = client.get("/employee").text
+    row = re.search(rf"<a href='/employee/claims/{cid}'>.*?</tr>", page, flags=re.S).group(0)
+    assert "perlu tindakan" not in row
+
+
+def test_masked_item_never_counts_as_needing_action():
+    dup = "CLM-2026-0104"
+    web.reset_all()
+    assert upload_flow.action_count(dup) == 0
+    states = [upload_flow.item_state(r, web.pending_items(dup)) for r in web.run_check(dup).items]
+    assert any(s.key == "review" for s in states) and all(s.key != "action" for s in states)

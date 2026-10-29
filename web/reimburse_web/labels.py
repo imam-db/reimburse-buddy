@@ -251,6 +251,7 @@ LABELS = {
     "ui_state_awaiting": "Menunggu verifikasi finance",
     "ui_state_decision": "Menunggu keputusan finance",
     "ui_file_pending": "menunggu verifikasi",
+    "ui_n_need_action": "{n} perlu tindakan",
     "ui_total_claimed": "Total diajukan",
     "ui_count_action": "Perlu tindakan Anda",
     "ui_count_waiting": "Menunggu finance",

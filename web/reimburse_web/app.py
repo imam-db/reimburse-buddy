@@ -555,11 +555,21 @@ def employee_page(request: Request, msg: str = ""):
     if not emp:
         return page(label("ui_portal_title"), auth.sign_in_notice())
     me = store.get_employee(emp)
+    from .upload_flow import action_count  # lazy: upload_flow imports this module
     claims = [c for c in store.claims if c["employee_id"] == emp]
+    needs = {c["id"]: action_count(c["id"]) for c in claims}
+    # claims that need the employee first, then newest submitted, ties by ID descending
+    claims.sort(key=lambda c: (str(c.get("submitted_at") or ""), c["id"]), reverse=True)
+    claims.sort(key=lambda c: needs[c["id"]] == 0)
+
+    def status_cell(c: dict) -> str:
+        n = needs[c["id"]]
+        return status_tag(c["status"]) + (ui.badge(label("ui_n_need_action").format(n=n), "warn") if n else "")
+
     rows = [[f"<a href='/employee/claims/{e(c['id'])}'>{e(c['id'])}</a>", e(c["purpose"]),
              f"{e(c['trip']['destination'])} {date_html(c['trip']['start_date'])} "
              f"&rarr; {date_html(c['trip']['end_date'])}",
-             e(rupiah(sum(Decimal(i["amount"]) for i in c["items"]))), status_tag(c["status"])]
+             e(rupiah(sum(Decimal(i["amount"]) for i in c["items"]))), status_cell(c)]
             for c in claims]
     inbox = [m for m in store.outbox if m["to"] == emp]
     msgs = [[e(m["claim_id"]), e(m["subject"]), e(m["body"])] for m in inbox]

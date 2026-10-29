@@ -723,6 +723,12 @@ def item_files(emp: str, cid: str, iid: str, res, state: ItemState, pending: dic
     return f'<div class="chips">{"".join(chips)}</div>'
 
 
+def action_count(cid: str) -> int:
+    """How many items of a claim need the employee (document gaps only). Masked items never count."""
+    pending = core.pending_items(cid)
+    return sum(1 for res in core.run_check(cid).items if item_state(res, pending).key == "action")
+
+
 def claim_summary(claim: dict, items: list, states: list[ItemState]) -> str:
     """Status, claimed total, the count per state and one next-step sentence. Claimed amounts only:
     the engine's approvable and pending totals never reach the employee."""
