@@ -140,6 +140,20 @@ def test_employee_and_manager_cannot_open_finance_file_route(tmp_path, monkeypat
     web.reset_all()
 
 
+# --- item 5: item status ------------------------------------------------------------------------
+def item_status(page: str, iid: str) -> str:
+    card = page.split(f"id='item-{iid}'", 1)[1].split("</article>", 1)[0]
+    return visible_text(card)
+
+
+def test_item_with_only_a_decision_gap_says_perlu_keputusan(client):
+    page = client.get(f"/admin/claims/{HERO}").text
+    hotel, taxi = item_status(page, "IT-3"), item_status(page, "IT-5")
+    assert "Perlu keputusan" in hotel and "Perlu bukti" not in hotel
+    assert "Perlu bukti" in taxi and "Perlu keputusan" not in taxi  # a document gap is still a document gap
+    assert "Disetujui: Rp2.400.000" in hotel  # amounts do not change
+
+
 # --- item 4: Indonesian findings ---------------------------------------------------------------
 def visible_text(html: str) -> str:
     return re.sub(r"<[^>]+>", " ", html)  # tags (and so their title attributes) are dropped

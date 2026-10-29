@@ -939,7 +939,11 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
                 dec += f"<div class=note>{e(label('ui_reviewer_said').format(decision=label(it.human_decision)))}</div>"
         elif it.gaps and not pend:
             dec = f"<div class=note>{e(label('ui_needs_review').format(gaps=', '.join(label(g) for g in it.gaps)))}</div>"
-        status_cell = f"<span title='{e(it.status.value)}'>{e(label(it.status.value))}</span>"
+        status_text = label(it.status.value)
+        if (it.status.value == "needs_evidence" and it.gaps and set(it.gaps) <= DECISION_GAPS
+                and not set(it.gaps) & DOCUMENT_GAPS):
+            status_text = label("ui_needs_decision")  # only a reviewer decision is open, not a document
+        status_cell = f"<span title='{e(it.status.value)}'>{e(status_text)}</span>"
         if pend:
             status_cell = f"<span class='tag warn'>{e(label('ui_pending_review'))}</span>"
             for mid in pend:

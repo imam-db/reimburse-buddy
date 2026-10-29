@@ -496,6 +496,7 @@ LABELS = {
     "prov_nights": "Malam",
     "prov_flight_no": "No. penerbangan",
     "prov_doc_type": "Jenis dokumen",
+    "ui_needs_decision": "Perlu keputusan",
 }
 
 
