@@ -230,7 +230,7 @@ LABELS = {
     "ui_could_not_read": "Berkas tidak bisa dibaca.",
     "ui_fill_manual": "Isi kartu ini secara manual.",
     "ui_summary_unreadable": "{bad} dari {total} berkas belum terbaca.",
-    "ui_summary_incomplete": "Lengkapi kartu {cards}.",
+    "ui_summary_incomplete": "Lengkapi: {cards}.",
     "ui_bar_items": "{n} item",
     "ui_bar_total": "Total diajukan {total}",
     "ui_bar_incomplete": "{n} kartu belum lengkap",
@@ -503,6 +503,15 @@ LABELS = {
     "ui_doc_name_receipt_missing": "struk",
     "ui_doc_name_boarding_pass_missing": "boarding pass",
     "ui_msg_sent_to": "Pesan terkirim ke {name}.",
+    "ui_err_amount_empty": "Isi nominal.",
+    "ui_err_amount_boarding_pass": "Boarding pass tidak memuat harga. Tambahkan e-ticket atau isi harga tiket.",
+    "ui_why_category": "kategori belum dipilih",
+    "ui_why_date": "tanggal di luar perjalanan",
+    "ui_why_amount_empty": "nominal belum diisi",
+    "ui_why_amount_bp": "nominal belum diisi",
+    "ui_why_amount": "nominal tidak valid",
+    "ui_why_flight_no": "nomor penerbangan belum diisi",
+    "ui_why_nights": "jumlah malam belum diisi",
 }
 
 

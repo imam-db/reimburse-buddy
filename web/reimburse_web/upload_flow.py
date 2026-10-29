@@ -322,7 +322,10 @@ def draft_page(did: str, request: Request):
                   f"{moves}{merge}{split}"
                   f"<button class='btn quiet-danger' name=action value='delete:{c['id']}' onclick='return confirm(&quot;Hapus item ini?&quot;)'>{e(label('ui_delete'))}</button>"
                   f"</details>")
-        errs = "".join(f"<div class=err>{e(x)}</div>" for x in c["errors"])
+        if c["errors"]:  # after a save or submit: errors, as before
+            errs = "".join(f"<div class=err>{e(x)}</div>" for x in c["errors"])
+        else:  # before the first save: the same problems as muted hints
+            errs = "".join(f"<div class='hint note'>{e(x)}</div>" for x in _card_errors(c, h))
         cards_html += (f"<div class='card' id='card-{e(c['id'])}' data-card='{e(c['id'])}' tabindex='-1'><b>{e(label('ui_card'))} {n + 1}</b>{errs}{''.join(_input(c, k, allowed, cat) for k in keys)}"
                        f"<div class=note>{e(label('ui_col_files'))}</div><ul>{files or '<li class=note>' + e(label('ui_no_file_yet')) + '</li>'}</ul>"
                        f"{manage}</div>")
@@ -365,22 +368,31 @@ def _apply_edits(d: dict, form) -> None:
                 f["doc_type"], f["doc_type_source"] = v, "self_declared"
 
 
-def _card_errors(c: dict, h: dict) -> list[str]:
-    """Validation errors for one card, without mutating it (the banner and _validate share this)."""
+def _card_problems(c: dict, h: dict) -> list[tuple[str, str]]:
+    """(code, Indonesian sentence) for each problem of one card, without mutating it."""
     allowed = core.store.policy["allowed_categories"]
     f = {k: v["value"] for k, v in c["fields"].items()}
-    errors = []
+    problems = []
     if f["category"] not in allowed:
-        errors.append(label("ui_err_category"))
+        problems.append(("category", label("ui_err_category")))
     if not f["date"] or not (h["start_date"] <= str(f["date"]) <= h["end_date"]):
-        errors.append(label("ui_err_date"))
-    if not isinstance(f["amount"], int) or f["amount"] <= 0:
-        errors.append(label("ui_err_amount"))
+        problems.append(("date", label("ui_err_date")))
+    if f["amount"] in (None, ""):
+        problems.append(("amount_empty", label("ui_err_amount_empty")))
+        if f["category"] == "flight" and c["files"] and all(x["doc_type"] == "boarding_pass" for x in c["files"]):
+            problems.append(("amount_bp", label("ui_err_amount_boarding_pass")))
+    elif not isinstance(f["amount"], int) or f["amount"] <= 0:
+        problems.append(("amount", label("ui_err_amount")))
     if f["category"] == "flight" and not f["flight_no"]:
-        errors.append(label("ui_err_flight_no"))
+        problems.append(("flight_no", label("ui_err_flight_no")))
     if f["category"] == "hotel" and not str(f["nights"] or "").isdigit():
-        errors.append(label("ui_err_nights"))
-    return errors
+        problems.append(("nights", label("ui_err_nights")))
+    return problems
+
+
+def _card_errors(c: dict, h: dict) -> list[str]:
+    """Validation errors for one card, without mutating it (the banner and _validate share this)."""
+    return [text for _, text in _card_problems(c, h)]
 
 
 def _validate(d: dict) -> bool:
@@ -399,14 +411,17 @@ def _summary(d: dict) -> str:
     """Banner above the cards: unreadable files and incomplete card numbers (linked to their anchor)."""
     files = [f for c in d["cards"] for f in c["files"]]
     unreadable = [f for f in files if f["error"]]
-    incomplete = [n for n, c in enumerate(d["cards"], 1) if _card_errors(c, d["header"])]
+    incomplete = [(n, _card_problems(c, d["header"])) for n, c in enumerate(d["cards"], 1)]
+    incomplete = [(n, p) for n, p in incomplete if p]
     if not unreadable and not incomplete:
         return ""
     parts = []
     if unreadable:
         parts.append(e(label("ui_summary_unreadable").format(bad=len(unreadable), total=len(files))))
     if incomplete:
-        links = ", ".join(f"<a href='#card-{e(d['cards'][n - 1]['id'])}'>{n}</a>" for n in incomplete)
+        # "Kartu 3: nominal belum diisi": each card with its first reason, linked to its anchor
+        links = "; ".join(f"<a href='#card-{e(d['cards'][n - 1]['id'])}'>{e(label('ui_card'))} {n}</a>: "
+                          f"{e(label('ui_why_' + p[0][0]))}" for n, p in incomplete)
         parts.append(e(label("ui_summary_incomplete")).replace("{cards}", links))
     return ui.alert_html(" ".join(parts), tone="warn")
 
