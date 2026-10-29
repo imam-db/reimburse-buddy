@@ -42,8 +42,7 @@ class _Data:
 
     def check(self, cid):
         from reimburse_buddy.models import to_jsonable
-        from reimburse_buddy.rules import check_claim
-        return to_jsonable(check_claim(_web().store, cid))
+        return to_jsonable(_web().run_check(cid))  # carries the review state, like the claim pages
 
 
 def service() -> qa_engine.QAService:

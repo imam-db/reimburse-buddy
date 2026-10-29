@@ -481,6 +481,8 @@ LABELS = {
     "ui_plan_actions": "Aksi",
     "ui_msg_decisions_saved": "Keputusan disimpan",
     "ui_msg_stale_form": "Formulir sudah usang: rencana berubah",
+    # --- ADR 0009 ---
+    "ui_time_assumption": "Asumsi: {n} menit tinjauan manual per klaim yang lolos otomatis (perkiraan sintetis).",
 }
 
 

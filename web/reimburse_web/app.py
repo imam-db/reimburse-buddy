@@ -710,9 +710,15 @@ def admin(batch: str = BATCH, msg: str = ""):
     held_total = sum((held for held, _ in entries), Decimal("0"))
     cards = []
     for held, x in entries:
-        gaps = "".join(gap_tag(g) for g in x["gaps"])
-        rejected = (f'<p class="note">{e(label("ui_rejected_items"))}: {e(", ".join(x["rejected_items"]))}</p>'
-                    if x["rejected_items"] else "")
+        # Chips and rejected items come from the reviewed state (ADR 0009 #1); membership, the injection
+        # flag and needs_review stay as triage reports them.
+        chk = run_check(x["claim_id"])
+        gap_codes = ({g for i in chk.items for g in i.gaps} | {w.gap for w in chk.warnings if w.gap}
+                     | ({"embedded_instructions"} if x.get("needs_review") else set()))
+        gaps = "".join(gap_tag(g) for g in sorted(gap_codes))
+        rejected_ids = [i.item_id for i in chk.items if i.status.value == "rejected"]
+        rejected = (f'<p class="note">{e(label("ui_rejected_items"))}: {e(", ".join(rejected_ids))}</p>'
+                    if rejected_ids else "")
         cards.append(
             f'<article class="item-card" id="exception-{e(x["claim_id"])}" data-held="{int(held)}">'
             f'<div class="item-head"><a href="/admin/claims/{e(x["claim_id"])}">{e(x["claim_id"])}</a>'
@@ -736,7 +742,7 @@ def admin(batch: str = BATCH, msg: str = ""):
            ui.stat(label('ui_exceptions'), len(entries), tone='warn' if entries else ''),
            ui.stat(label('ui_held_money'), rupiah(held_total), tone='warn' if held_total else '')],
           id='triage-stats')}
-<div class="box"><p>{e(label('ui_time_saved'))}: {e(label('ui_minutes').format(n=est['minutes']))} <span class="tag warn">{e(label('ui_estimate'))}</span> <span class="note">{e(est['assumption'])}</span></p>
+<div class="box"><p>{e(label('ui_time_saved'))}: {e(label('ui_minutes').format(n=est['minutes']))} <span class="tag warn">{e(label('ui_estimate'))}</span> <span class="note" id="time-assumption">{e(label('ui_time_assumption').format(n=store.policy['triage']['manual_review_minutes_per_claim']))}</span></p>
 <p class="note">{e(label('ui_triage_readonly'))}</p>
 <h3>{e(label('ui_cleared'))}</h3><p>{''.join(f'<span class=tag>{e(c)}</span>' for c in cleared) or '<span class=note>' + e(label('ui_cleared_none')) + '</span>'}</p>
 {f'''<form method="post" action="/admin/batch/approve"><input type="hidden" name="batch" value="{e(batch)}">{hidden}
