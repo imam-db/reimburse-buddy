@@ -17,6 +17,7 @@ Status: `Proposed` (written, not yet agreed) → `Accepted` (agreed, work may st
 | [0006](0006-ui-ux-design-layer.md) | UI/UX: one design layer, mobile-first pages, Indonesian-first copy | Accepted |
 | [0007](0007-new-claim-flow-ux.md) | New claim flow: clearer steps, calmer draft cards, file previews | Accepted |
 | [0008](0008-employee-claim-pages.md) | Employee portal and claim page: honest item states, one next step | Accepted |
+| [0009](0009-end-to-end-demo-fixes.md) | End-to-end demo: one claim state everywhere, evidence finance can see | Accepted |
 
 ## Template
 
