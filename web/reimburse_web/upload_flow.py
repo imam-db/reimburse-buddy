@@ -684,7 +684,25 @@ class ItemState:
     pending: bool  # an uploaded file still awaits a reviewer
 
 
-def item_state(res, pending: dict) -> ItemState:
+def rejected_uploads(cid: str) -> dict[str, set[str]]:
+    """item_id -> message IDs of the employee's uploads that finance rejected on this claim.
+
+    Used only to tell the employee, without any reason, that an earlier file was not accepted."""
+    out: dict[str, set[str]] = {}
+    for mid, p in core.review(cid).get("pending", {}).items():
+        if p.get("state") == "rejected":
+            out.setdefault(p["item_id"], set()).add(mid)
+    return out
+
+
+def doc_name(gap: str, category: str) -> str:
+    """The employee-facing name of a missing document: a flight lacks its ticket, not a receipt."""
+    if gap == "receipt_missing" and category == "flight":
+        return label("ui_ticket_missing")
+    return label(gap)
+
+
+def item_state(res, pending: dict, rejected: dict | None = None) -> ItemState:
     """The one place that decides the employee-facing state of an item (claim page and portal).
 
     `res` is the item's ItemResult, `pending` is core.pending_items(cid). Only document gaps are
@@ -702,7 +720,10 @@ def item_state(res, pending: dict) -> ItemState:
         return ItemState("wait", "info", "◷ " + AWAITING, False, True)
     docs = [g for g in gaps if g in core.DOCUMENT_GAPS]
     if docs:
-        names = ", ".join(dict.fromkeys(label(g) for g in docs))
+        if res.item_id in (rejected or {}):  # a generic hint; the reviewer's reason is never shown
+            names = label("ui_file_rejected_reupload")
+        else:
+            names = ", ".join(dict.fromkeys(doc_name(g, res.category) for g in docs))
         return ItemState("action", "warn", "! " + label("ui_needs_action") + ": " + names, False, False)
     if gaps:
         names = ", ".join(dict.fromkeys(label(g) for g in gaps))
@@ -731,7 +752,8 @@ def upload_control(cid: str, iid: str, primary: bool) -> str:
             f"{ui.button(label('ui_upload'), variant='primary' if primary else 'secondary')}</form>")
 
 
-def item_files(emp: str, cid: str, iid: str, res, state: ItemState, pending: dict, item: dict | None = None) -> str:
+def item_files(emp: str, cid: str, iid: str, res, state: ItemState, pending: dict, item: dict | None = None,
+               rejected_mids: set | frozenset = frozenset()) -> str:
     """The files cell: web uploads for the item, plus the attachments of the mailbox messages the engine
     used as its evidence. Only messages the signed-in employee owns, and never mailbox files for a masked
     item (its uploads stay, in the neutral tone). Chip tone: ok = used by the engine, warn = awaiting a
@@ -755,7 +777,10 @@ def item_files(emp: str, cid: str, iid: str, res, state: ItemState, pending: dic
             for a in atts:
                 if a.get("linked_claim") == cid and a.get("linked_item") == iid:
                     tone = "" if state.masked else "warn" if m["id"] in waiting else "ok" if m["id"] in used else ""
-                    add(a["name"], tone)
+                    name = a["name"]
+                    if m["id"] in rejected_mids and not state.masked:  # neutral tone, no reason
+                        name = f"{name} ({label('ui_file_not_accepted')})"
+                    add(name, tone)
         elif m["id"] in used and not state.masked:
             for a in atts:
                 add(a["name"], "ok")
@@ -773,7 +798,7 @@ def item_files(emp: str, cid: str, iid: str, res, state: ItemState, pending: dic
 def action_count(cid: str) -> int:
     """How many items of a claim need the employee (document gaps only). Masked items never count."""
     pending = core.pending_items(cid)
-    return sum(1 for res in core.run_check(cid).items if item_state(res, pending).key == "action")
+    return sum(1 for res in core.run_check(cid).items if item_state(res, pending).key == "action")  # same key with or without the rejected hint
 
 
 def claim_summary(claim: dict, items: list, states: list[ItemState]) -> str:
@@ -827,12 +852,13 @@ def employee_claim(cid: str, request: Request = None, msg: str = "", item: str =
     chk = core.run_check(cid)
     pending = core.pending_items(cid)
     rows: list[list[str]] = []
-    states = [item_state(res, pending) for res in chk.items]
+    rejected = rejected_uploads(cid)
+    states = [item_state(res, pending, rejected) for res in chk.items]
     for it, res, state in zip(claim["items"], chk.items, states):
         status, cls = state.text, state.tone
         form = upload_control(cid, it["id"], primary=state.key == "action")
         add = form if state.key == "action" else ui.details(label("ui_add_file"), form)
-        files_cell = item_files(emp, cid, it["id"], res, state, pending, it)
+        files_cell = item_files(emp, cid, it["id"], res, state, pending, it, rejected.get(it["id"], set()))
         desc = str(it["description"] or "").strip()
         note = "" if desc.lower() == str(it["category"]).strip().lower() else f"<div class=note>{e(desc)}</div>"
         rows.append([f"{e(label(it['category']))}{note}", core.date_html(it["date"]),

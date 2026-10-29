@@ -1,6 +1,8 @@
 """ADR 0009, employee side (P2). Stub extractors only: nothing here needs Tesseract."""
 from __future__ import annotations
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -18,6 +20,67 @@ def client(tmp_path, monkeypatch):
     web.reset_all()
     yield TestClient(web.app)
     web.reset_all()
+
+
+def web_claim(items, cid="CLM-2026-W050", emp="EMP-001"):
+    web.store.claims.append({"id": cid, "employee_id": emp, "status": "submitted", "submitted_at": "2026-10-29",
+                             "purpose": "Demo", "batch": web.WEB_BATCH,
+                             "trip": {"origin": "Jakarta", "destination": "Surabaya",
+                                      "start_date": "2026-10-02", "end_date": "2026-10-04"}, "items": items})
+    return cid
+
+
+def row_text(page: str, iid: str) -> str:
+    return visible(page.split(f"id='item-{iid}'", 1)[1].split("</tr>", 1)[0])
+
+
+def test_flight_gap_reads_ticket_for_flights_and_receipt_otherwise(client):
+    cid = web_claim([
+        {"id": "IT-1", "category": "flight", "date": "2026-10-02", "description": "QZ 7520", "amount": "900000",
+         "receipt": False, "flight_no": "QZ 7520", "boarding_pass": False},
+        {"id": "IT-2", "category": "taxi", "date": "2026-10-03", "description": "Taksi", "amount": "100000",
+         "receipt": False}])
+    page = client.get(f"/employee/claims/{cid}").text
+    assert "Tiket pesawat belum ada" in row_text(page, "IT-1")
+    assert "Struk belum ada" not in row_text(page, "IT-1")
+    assert "Struk belum ada" in row_text(page, "IT-2") and "Tiket pesawat" not in row_text(page, "IT-2")
+    # finance keeps the engine label
+    assert "Struk belum ada" in visible(client.get(f"/admin/claims/{cid}").text)
+
+
+def add_upload(cid, iid, state, mid="MSG-W910", emp="EMP-001", name="struk.png"):
+    web.store.inbox.append({"id": mid, "owner_id": emp, "from": "x@y.example", "date": "2026-10-29", "subject": "s",
+                            "body": "", "mailbox": web.MAILBOX,
+                            "attachments": [{"name": name, "type": "receipt", "claim_id": cid, "item_id": iid,
+                                             "linked_claim": cid, "linked_item": iid, "stored_as": "x.png"}]})
+    rv = web.review(cid)
+    rv.setdefault("origin", {})[mid] = "employee_upload"
+    rv["pending"][mid] = {"item_id": iid, "reason": "duplicate_file", "reasons": ["duplicate_file"], "state": state}
+
+
+def test_rejected_upload_tells_the_employee_without_the_reason(client):
+    cid = web_claim([{"id": "IT-1", "category": "taxi", "date": "2026-10-03", "description": "Taksi",
+                      "amount": "100000", "receipt": False}])
+    add_upload(cid, "IT-1", "rejected")
+    page = client.get(f"/employee/claims/{cid}").text
+    text = row_text(page, "IT-1")
+    assert "! Perlu tindakan: Berkas sebelumnya tidak diterima finance. Unggah ulang." in text
+    assert "struk.png (tidak diterima)" in text
+    for leak in ("duplicate_file", "duplikat", "Duplikat", "Struk belum ada"):
+        assert leak not in text
+    chip = re.search(r'<span class="([^"]*)"[^>]*>struk\.png \(tidak diterima\)</span>', page)
+    assert chip and chip.group(1).strip() == "tag"  # neutral tone, not ok or warn
+
+
+def test_rejected_upload_stays_masked_on_a_sensitive_item(client, monkeypatch):
+    monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", "EMP-003")
+    cid = "CLM-2026-0104"
+    chk = web.run_check(cid)
+    iid = next(i.item_id for i in chk.items if "duplicate_suspected" in i.gaps)
+    add_upload(cid, iid, "rejected", emp="EMP-003")
+    text = row_text(client.get(f"/employee/claims/{cid}").text, iid)
+    assert "tidak diterima" not in text and "Unggah ulang" not in text
+    assert "Sedang ditinjau" in text or "ditinjau" in text
 
 
 def test_anchor_targets_clear_the_sticky_header():

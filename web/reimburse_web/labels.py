@@ -512,6 +512,9 @@ LABELS = {
     "ui_why_amount": "nominal tidak valid",
     "ui_why_flight_no": "nomor penerbangan belum diisi",
     "ui_why_nights": "jumlah malam belum diisi",
+    "ui_ticket_missing": "Tiket pesawat belum ada",
+    "ui_file_rejected_reupload": "Berkas sebelumnya tidak diterima finance. Unggah ulang.",
+    "ui_file_not_accepted": "tidak diterima",
 }
 
 
