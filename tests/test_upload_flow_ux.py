@@ -112,3 +112,19 @@ def test_summary_banner_is_absent_when_everything_is_readable(client, monkeypatc
     markup = client.get(f"/employee/drafts/{d['id']}").text
     assert 'class="alert"' not in markup
     assert "berkas belum terbaca" not in visible(markup)
+
+
+# --- P1.3/P1.4: stepper and no internal terms ---------------------------------
+def test_both_pages_show_the_stepper_and_no_internal_terms(client, monkeypatch):
+    new = client.get("/employee/new").text
+    assert 'class="stepper"' in new
+    assert "Perjalanan" in new and "Unggah berkas" in new and "Periksa &amp; kirim" in new
+    assert "Ekstraksi:" not in new
+    assert "1. Perjalanan" not in new and "2. Unggah" not in new
+
+    d = drop(client, monkeypatch, {"ok.png": good(doc_type="taxi_receipt", date="2026-10-03",
+                                                  amount=150000, merchant="Taksi")})
+    draft = client.get(f"/employee/drafts/{d['id']}").text
+    assert 'class="stepper"' in draft
+    assert '<li aria-current="step">Periksa &amp; kirim</li>' in draft
+    assert "3. Periksa" not in draft

@@ -113,7 +113,9 @@ def new_claim(request: Request):
     if not emp:
         return core.page(label("ui_new_claim"), auth.sign_in_notice())
     me = core.store.get_employee(emp)
+    steps = [label("ui_step_trip"), label("ui_step_upload"), label("ui_step_verify")]
     body = f"""<p><a href="/employee">&larr; {e(label('ui_my_claims'))}</a> &middot; {e(me['name'])}</p>
+{ui.stepper(steps, 0)}
 <form method="post" action="/employee/drafts" enctype="multipart/form-data">
 <div class="box"><h2>{e(label('ui_step_trip'))}</h2><label>{e(label('ui_field_purpose'))} <input name="purpose" size="40" required></label>
 <label>{e(label('ui_field_destination'))} <input name="destination" value="Surabaya" required></label>
@@ -124,7 +126,7 @@ def new_claim(request: Request):
 <input id="files" class="visually-hidden" type="file" name="files" multiple accept=".pdf,.png,.jpg,.jpeg"></label>
 <p><button type="button" id="pick-files">{e(label('ui_pick_files'))}</button></p>
 <div id="picked" class="note"></div>
-<p class="note">{e(label('ui_extraction_note').format(engine=get_extractor().name))}</p>
+<p class="note">{e(label('ui_extraction_note'))}</p>
 <button type="submit">{e(label('ui_read_files'))}</button></div></form>{DROP_JS}"""
     return core.page(label("ui_new_claim"), body)
 
@@ -227,7 +229,9 @@ def draft_page(did: str, request: Request):
                        f"<div class=note>{e(label('ui_col_files'))}</div><ul>{files or '<li class=note>' + e(label('ui_no_file_yet')) + '</li>'}</ul>"
                        f"{merge} {split} <button class='btn quiet-danger' name=action value='delete:{c['id']}' onclick='return confirm(&quot;Hapus item ini?&quot;)'>{e(label('ui_delete'))}</button></div>")
     errs = "".join(f"<p class=err>{e(x)}</p>" for x in d["errors"])
+    steps = [label("ui_step_trip"), label("ui_step_upload"), label("ui_step_verify")]
     body = f"""<p>{e(h['purpose'])} &middot; {e(h['destination'])} {core.date_html(h['start_date'])} &rarr; {core.date_html(h['end_date'])}</p>
+{ui.stepper(steps, 2)}
 <p class="note">{e(label('ui_check_note').format(flag=label('self_declared')))}</p>{errs}
 {_summary(d)}
 <form method="post" action="/employee/drafts/{e(did)}"><div class="cards" id="draft-cards" tabindex="-1">{cards_html}</div>
