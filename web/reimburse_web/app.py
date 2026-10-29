@@ -702,8 +702,7 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
     r = review(cid)
     c = investigate(cid)
     pending = pending_items(cid)
-    item_rows: list[list[str]] = []
-    item_ids: list[str] = []
+    item_cards: list[str] = []
     for it in c.items:
         src = next(x for x in claim["items"] if x["id"] == it.item_id)
         finds = "<br>".join(f"<span class=tag title='{e(f.rule)}'>{e(label(f.rule))}</span> {e(f.message)}"
@@ -743,13 +742,19 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
         if self_blocked:  # UX only: the server refuses these requests anyway
             dec = f"<div class=note id='self-approval'>{e(label('self_approval_note'))}</div>"
         dec += manager_cell(cid, it.item_id, emp)
-        item_ids.append(f"item-{it.item_id}")
-        item_rows.append([
-            e(it.item_id),
-            f"{e(label(it.category))}<div class=note>{e(src['description'])}</div>",
-            e(rupiah(it.claimed)), e(rupiah(it.approvable)), status_cell,
-            f"{provenance_badges(src)}{finds}<div>{gaps}</div>",
-            e(", ".join(it.evidence_used)), dec])
+        evidence = (ui.chips(list(it.evidence_used), tone="ok") if it.evidence_used
+                    else f"<span class=note>{e(label('ui_none_attached'))}</span>")
+        item_cards.append(
+            f"<article class='item-card' id='item-{e(it.item_id)}'>"
+            f"<div class='item-head'><div><span class='item-title'>{e(label(it.category))}</span>"
+            f"<div class='note'>{e(src['description'])}</div></div>"
+            f"<div class='amount'>{e(rupiah(it.claimed))}</div></div>"
+            f"<p class='note'>{e(label('ui_approvable'))}: {e(rupiah(it.approvable))} &middot; {status_cell}</p>"
+            f"{provenance_badges(src)}{finds}"
+            f"<div class='chips'>{gaps}</div>"
+            f"<p class='note'>{e(label('ui_evidence'))}: {evidence}</p>"
+            + (f"<div class='btn-row'>{dec}</div>" if dec else "")
+            + "</article>")
     needs = [(it, [g for g in it.gaps if g in DECISION_GAPS]) for it in c.items
              if any(g in DECISION_GAPS for g in it.gaps) and not it.human_decision
              and it.item_id not in pending]
@@ -801,21 +806,11 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
                        f"<select name=status aria-label=\"{e(label('ui_final_status'))}\">{options([(s, label(s)) for s in allowed_status])}"
                        f"</select></label>\n<label><input type=checkbox name=reviewer_confirmed value=true> "
                        f"{e(label('ui_confirm_decision'))}</label> <button>{e(label('ui_action_apply_status'))}</button></form>")
-    body = f"""<p><a href="/admin">&larr; {e(label('ui_back_to_triage'))}</a> &middot; <a href="/admin/claims/{e(cid)}/audit">{e(label('ui_audit_link'))}</a></p>{ui.alert(msg, tone="success") if msg else ''}
-<p><span title="{e(emp)}">{e(person(store, emp))}</span> &middot; {e(claim['purpose'])} &middot; {e(trip['destination'])}
-{e(trip['start_date'])} &rarr; {e(trip['end_date'])} &middot; {e(label('ui_status'))} {status_tag(claim['status'])}</p>
-<div class="box"><h2>{e(label('ui_rule_engine').format(decision=label(c.decision.value)))}</h2>
-<p>{label('ui_engine_amounts').format(approvable=rupiah(c.total_approvable), claimed=rupiah(c.total_claimed), pending=rupiah(c.total_pending))}</p>
-<p class="note">{e(label('ui_engine_note'))} {e(label('ui_evidence_attached').format(evidence=', '.join(r['evidence']) or label('ui_none_attached')))}</p>
-{needs_you}
-{ui.table([label('ui_item'), label('ui_category'), label('ui_claimed'), label('ui_approvable'),
-           label('ui_status'), label('ui_findings'), label('ui_evidence'), label('ui_reviewer_decision')],
-          item_rows, num=(2, 3), caption=label('ui_claim_title').format(cid=cid), row_ids=item_ids)}
-{f'<h3>' + e(label('ui_evidence_review_log')) + f'</h3><ul>{log_rows}</ul>' if log_rows else ''}{f'<h3>' + e(label('ui_ignored_evidence')) + f'</h3><ul>{ignored}</ul>' if ignored else ''}{f'<h3>' + e(label('ui_warnings')) + f'</h3><ul>{warns}</ul>' if warns else ''}</div>
-<div class="box"><h2>{e(label('ui_investigate'))}</h2>
-<form method=post action="/admin/claims/{e(cid)}/investigate"><button>{e(label('ui_action_investigate'))}</button>
-<span class="note">{e(label('ui_investigate_note'))}</span></form>
-<p class="note">{e(label('ui_investigate_manual'))}</p>
+    engine_amounts = label('ui_engine_amounts').format(
+        approvable=rupiah(c.total_approvable), claimed=rupiah(c.total_claimed), pending=rupiah(c.total_pending))
+    manual = f"""{f'<h3>' + e(label('ui_evidence_review_log')) + f'</h3><ul>{log_rows}</ul>' if log_rows else ''}
+{f'<h3>' + e(label('ui_ignored_evidence')) + f'</h3><ul>{ignored}</ul>' if ignored else ''}
+{f'<h3>' + e(label('ui_warnings')) + f'</h3><ul>{warns}</ul>' if warns else ''}
 <h3>{e(label('ui_search_mailbox'))}</h3><form method=get><label>{e(label('ui_search_mailbox'))} <input name=q aria-label="{e(label('ui_search_mailbox'))}" value="{e(q)}" size=40 placeholder="{e(label('ui_mailbox_placeholder'))}"></label><button>{e(label('ui_search'))}</button></form>
 {ui.table(['ID', label('ui_col_date'), label('ui_col_subject'), label('ui_col_attachments'), ''], hit_rows, caption=label('ui_search_mailbox')) if hits else ''}
 <h3>{e(label('ui_calendar_trip'))}</h3>{ui.table(['ID', label('ui_col_date'), label('ui_col_subject'), label('ui_field_destination'), ''], cal_rows, caption=label('ui_calendar_trip'), empty=label('ui_calendar_empty'))}
@@ -823,11 +818,34 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
 <h3>{e(label('ui_ask_employee'))}</h3><form method=post action="/admin/claims/{e(cid)}/message">
 <label>{e(label('ui_subject'))} <input name=subject aria-label="{e(label('ui_subject'))}" size=40 value="{e(label('ui_default_subject').format(cid=cid))}"></label>
 <label>{e(label('ui_body'))} <input name=body aria-label="{e(label('ui_body'))}" size=60 placeholder="Mohon kirim struk taksi tanggal 3 Okt (IT-5)." required></label>
-<button>{e(label('ui_send'))}</button></form>{f'<ul>{sent_rows}</ul>' if sent_rows else ''}</div>
-<div class="box"><h2>{e(label('ui_decision_note'))}</h2><pre>{e(note)}</pre>
-{ui.details(label("ui_english"), f"<pre>{e(note_en)}</pre>")}
+<button>{e(label('ui_send'))}</button></form>{f'<ul>{sent_rows}</ul>' if sent_rows else ''}"""
+    body = f"""<p><a href="/admin">&larr; {e(label('ui_back_to_triage'))}</a></p>{ui.alert(msg, tone="success") if msg else ''}
+<section class="claim-summary" id="claim-summary" aria-label="{e(label('ui_claim_summary'))}">
+<div class="summary-body">
+<h2>{e(label('ui_rule_engine').format(decision=label(c.decision.value)))}</h2>
+<p><span title="{e(emp)}">{e(person(store, emp))}</span> &middot; {e(claim['purpose'])} &middot; {e(trip['destination'])}
+{e(trip['start_date'])} &rarr; {e(trip['end_date'])} &middot; {e(label('ui_status'))} {status_tag(claim['status'])}</p>
+<p>{engine_amounts}</p>
+<p class="note">{e(label('ui_engine_note'))} {e(label('ui_evidence_attached').format(evidence=', '.join(r['evidence']) or label('ui_none_attached')))}</p>
+</div>
+<div class="summary-actions">
+<form method=post action="/admin/claims/{e(cid)}/investigate"><button class="primary">{e(label('ui_action_investigate'))}</button></form>
+<a class="btn" href="#claim-items">{e(label('ui_view_items'))}</a>
+<a class="btn" href="/admin/claims/{e(cid)}/audit">{e(label('ui_audit_link'))}</a>
+</div>
+{needs_you}
+</section>
+<div class="item-list" id="claim-items">{''.join(item_cards)}</div>
+{ui.details(label('ui_investigate_manual'), manual, id='manual')}
+<div class="box" id="decision-note-box"><h2>{e(label('ui_decision_note'))}</h2>
+<p class="btn-row"><button type="button" class="btn" id="copy-note">{e(label('ui_copy_note'))}</button></p>
+<pre id="decision-note">{e(note)}</pre>
+{ui.details(label('ui_english'), f"<pre>{e(note_en)}</pre>")}
 {status_form}
-<p class="note">{e(label('ui_status_follows').format(decision=label(c.decision.value)))} {e(label('ui_status_confirmed_note'))}</p></div>"""
+<p class="note">{e(label('ui_status_follows').format(decision=label(c.decision.value)))} {e(label('ui_status_confirmed_note'))}</p></div>
+<script>(function(){{var b=document.getElementById('copy-note'),n=document.getElementById('decision-note');
+if(!b||!n)return;b.addEventListener('click',function(){{navigator.clipboard.writeText(n.textContent).then(
+function(){{b.textContent='{e(label("ui_copied"))}';}},function(){{b.textContent='{e(label("ui_copy_failed"))}';}});}});}})();</script>"""
     return page(label("ui_claim_title").format(cid=cid), body)
 
 

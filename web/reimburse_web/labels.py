@@ -279,6 +279,11 @@ LABELS = {
     "ui_reviewer_decision": "Keputusan peninjau",
     # claim page (app.claim_detail)
     "ui_claim_title": "Klaim {cid}",
+    "ui_claim_summary": "Ringkasan klaim",
+    "ui_view_items": "Lihat item",
+    "ui_copy_note": "Salin catatan",
+    "ui_copied": "Tersalin",
+    "ui_copy_failed": "Gagal menyalin",
     "ui_back_to_triage": "Kembali ke triage",
     "ui_audit_link": "Lihat jejak audit",
     "ui_rule_engine": "Mesin aturan: {decision}",

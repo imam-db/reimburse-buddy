@@ -101,7 +101,7 @@ def test_confirmation_page_does_not_default_to_approve_and_posts_execute_nothing
 
 def _row(html: str, item_id: str) -> str:
     assert f"id='item-{item_id}'" in html
-    return html.split(f"id='item-{item_id}'", 1)[1].split("</tr>", 1)[0]
+    return html.split(f"id='item-{item_id}'", 1)[1].split("</article>", 1)[0]
 
 
 def test_claim_page_decision_buttons_only_for_decision_gaps(client):
@@ -146,3 +146,35 @@ def test_claim_page_states_amounts_come_from_rules_and_links_audit(client):
     assert "Riwayat status" in audit.text and "Log bukti peninjau" in audit.text
     assert "OUT-001" in audit.text and "CLM-2026-0110" in audit.text
     assert client.get("/admin/claims/CLM-2026-9999/audit").status_code == 404
+
+
+def test_claim_page_is_a_review_workspace(client):
+    html = client.get(f"/admin/claims/{HERO}").text
+    summary = html.split('<section class="claim-summary"', 1)[1].split("</section>", 1)[0]
+    assert "id=\"claim-summary\"" in summary or "id='claim-summary'" in summary
+    assert 'action="/admin/claims/CLM-2026-0110/investigate"' in summary
+    assert "Selidiki dengan agent" in summary
+    from reimburse_buddy.models import rupiah
+
+    check = web.run_check(HERO)
+    assert rupiah(check.total_claimed) in summary and rupiah(check.total_approvable) in summary
+
+    # Items are cards with a stable anchor, the description, the amount and one action row.
+    card = html.split("id='item-IT-3'", 1)[1].split("</article>", 1)[0]
+    assert "Hotel" in card and "Rp" in card and "Hotel di atas plafon" in card
+    assert "btn-row" in card and "name=choice" in card
+
+    # Search, calendar and memos live behind one disclosure below the items.
+    manual = html.split('id="manual"', 1)[1]
+    assert "Cari di mailbox reimburse" in manual and "Kalender selama perjalanan" in manual
+    assert html.index('id="claim-items"') < html.index('id="manual"')
+
+
+def test_decision_note_is_indonesian_with_english_behind_a_disclosure_and_a_copy_button(client):
+    html = client.get(f"/admin/claims/{HERO}").text
+    note = html.split("id=\"decision-note\"", 1)[1].split("</pre>", 1)[0]
+    assert "Klaim biaya" in note and "Perjalanan:" in note
+    assert "Expense claim" not in note
+    assert "<summary>English</summary>" in html
+    assert 'id="copy-note"' in html and "navigator.clipboard.writeText" in html
+    assert "addEventListener('click'" in html
