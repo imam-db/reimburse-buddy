@@ -93,7 +93,13 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
     action_ids = {a["action_id"] for a in plan["actions"]}
     expired = {aid for aid in action_ids if _status(events, aid) == "expired"}
     refused = bool(plan.get("staging_errors"))
-    link = f"<link rel=stylesheet href='{e(stylesheet_url)}'>" if stylesheet_url else ""
+    # Presentation only: which actions still wait for a decision, read from the audit log as before.
+    statuses = {aid: _status(events, aid) for aid in action_ids}
+    waiting = [aid for aid, st in statuses.items() if st is None]
+    ran = sum(1 for st in statuses.values() if st == "execution")
+    rejected = sum(1 for st in statuses.values() if st == "rejection")
+    finished = bool(action_ids) and not waiting and not refused and not expired and (ran or rejected) > 0
+    link =f"<link rel=stylesheet href='{e(stylesheet_url)}'>" if stylesheet_url else ""
     out = [f"<!doctype html><html lang=id><head><meta charset=utf-8>"
            f"<meta name=viewport content='width=device-width, initial-scale=1'>"
            f"<title>Konfirmasi rencana {run} · Reimburse Buddy</title>"
@@ -108,7 +114,9 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
            + "</p>",
            f"<details><summary>Detail rencana</summary><p class=muted>Run {run} &middot; "
            f"{e(plan['plan_id'])}</p></details>",
-           "<p><b>Belum ada yang dikirim sampai Anda menyetujui.</b> Semua alat masih tiruan.</p>"]
+           (f"<p id='plan-finished'><b>Rencana selesai: {ran} aksi dijalankan, {rejected} ditolak.</b> "
+            "Semua alat masih tiruan.</p>" if finished else
+            "<p><b>Belum ada yang dikirim sampai Anda menyetujui.</b> Semua alat masih tiruan.</p>")]
     if not allow_approve:
         note = blocked_note or "Anda peminta rencana ini, jadi tombol Setujui dimatikan."
         out.append(f"<div class='notice' id='self-approval'><b>Anda tidak dapat menyetujui rencana ini</b>"
@@ -149,7 +157,7 @@ def render(plan: dict, log: AuditLog, directory: Directory, rules: R.Rules, *, a
     by_action: dict[str, list[dict]] = {}
     for a in plan.get("assumptions", []):
         by_action.setdefault(a.get("action_id", ""), []).append(a)
-    form = action_url is not None and not expired and not refused and not stale
+    form = action_url is not None and not expired and not refused and not stale and not finished
     if form:
         out.append(f"<form method=post action='{e(action_url)}' id='plan-form'>"
                    f"<input type=hidden name=plan_id value='{e(plan['plan_id'])}'>")

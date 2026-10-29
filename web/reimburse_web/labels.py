@@ -515,6 +515,7 @@ LABELS = {
     "ui_ticket_missing": "Tiket pesawat belum ada",
     "ui_file_rejected_reupload": "Berkas sebelumnya tidak diterima finance. Unggah ulang.",
     "ui_file_not_accepted": "tidak diterima",
+    "ui_msg_decisions_saved_counts": "Keputusan disimpan: {approved} disetujui, {rejected} ditolak.",
 }
 
 

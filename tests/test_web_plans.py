@@ -55,6 +55,15 @@ def test_decide_stores_decision_map_only(client):
     assert not [e for e in plans.log().list("w1") if e["event_type"] in ("approval", "execution")]
 
 
+def test_decide_flash_states_the_counts(client):
+    from urllib.parse import unquote
+    c, plan, _ = client
+    a1, a2 = (a["action_id"] for a in plan["actions"])
+    r = c.post("/admin/plans/w1/decide", data={"plan_id": plan["plan_id"], f"decision:{a1}": "approve",
+                                               f"decision:{a2}": "reject"}, follow_redirects=False)
+    assert "Keputusan disimpan: 1 disetujui, 1 ditolak." in unquote(r.headers["location"])
+
+
 def test_stale_form_is_not_saved(client):
     c, plan, store = client
     r = c.post("/admin/plans/w1/decide", data={"plan_id": "w1:v0"}, follow_redirects=False)
