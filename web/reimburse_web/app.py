@@ -30,6 +30,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from reimburse_buddy.data_store import DataStore
 from reimburse_buddy.decision import draft_decision
+from reimburse_buddy.messages import render as render_message
 from reimburse_buddy.models import rupiah
 from reimburse_buddy.rules import check_claim
 from reimburse_buddy.triage import approve_cleared_batch, triage_claims
@@ -369,13 +370,29 @@ def options(values, selected=None) -> str:
     return "".join(f'<option value="{e(v)}"{" selected" if v == selected else ""}>{e(label)}</option>' for v, label in values)
 
 
+def finding_text(f) -> str:
+    """One engine finding in Indonesian (messages.render); the English text stays in the title attribute.
+
+    A finding without a key, or one the template cannot format, falls back to its own text."""
+    text = f.message
+    if getattr(f, "key", ""):
+        params = dict(f.params)
+        if f.key == "human_resolved" and "choice" in params:
+            params["choice"] = label(params["choice"])  # "Setujui sebatas plafon", not the code
+        try:
+            text = render_message(f.key, params, "id")
+        except (KeyError, IndexError, ValueError):
+            text = f.message
+    return f"<span title='{e(f.message)}'>{e(text)}</span>"
+
+
 def provenance_badges(item: dict) -> str:
     prov = item.get("provenance") or {}
     if not prov:
         return ""
     def badge(k, v):
         cls = "warn" if v == "self_declared" else "ok"
-        return f"<span class='tag {cls}' title='{e(k)}: {e(v)}'>{e(label(k))}: {e(label(v))}</span>"
+        return f"<span class='tag {cls}' title='{e(k)}: {e(v)}'>{e(label('prov_' + k))}: {e(label(v))}</span>"
     return "<div>" + "".join(badge(k, v) for k, v in prov.items()) + "</div>"
 
 
@@ -894,7 +911,7 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
     item_cards: list[str] = []
     for it in c.items:
         src = next(x for x in claim["items"] if x["id"] == it.item_id)
-        finds = "<br>".join(f"<span class=tag title='{e(f.rule)}'>{e(label(f.rule))}</span> {e(f.message)}"
+        finds = "<br>".join(f"<span class=tag title='{e(f.rule)}'>{e(label(f.rule))}</span> {finding_text(f)}"
                             for f in it.findings)
         gaps = "".join(f"<span class='tag warn' title='{e(g)}'>{e(label(g))}</span>" for g in it.gaps)
         pend = pending.get(it.item_id, [])

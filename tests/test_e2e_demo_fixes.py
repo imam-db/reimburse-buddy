@@ -138,3 +138,31 @@ def test_employee_and_manager_cannot_open_finance_file_route(tmp_path, monkeypat
     login_as(c, "EMP-102")
     assert c.get(url).status_code == 200
     web.reset_all()
+
+
+# --- item 4: Indonesian findings ---------------------------------------------------------------
+def visible_text(html: str) -> str:
+    return re.sub(r"<[^>]+>", " ", html)  # tags (and so their title attributes) are dropped
+
+
+def test_claim_page_findings_are_indonesian(client):
+    for ev in ("MSG-5201", "MSG-5001", "MEMO-2026-038", "EVT-7010", "MSG-5202", "MSG-5203"):
+        client.post(f"/admin/claims/{HERO}/evidence", data={"evidence_id": ev})
+    client.post(f"/admin/claims/{HERO}/decide", data={"item_id": "IT-3", "choice": "approve_capped"})
+    page = client.get(f"/admin/claims/{HERO}").text
+    text = visible_text(page.split('id="decision-note-box"', 1)[0])  # the note has its own English toggle
+    for english in ("Receipt found in", "exceeds the tier", "Resolved by the reviewer", "approve_capped",
+                    "Boarding pass for", "Category: "):
+        assert english not in text, english
+    assert "ditemukan di MSG-5201" in text and "Bukti pembayaran tidak ada" in text
+    assert "Diputuskan oleh reviewer: Setujui sebatas plafon" in text
+    assert "Boarding pass for QZ 7520" in page  # the English text stays in the title attribute
+
+
+def test_provenance_tags_use_indonesian_names():
+    html = web.provenance_badges({"provenance": {"category": "ocr", "date": "ocr", "amount": "self_declared",
+                                                 "merchant": "pdf_text", "nights": "ocr", "flight_no": "ocr"}})
+    text = visible_text(html)
+    for word in ("Kategori: OCR", "Tanggal: OCR", "Nominal: Dideklarasikan sendiri", "Merchant: Teks PDF",
+                 "Malam: OCR", "No. penerbangan: OCR"):
+        assert word in text, word

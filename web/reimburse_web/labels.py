@@ -489,6 +489,13 @@ LABELS = {
     "ui_batch_web": "Pengajuan karyawan",
     "ui_open_file": "Buka berkas di tab baru",
     "ui_file_preview": "Pratinjau {name}",
+    "prov_category": "Kategori",
+    "prov_date": "Tanggal",
+    "prov_amount": "Nominal",
+    "prov_merchant": "Merchant",
+    "prov_nights": "Malam",
+    "prov_flight_no": "No. penerbangan",
+    "prov_doc_type": "Jenis dokumen",
 }
 
 
