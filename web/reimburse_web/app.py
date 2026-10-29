@@ -601,7 +601,12 @@ def employee_page(request: Request, msg: str = ""):
     if rows:  # a table on wide screens, one compact block per claim below 720 px
         claims_html = f"<div class='claims-wide'>{claims_html}</div><ul class='claims-compact'>{cards}</ul>"
     inbox = [m for m in store.outbox if m["to"] == emp]
-    msgs = [[e(m["claim_id"]), e(m["subject"]), e(m["body"])] for m in inbox]
+    own_ids = {c["id"] for c in claims}  # link only to the employee's own claims
+
+    def claim_link(cid: str) -> str:
+        return f"<a href='/employee/claims/{e(cid)}'>{e(cid)}</a>" if cid in own_ids else e(cid)
+
+    msgs = [[claim_link(m["claim_id"]), e(m["subject"]), e(m["body"])] for m in inbox]
     messages_html = ""  # only when finance wrote to this employee, right after "Klaim saya"
     if msgs:
         messages_html = (f"<h2>{e(label('ui_messages_from_finance'))}</h2>"

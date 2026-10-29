@@ -83,6 +83,13 @@ def test_rejected_upload_stays_masked_on_a_sensitive_item(client, monkeypatch):
     assert "Sedang ditinjau" in text or "ditinjau" in text
 
 
+def test_portal_message_links_to_the_claim_page(client):
+    web.store.send_message("EMP-001", "Mohon kirim struk.", "Klaim CLM-2026-0110", "CLM-2026-0110")
+    page = client.get("/employee").text
+    box = page.split("Pesan dari finance", 1)[1]
+    assert "<a href='/employee/claims/CLM-2026-0110'>CLM-2026-0110</a>" in box
+
+
 def test_anchor_targets_clear_the_sticky_header():
     css = (web.STATIC_DIR / "app.css").read_text(encoding="utf-8")
     assert "--header-h:" in css
