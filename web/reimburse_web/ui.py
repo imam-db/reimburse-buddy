@@ -37,11 +37,13 @@ def skip_link(target: str = "#main", text: str = "Lewati ke konten") -> str:
 
 def page_header(title: str, subtitle: str = "", actions: str = "", *, back: str = "",
                 id: str = "") -> str:
-    """The one h1 of a page, an optional subtitle and right-aligned actions (markup)."""
+    """The one h1 of a page, an optional subtitle and right-aligned actions (markup).
+
+    An empty `title` leaves the h1 out, for pages whose shell (`page()`) already prints it."""
     parts = []
     if back:
         parts.append(f'<p class="note">{back}</p>')
-    head = [f"<h1{_attrs(id=id)}>{e(title)}</h1>"]
+    head = [f"<h1{_attrs(id=id)}>{e(title)}</h1>"] if title else []
     if subtitle:
         head.append(f'<p class="sub">{e(subtitle)}</p>')
     parts.append(f'<div class="page-head"><div>{"".join(head)}</div>'

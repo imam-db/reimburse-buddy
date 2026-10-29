@@ -270,3 +270,13 @@ def test_flash_for_an_unknown_item_or_text_is_escaped(client):
     page = client.get(f"/employee/claims/{cid}?msg=File+added&item=IT-99").text
     assert "Berkas ditambahkan" in page and "IT-99" not in page.split("<main", 1)[1].split("</main>")[0]
     assert "&lt;b&gt;" in client.get(f"/employee/claims/{cid}?msg=%3Cb%3E").text
+
+
+# --- item 8: main action first ----------------------------------------------------
+def test_start_new_claim_comes_before_my_claims(client):
+    page = client.get("/employee").text
+    assert page.index('href="/employee/new"') < page.index("<h2>Klaim saya</h2>")
+    assert page.count('href="/employee/new"') == 1
+    assert 'class="btn primary" href="/employee/new">Mulai klaim baru</a>' in page
+    assert 'class="page-head"' in page and "Klaim baru</h2>" not in page
+    assert page.count("<h1") == 1

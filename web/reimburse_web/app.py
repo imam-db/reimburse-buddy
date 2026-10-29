@@ -568,6 +568,7 @@ def employee_page(request: Request, msg: str = ""):
                  e(", ".join(a["name"] for a in m.get("attachments", [])))] for m in fwd]
     body = f"""
 {ui.alert(flash_text(msg), tone="success") if msg else ''}
+{ui.page_header("", label('ui_new_claim_hint'), '<a class="btn primary" href="/employee/new">' + e(label('ui_start_new_claim')) + '</a>')}
 <h2>{e(label('ui_my_claims'))}</h2>
 {ui.table([label('ui_col_id'), label('ui_col_purpose'), label('ui_col_trip'), label('ui_col_claimed'),
            label('ui_col_status')], rows, num=(3,), caption=label('ui_my_claims'),
@@ -576,8 +577,6 @@ def employee_page(request: Request, msg: str = ""):
 <h2>{e(label('ui_messages_from_finance'))}</h2>
 {ui.table([label('ui_col_claim'), label('ui_col_subject'), label('ui_col_body')], msgs,
           caption=label('ui_messages_from_finance'), empty=label('ui_no_messages'))}
-<div class="box"><h2>{e(label('ui_new_claim'))}</h2><p>{e(label('ui_new_claim_hint'))}</p>
-<p><a class="btn primary" href="/employee/new">{e(label('ui_start_new_claim'))}</a></p></div>
 <h2>{e(label('ui_forwarded_mailbox'))}</h2>
 {ui.table([label('ui_col_date'), label('ui_col_subject'), label('ui_col_attachments')], fwd_rows,
           caption=label('ui_forwarded_mailbox'), empty=label('ui_no_forwarded'))}
