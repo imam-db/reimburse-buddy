@@ -410,3 +410,23 @@ def test_draft_file_route_needs_an_employee(client, monkeypatch):
     f = first_file(d)
     monkeypatch.delenv("REIMBURSE_DEV_EMPLOYEE")
     assert client.get(f"/employee/drafts/{d['id']}/files/{f['id']}").status_code == 401
+
+
+# --- P4.16: thumbnails in the card ---------------------------------------------
+def test_file_rows_show_previews_even_when_extraction_failed(client, monkeypatch):
+    d = drop(client, monkeypatch, {
+        "ok.png": good(doc_type="taxi_receipt", date="2026-10-03", amount=150000, merchant="Taksi"),
+        "doc.pdf": good(doc_type="flight_receipt", date="2026-10-03", amount=500000,
+                        merchant="Airlines", flight_no="QZ 7520"),
+        "bad.png": bad(),
+    })
+    markup = client.get(f"/employee/drafts/{d['id']}").text
+    files = {f["name"]: f for c in d["cards"] for f in c["files"]}
+    for name, f in files.items():
+        assert f"/employee/drafts/{d['id']}/files/{f['id']}" in markup, name
+    ok = files["ok.png"]
+    assert (f"<img class='thumb' loading='lazy' "
+            f"src='/employee/drafts/{d['id']}/files/{ok['id']}' alt='Pratinjau ok.png'>") in markup
+    assert "class='doc-icon' aria-hidden='true'>PDF</span>" in markup
+    assert "alt='Pratinjau bad.png'" in markup
+    assert "target='_blank' rel='noopener'" in markup
