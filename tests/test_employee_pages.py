@@ -371,3 +371,31 @@ def test_forwarded_history_is_a_closed_details_with_its_count(client):
     assert "<details open" not in page and re.search(r"<details[^>]* open", page) is None
     assert "<h2>Diteruskan ke mailbox reimburse</h2>" not in page
     assert page.index("<h2>Klaim saya</h2>") < page.index("Riwayat berkas yang diteruskan")
+
+
+# --- item 12: Q&A box position -----------------------------------------------------
+def test_qa_box_comes_after_my_claims_and_messages(monkeypatch):
+    from reimburse_agent.audit import JsonlAuditLog
+    from reimburse_web import plans, qa
+
+    from conftest import install_test_users, login_as
+
+    monkeypatch.setenv("EMPLOYEE_QA", "1")
+    monkeypatch.delenv("REIMBURSE_DEV_EMPLOYEE", raising=False)
+    web.reset_all()
+    plans.STATE["log"] = JsonlAuditLog()
+    qa.STATE.clear()
+    install_test_users()
+    try:
+        c = TestClient(web.app)
+        assert login_as(c, "EMP-001", "/employee").status_code == 303
+        web.store.outbox.append({"to": "EMP-001", "claim_id": "CLM-2026-0101", "subject": "Mohon lengkapi", "body": "x"})
+        page = c.get("/employee").text
+        assert "id='qa'" in page
+        assert (page.index("<h2>Klaim saya</h2>") < page.index("<h2>Pesan dari finance</h2>")
+                < page.index("id='qa'") < page.index("Riwayat berkas yang diteruskan"))
+        assert page.index('href="/employee/new"') < page.index("id='qa'")
+    finally:
+        qa.STATE.clear()
+        plans.STATE.clear()
+        web.reset_all()
