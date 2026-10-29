@@ -202,6 +202,8 @@ uv run --no-dev reimburse-buddy-mcp   # starts the server on stdio (WorkBuddy no
 (cd agent && uv sync && uv run pytest -q)   # agent, plan graph, audit log, injection, Q&A
 ```
 
+CI runs both suites on every pull request and on pushes to main, with Tesseract and RapidOCR installed. The Postgres-marked tests stay skipped in CI because no database is available there.
+
 ## Run the version B web app
 
 ```bash

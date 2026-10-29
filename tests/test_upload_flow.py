@@ -85,11 +85,11 @@ def test_edits_are_self_declared_and_submit_forwards_files(client):
     assert fwd[2]["attachments"][0]["evidence_status"] == "needs_review"
     assert fwd[2]["attachments"][0]["review_reason"] == "unreadable_file"
     page = client.get(r.headers["location"]).text
-    assert "berkas diteruskan ke" in page and "Tambah file" in page
+    assert "Berkas Anda sudah diteruskan ke finance." in page and "Tambah berkas" in page
     admin = client.get(f"/admin/claims/{cid}").text
     assert "amount: self_declared" in admin and "amount: ocr" in admin
     # Triage of the W43 batch is unaffected.
-    assert "10 claims, 7 cleared, 3 exceptions" in client.get("/admin").text
+    assert "10 klaim, 7 bersih, 3 pengecualian" in client.get("/admin").text
 
 
 def test_missing_evidence_then_add_file(client):
@@ -162,7 +162,7 @@ def test_unreadable_evidence_needs_explicit_acceptance(client):
     log = web.review(cid)["evidence_log"]
     assert log[-1] | {"at": ""} == {"at": "", "evidence_id": "MSG-W002", "item_id": "IT-2",
                                     "reason": "unreadable_file", "verdict": "accepted"}
-    assert "Evidence review log" in client.get(f"/admin/claims/{cid}").text
+    assert "Log peninjauan bukti" in client.get(f"/admin/claims/{cid}").text
 
 
 def test_rejected_evidence_leaves_item_missing(client):
