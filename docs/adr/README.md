@@ -14,6 +14,7 @@ Status: `Proposed` (written, not yet agreed) → `Accepted` (agreed, work may st
 | [0003](0003-manager-approval-requests.md) | Managers answer approval requests; finance decides | Accepted |
 | [0004](0004-seeding-employee-accounts.md) | Seeding the employee accounts | Accepted |
 | [0005](0005-employee-qa-improvements.md) | Employee Q&A: answer quality and usability | Accepted |
+| [0006](0006-ui-ux-design-layer.md) | UI/UX: one design layer, mobile-first pages, Indonesian-first copy | Accepted |
 
 ## Template
 
