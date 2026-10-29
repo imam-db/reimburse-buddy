@@ -267,7 +267,8 @@ def reset_form(text: str) -> str:
     """The demo reset button; never rendered in production."""
     if auth.is_production():
         return ""
-    return f'<form method="post" action="/admin/reset"><button type="submit">{e(text)}</button></form>'
+    return (f'<form method="post" action="/admin/reset"><button type="submit" class="btn quiet-danger" '
+            f"onclick=\"return confirm('Reset data demo?')\">{e(text)}</button></form>")
 
 
 def page(title: str, body: str, status_code: int = 200) -> HTMLResponse:
@@ -288,6 +289,36 @@ def page(title: str, body: str, status_code: int = 200) -> HTMLResponse:
 
 def e(x) -> str:
     return escape(str(x))
+
+
+MONTHS_ID = ("Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des")
+
+
+def fmt_date(value) -> str:
+    """'2026-10-02' -> '2 Okt 2026'; anything else is shown unchanged."""
+    try:
+        d = date.fromisoformat(str(value)[:10])
+    except (TypeError, ValueError):
+        return str(value or "")
+    return f"{d.day} {MONTHS_ID[d.month - 1]} {d.year}"
+
+
+def fmt_moment(value) -> str:
+    """'2026-10-02 14:30' -> '2 Okt 2026 14:30'; the ISO value stays in the title attribute."""
+    text = str(value or "")
+    if len(text) >= 16 and text[10] in " T":
+        return f"{fmt_date(text)} {text[11:16]}"
+    return fmt_date(text)
+
+
+def date_html(value) -> str:
+    iso = e(str(value if value is not None else ""))
+    return f'<time datetime="{iso}" title="{iso}">{e(fmt_date(value))}</time>'
+
+
+def moment_html(value) -> str:
+    iso = e(str(value if value is not None else ""))
+    return f'<time datetime="{iso}" title="{iso}">{e(fmt_moment(value))}</time>'
 
 
 # --- failed navigations get a page, scripts still get JSON -----------------------------
@@ -512,13 +543,14 @@ def employee_page(request: Request, msg: str = ""):
     me = store.get_employee(emp)
     claims = [c for c in store.claims if c["employee_id"] == emp]
     rows = [[f"<a href='/employee/claims/{e(c['id'])}'>{e(c['id'])}</a>", e(c["purpose"]),
-             f"{e(c['trip']['destination'])} {e(c['trip']['start_date'])} &rarr; {e(c['trip']['end_date'])}",
+             f"{e(c['trip']['destination'])} {date_html(c['trip']['start_date'])} "
+             f"&rarr; {date_html(c['trip']['end_date'])}",
              e(rupiah(sum(Decimal(i["amount"]) for i in c["items"]))), status_tag(c["status"])]
             for c in claims]
     inbox = [m for m in store.outbox if m["to"] == emp]
     msgs = [[e(m["claim_id"]), e(m["subject"]), e(m["body"])] for m in inbox]
     fwd = [m for m in store.inbox if m.get("owner_id") == emp]
-    fwd_rows = [[e(m["date"]), e(m["subject"]),
+    fwd_rows = [[date_html(m["date"]), e(m["subject"]),
                  e(", ".join(a["name"] for a in m.get("attachments", [])))] for m in fwd]
     body = f"""
 {ui.alert(flash_text(msg), tone="success") if msg else ''}
@@ -866,7 +898,7 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
 <div class="summary-body">
 <h2>{e(label('ui_rule_engine').format(decision=label(c.decision.value)))}</h2>
 <p><span title="{e(emp)}">{e(person(store, emp))}</span> &middot; {e(claim['purpose'])} &middot; {e(trip['destination'])}
-{e(trip['start_date'])} &rarr; {e(trip['end_date'])} &middot; {e(label('ui_status'))} {status_tag(claim['status'])}</p>
+{date_html(trip['start_date'])} &rarr; {date_html(trip['end_date'])} &middot; {e(label('ui_status'))} {status_tag(claim['status'])}</p>
 <p>{engine_amounts}</p>
 <p class="note">{e(label('ui_engine_note'))} {e(label('ui_evidence_attached').format(evidence=', '.join(r['evidence']) or label('ui_none_attached')))}</p>
 </div>
@@ -901,7 +933,7 @@ def claim_audit(cid: str):
     r = review(cid)
     status_rows = [[e(x.get("claim_id")), e(x.get("from")), e(x.get("to")), e(x.get("note", ""))]
                    for x in store.status_log if x.get("claim_id") == cid]
-    evidence_rows = [[e(x.get("at")), e(x.get("evidence_id")), e(x.get("item_id")),
+    evidence_rows = [[moment_html(x.get("at")), e(x.get("evidence_id")), e(x.get("item_id")),
                       e(x.get("reason")), e(x.get("verdict"))] for x in r["evidence_log"]]
     decision_rows = [[e(item_id), e(choice)] for item_id, choice in r["decisions"].items()]
     outbox_rows = [[e(m.get("id")), e(m.get("to")), e(m.get("subject")), e(m.get("body"))]

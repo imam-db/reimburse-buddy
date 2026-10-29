@@ -1221,3 +1221,73 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
     scroll-behavior: auto !important;
   }
 }
+
+/* --- dark theme -------------------------------------------------------------- */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --ink: #e7ebf2;
+    --muted: #a2abba;
+    --line: #2b3240;
+    --line-strong: #3d4657;
+    --surface: #171c25;
+    --surface-2: #1f2631;
+    --bg: #0f1319;
+
+    --brand: #6ea8f5;
+    --brand-hover: #8bbcf7;
+    --brand-ink: #0b1118;
+    --brand-soft: #1b2a40;
+
+    --success: #6fce97;
+    --success-soft: #16301f;
+    --warn: #e5b45f;
+    --warn-soft: #2f2513;
+    --danger: #f08a8f;
+    --danger-soft: #341a1c;
+    --focus: #8bbcf7;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
+  }
+
+  .site-header {
+    background: rgba(23, 28, 37, 0.94);
+  }
+
+  .submit-bar {
+    background: rgba(23, 28, 37, 0.97);
+  }
+
+  tbody tr:hover {
+    background: #1d2430;
+  }
+
+  .login-shell {
+    background: radial-gradient(1200px 600px at 50% -10%, #1a2433 0%, var(--bg) 55%);
+  }
+
+  .tag.ok {
+    border-color: #2c5a3c;
+  }
+
+  .tag.warn,
+  .tag.low {
+    border-color: #5a4a22;
+  }
+
+  .tag.bad {
+    border-color: #5a2a2d;
+  }
+
+  .login-error {
+    border-color: #6b2f33;
+  }
+
+  .table-wrap,
+  .drop {
+    background: var(--surface);
+  }
+}

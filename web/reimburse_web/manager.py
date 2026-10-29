@@ -75,7 +75,7 @@ def manager_home(request: Request, msg: str = ""):
                    f"<button name=decision value=approved>{e(label('ui_req_approve'))}</button> "
                    f"<button name=decision value=rejected>{e(label('ui_req_reject'))}</button></form>")
         else:
-            act = (f"<span class=note>{e(r.get('answered_at', ''))}</span>"
+            act = (f"<span class=note>{web.moment_html(r['answered_at']) if r.get('answered_at') else ''}</span>"
                    + (f"<div class=note>{e(r['note'])}</div>" if r.get("note") else ""))
         rows.append([e(r["claim_id"]), e(person(web.store, claim["employee_id"])),
                      f"{e(label(it.get('category', '')))}<div class=note>{e(it.get('description', r['item_id']))}</div>",

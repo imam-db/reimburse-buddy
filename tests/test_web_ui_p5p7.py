@@ -333,3 +333,24 @@ def test_flash_message_is_a_focusable_status_region(client):
     html = client.get("/employee?msg=File+added").text
     assert 'class="alert"' in html and 'role="status"' in html and 'tabindex="-1"' in html
     assert "querySelector('.alert')" in html and "a.focus()" in html
+
+
+# --- P6 polish -----------------------------------------------------------------
+def test_dates_are_indonesian_with_the_iso_value_in_the_title(client):
+    claim = client.get(f"/employee/claims/{HERO}").text
+    assert '<time datetime="2026-10-02" title="2026-10-02">2 Okt 2026</time>' in claim
+    portal = client.get("/employee").text
+    assert '<time datetime="2026-10-12"' in portal and "Okt 2026" in portal
+
+
+def test_destructive_actions_ask_first(client):
+    assert "confirm('Reset data demo?')" in client.get("/admin").text
+    did = _employee_draft(client)
+    assert "Hapus item ini?" in client.get(f"/employee/drafts/{did}").text
+
+
+def test_stylesheet_has_a_dark_theme_and_honours_reduced_motion(client):
+    css = client.get("/static/app.css").text
+    assert "@media (prefers-color-scheme: dark)" in css and "color-scheme: dark" in css
+    assert "@media (prefers-reduced-motion: reduce)" in css
+    assert "tabular-nums" in css

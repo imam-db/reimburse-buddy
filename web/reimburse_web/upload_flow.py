@@ -221,9 +221,9 @@ def draft_page(did: str, request: Request):
         errs = "".join(f"<div class=err>{e(x)}</div>" for x in c["errors"])
         cards_html += (f"<div class=card><b>{e(label('ui_card'))} {n + 1}</b>{errs}{''.join(_input(c, k, allowed) for k in keys)}"
                        f"<div class=note>{e(label('ui_col_files'))}</div><ul>{files or '<li class=note>' + e(label('ui_no_file_yet')) + '</li>'}</ul>"
-                       f"{merge} {split} <button name=action value='delete:{c['id']}'>{e(label('ui_delete'))}</button></div>")
+                       f"{merge} {split} <button class='btn quiet-danger' name=action value='delete:{c['id']}' onclick='return confirm(&quot;Hapus item ini?&quot;)'>{e(label('ui_delete'))}</button></div>")
     errs = "".join(f"<p class=err>{e(x)}</p>" for x in d["errors"])
-    body = f"""<p>{e(h['purpose'])} &middot; {e(h['destination'])} {e(h['start_date'])} &rarr; {e(h['end_date'])}</p>
+    body = f"""<p>{e(h['purpose'])} &middot; {e(h['destination'])} {core.date_html(h['start_date'])} &rarr; {core.date_html(h['end_date'])}</p>
 <p class="note">{e(label('ui_check_note').format(flag=label('self_declared')))}</p>{errs}
 <form method="post" action="/employee/drafts/{e(did)}"><div class="cards">{cards_html}</div>
 <p><button name=action value="save">{e(label('ui_save_changes'))}</button> <button name=action value="add">{e(label('ui_add_item'))}</button>
@@ -486,12 +486,12 @@ def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: i
                f"<button>{e(label('ui_add_file'))}</button></form></details>")
         files_cell = (ui.chips(have, tone="ok") if have
                       else f"<span class=note>{e(label('none'))}</span>")
-        rows.append([f"{e(label(it['category']))}<div class=note>{e(it['description'])}</div>", e(it["date"]),
+        rows.append([f"{e(label(it['category']))}<div class=note>{e(it['description'])}</div>", core.date_html(it["date"]),
                      e(rupiah(res.claimed)), files_cell, f"<span class='tag {cls}'>{e(status)}</span>", add])
     body = f"""<p><a href="/employee">&larr; {e(label('ui_my_claims'))}</a></p>
 {ui.alert(label("ui_forwarded_note").format(flash=core.flash_text(msg), mailbox=core.MAILBOX), tone="success") if msg else ''}
-<p>{e(claim['purpose'])} &middot; {e(claim['trip']['destination'])} {e(claim['trip']['start_date'])} &rarr;
-{e(claim['trip']['end_date'])} &middot; {e(label('ui_status'))} {core.status_tag(claim['status'])}</p>
+<p>{e(claim['purpose'])} &middot; {e(claim['trip']['destination'])} {core.date_html(claim['trip']['start_date'])} &rarr;
+{core.date_html(claim['trip']['end_date'])} &middot; {e(label('ui_status'))} {core.status_tag(claim['status'])}</p>
 {ui.table([label('ui_col_item'), label('ui_col_date'), label('ui_col_claimed'), label('ui_col_files'),
            label('ui_col_evidence'), ''], rows, num=(2,), caption=label('ui_claim'))}
 <p class="note">{e(label('ui_finance_note'))}</p>"""

@@ -250,6 +250,7 @@ f.addEventListener('change',refresh);refresh();
 document.getElementById('approve-all').addEventListener('click',function(){
 f.querySelectorAll("input[value=approve]:not([disabled])").forEach(function(x){x.checked=true;});refresh();});
 document.getElementById('reject-all').addEventListener('click',function(){
+if(!confirm('Tolak semua aksi?'))return;
 f.querySelectorAll("input[value=reject]").forEach(function(x){x.checked=true;});refresh();});})();</script>""")
     out.append("</main></body></html>")
     return "".join(out)
