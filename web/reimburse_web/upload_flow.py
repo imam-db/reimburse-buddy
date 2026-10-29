@@ -13,6 +13,7 @@ import os
 import re
 import uuid
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
@@ -235,8 +236,9 @@ def draft_page(did: str, request: Request):
 <p class="note">{e(label('ui_check_note').format(flag=label('self_declared')))}</p>{errs}
 {_summary(d)}
 <form method="post" action="/employee/drafts/{e(did)}"><div class="cards" id="draft-cards" tabindex="-1">{cards_html}</div>
-<p><button name=action value="save">{e(label('ui_save_changes'))}</button> <button name=action value="add">{e(label('ui_add_item'))}</button>
-<button name=action value="submit" style="font-weight:bold">{e(label('ui_submit_claim'))}</button></p></form>"""
+<p class="draft-add">{ui.button(label("ui_add_item"), variant="secondary", name="action", value="add")}</p>
+{_submit_bar(d)}</form>
+<div class="draft-spacer" aria-hidden="true"></div>"""
     return core.page(label("ui_check_title"), body)
 
 
@@ -310,6 +312,26 @@ def _summary(d: dict) -> str:
         links = ", ".join(f"<a href='#card-{e(d['cards'][n - 1]['id'])}'>{n}</a>" for n in incomplete)
         parts.append(e(label("ui_summary_incomplete")).replace("{cards}", links))
     return ui.alert_html(" ".join(parts), tone="warn")
+
+
+def _draft_total(d: dict) -> Decimal:
+    """Sum of the card amounts that parse as whole Rupiah; unreadable cards contribute nothing."""
+    return sum((Decimal(c["fields"]["amount"]["value"]) for c in d["cards"]
+                if isinstance(c["fields"]["amount"]["value"], int) and c["fields"]["amount"]["value"] > 0),
+               Decimal("0"))
+
+
+def _submit_bar(d: dict) -> str:
+    """The sticky bar: item count, claimed total and incomplete-card count, then save/submit."""
+    incomplete = len([c for c in d["cards"] if _card_errors(c, d["header"])])
+    summary = (f'{e(label("ui_bar_items").format(n=len(d["cards"])))} &middot; '
+               f'{e(label("ui_bar_total").format(total=rupiah(_draft_total(d))))} &middot; '
+               f'{e(label("ui_bar_incomplete").format(n=incomplete))}')
+    return (f'<div class="draft-bar" id="draft-bar">'
+            f'<p class="bar-summary">{summary}</p>'
+            f'{ui.button(label("ui_save_changes"), variant="secondary", name="action", value="save")}'
+            f'{ui.button(label("ui_submit_claim"), variant="primary", name="action", value="submit")}'
+            f'</div>')
 
 
 def plausible_max(category: str) -> int | None:

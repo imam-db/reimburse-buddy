@@ -128,3 +128,26 @@ def test_both_pages_show_the_stepper_and_no_internal_terms(client, monkeypatch):
     assert 'class="stepper"' in draft
     assert '<li aria-current="step">Periksa &amp; kirim</li>' in draft
     assert "3. Periksa" not in draft
+
+
+# --- P1.5: sticky submit bar ---------------------------------------------------
+def test_submit_bar_shows_items_total_and_incomplete(client, monkeypatch):
+    from decimal import Decimal
+
+    from reimburse_buddy.models import rupiah
+
+    d = drop(client, monkeypatch, {
+        "a.png": good(doc_type="taxi_receipt", date="2026-10-03", amount=150000, merchant="Taksi"),
+        "b.png": good(doc_type="meal_receipt", date="2026-10-03", amount=95000, merchant="Warung"),
+        "bad.png": bad(),
+    })
+    markup = client.get(f"/employee/drafts/{d['id']}").text
+    assert 'id="draft-bar"' in markup
+    assert "3 item" in markup
+    assert f"Total diajukan {rupiah(Decimal('245000'))}" in markup
+    assert "1 kartu belum lengkap" in markup
+    assert 'class="btn primary"' in markup and 'value="submit"' in markup
+    assert 'value="save"' in markup
+    assert 'style="font-weight:bold"' not in markup
+    assert markup.index('id="draft-cards"') < markup.index('value="add"') < markup.index('id="draft-bar"')
+    assert 'class="draft-spacer"' in markup

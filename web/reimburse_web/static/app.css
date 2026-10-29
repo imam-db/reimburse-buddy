@@ -1240,6 +1240,56 @@ details > summary + * {
   height: 72px;
 }
 
+.draft-add {
+  margin: var(--sp-3) 0;
+}
+
+.draft-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  background: rgba(255, 255, 255, 0.97);
+  border-top: 1px solid var(--line);
+  padding: 10px 12px;
+  margin: var(--sp-3) 0 0;
+  box-shadow: 0 -6px 16px rgba(16, 24, 40, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.draft-bar .bar-summary {
+  margin: 0 auto 0 0;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.draft-spacer {
+  height: 72px;
+}
+
+@media (max-width: 720px) {
+  .draft-bar {
+    flex-wrap: nowrap;
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .draft-bar .bar-summary {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.8rem;
+  }
+
+  .draft-bar button {
+    padding: 0 10px;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+}
+
 /* --- employee Q&A ------------------------------------------------------------ */
 
 .qa {
@@ -1459,6 +1509,10 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
   }
 
   .submit-bar {
+    background: rgba(23, 28, 37, 0.97);
+  }
+
+  .draft-bar {
     background: rgba(23, 28, 37, 0.97);
   }
 
