@@ -129,7 +129,7 @@ def test_example_1_question_answer_and_approval_survive_a_restart(pg):
 
     page = c.get(f"/admin/plans/{run_id}")
     assert "Ada 2 karyawan bernama Budi" in page.text
-    assert "Setujui / Approve" not in page.text
+    assert "Setujui" not in page.text
 
     restart()
 
@@ -138,7 +138,7 @@ def test_example_1_question_answer_and_approval_survive_a_restart(pg):
     assert page.status_code == 200
     assert "Ada 2 karyawan bernama Budi" in page.text
     assert "EMP-201" in page.text and "EMP-202" in page.text
-    assert "Setujui / Approve" not in page.text
+    assert "Setujui" not in page.text
 
     r = answer(c, run_id)
     assert r.status_code == 303 and r.headers["location"] == f"/admin/plans/{run_id}"
@@ -151,7 +151,7 @@ def test_example_1_question_answer_and_approval_survive_a_restart(pg):
     # The pending approval survived too, and the third reviewer may approve it.
     login(c, "EMP-102")
     page = c.get(f"/admin/plans/{run_id}")
-    assert "Setujui / Approve" in page.text
+    assert "Setujui" in page.text
     r = c.post(f"/admin/plans/{run_id}/decide", data=approve_form(run_id), follow_redirects=False)
     assert r.status_code == 303
     assert "stale" not in r.headers["location"]
@@ -214,6 +214,6 @@ def test_a_plan_whose_thread_is_gone_says_so_instead_of_saved(file_backend):
     assert page.status_code == 200
     assert STALE in page.text and "Jalankan ulang" in page.text
     assert "Keputusan disimpan" not in page.text
-    assert "Setujui / Approve" not in page.text
+    assert "Setujui" not in page.text
     assert not [e for e in events(run_id) if e["event_type"] == "execution"]
     assert not (plans.store().root / run_id / "mock_office.json").exists()

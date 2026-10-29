@@ -58,4 +58,4 @@ def test_decide_stores_decision_map_only(client):
 def test_stale_form_is_not_saved(client):
     c, plan, store = client
     r = c.post("/admin/plans/w1/decide", data={"plan_id": "w1:v0"}, follow_redirects=False)
-    assert "Stale" in r.headers["location"] and store.load_decisions("w1", 1) is None
+    assert "Formulir" in r.headers["location"] and store.load_decisions("w1", 1) is None

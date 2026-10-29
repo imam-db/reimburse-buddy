@@ -40,6 +40,7 @@ from reimburse_agent.office.tools import MockOffice  # noqa: E402
 from reimburse_agent.plan_graph import build_plan_graph, pending, run_input  # noqa: E402
 
 from . import plan_state, plans  # noqa: E402
+from .labels import label  # noqa: E402
 
 router = APIRouter()
 _LOCK = threading.RLock()
@@ -271,12 +272,12 @@ def render_question(run_id: str, payload: dict | None, msg: str = "", error: str
     thread for it, so there is nothing to answer. It says so and offers "Jalankan ulang" instead of a form
     that cannot work."""
     if stale:
-        body = f"""<p><a href="/admin/plans">&larr; Rencana / Plans</a></p>
-<div class="box" id="plan-stale"><h2>Pertanyaan ini tidak bisa dijawab lagi</h2>
+        body = f"""<p><a href="/admin/plans">&larr; Rencana</a></p>
+<div class="box" id="plan-stale"><h2>{e(label('ui_question_stale'))}</h2>
 <p>{e(STALE_TEXT)}</p>
 <form method="post" action="/admin/intake/rerun/{e(run_id)}">
 <button class="btn" type="submit" id="rerun">Jalankan ulang</button></form></div>"""
-        return _page("Pertanyaan rencana / Plan question", body)
+        return _page(label("ui_question_title"), body)
     q = payload["question"]
     options = q.get("options") or []
     if options:
@@ -291,20 +292,19 @@ def render_question(run_id: str, payload: dict | None, msg: str = "", error: str
                         f"<input type='radio' name='answer' value='{e(emp)}' required> {e(text)}</label>")
         control = "".join(rows)
     else:
-        control = ('<label>ID karyawan / Employee ID '
-                   '<input name="answer" aria-label="ID karyawan / Employee ID" required></label>')
-    body = f"""<p><a href="/admin/plans">&larr; Rencana / Plans</a></p>
+        control = (f'<label>{e(label("ui_employee_id"))} '
+                   f'<input name="answer" aria-label="{e(label("ui_employee_id"))}" required></label>')
+    body = f"""<p><a href="/admin/plans">&larr; Rencana</a></p>
 {f'<p class="tag ok">{e(msg)}</p>' if msg else ''}
 {f'<p class="tag bad" id="answer-refused">{e(error)}</p>' if error else ''}
-<div class="box"><h2>Pertanyaan dari agen / Question from the agent</h2>
+<div class="box"><h2>{e(label('ui_question_from_agent'))}</h2>
 <p><b>{e(q.get('id_text', ''))}</b></p>
-<p class="note"><i>{e(q.get('en', ''))}</i></p>
-<p class="note">Belum ada tindakan yang disusun atau disetujui sampai pertanyaan ini dijawab.
-/ No action is staged or approvable until this question is answered.</p>
+{f'<details><summary>{e(label("ui_english"))}</summary><p class="note"><i>{e(q.get("en", ""))}</i></p></details>' if q.get('en') else ''}
+<p class="note">{e(label('ui_question_no_action'))}</p>
 <form method="post" action="/admin/plans/{e(run_id)}/answer">
 {control}
-<p><button type="submit">Kirim jawaban / Send answer</button></p></form></div>"""
-    return _page("Pertanyaan rencana / Plan question", body)
+<p><button type="submit">{e(label('ui_question_send'))}</button></p></form></div>"""
+    return _page(label("ui_question_title"), body)
 
 
 @router.get("/admin/intake", response_class=HTMLResponse)
@@ -321,18 +321,16 @@ def intake_page(request: Request):
         choices.append(f'<option value="{e(emp)}"{" selected" if emp == default else ""}>'
                        f'{e(name)} ({e(emp)})</option>')
     who = web.submitter_of(request)
-    body = f"""<p class="note">Tulis permintaan seperti yang Anda ucapkan. Isi dokumen (opsional) diperlakukan
-sebagai data, bukan perintah. / Write the request in your own words; optional document content is treated
-as data, never as instructions.</p>
+    body = f"""<p class="note">{e(label('ui_intake_note'))}</p>
 {web.submitted_by_note(who)}
 <div class="box"><form method="post" action="/admin/intake">
-<label>Permintaan / Request<br><textarea name="request" rows="4" cols="80" required
+<label>{e(label('ui_intake_request'))}<br><textarea name="request" rows="4" required
 placeholder="Tolong kirim notulen ke Pak Budi ya, terus jadwalin follow-up Jumat siang."></textarea></label>
-<label>Isi dokumen / file content (opsional)<br><textarea name="document" rows="5" cols="80"></textarea></label>
-<label>Peminta / Requester <select name="requester">{''.join(choices)}</select></label>
-<p><button type="submit">Buat rencana / Create plan</button></p></form></div>
-<p class="note">Tidak ada LLM atau API berbayar yang dipanggil. Alat kantor hanya tiruan.</p>"""
-    return web.page("Permintaan baru / New request", body)
+<label>{e(label('ui_intake_document'))}<br><textarea name="document" rows="5"></textarea></label>
+<label>{e(label('ui_intake_requester'))} <select name="requester">{''.join(choices)}</select></label>
+<p><button type="submit">{e(label('ui_intake_create'))}</button></p></form></div>
+<p class="note">{e(label('ui_intake_no_llm'))}</p>"""
+    return web.page(label("ui_intake_title"), body)
 
 
 @router.post("/admin/intake")
@@ -343,9 +341,9 @@ def intake_submit(request: Request, request_text: str = Form("", alias="request"
 
     text = (request_text or "").strip()
     if not text:
-        raise HTTPException(400, "Permintaan tidak boleh kosong / request must not be empty")
+        raise HTTPException(400, "Permintaan tidak boleh kosong")
     if requester not in directory().ids():
-        raise HTTPException(400, f"Peminta tidak ada di direktori / unknown requester: {requester}")
+        raise HTTPException(400, f"Peminta tidak ada di direktori: {requester}")
     docs = [{"id": "DOC-1", "text": document}] if (document or "").strip() else []
     run_id = start_run(request=text, requester=requester, documents=docs,
                        submitted_by=web.submitter_of(request))
@@ -365,8 +363,7 @@ def plan_answer(run_id: str, answer: str = Form("")):
     if outcome == CANNOT_RESUME:
         return HTMLResponse(render_question(run_id, payload, stale=True), status_code=409)
     if outcome == INVALID:
-        error = (f"Jawaban tidak valid: {answer or '(kosong)'}. Pilih salah satu EMP-ID dari daftar. "
-                 f"/ Invalid answer: choose one of the listed employee IDs.")
+        error = label("ui_question_invalid").format(answer=answer or "(kosong)")
         return HTMLResponse(render_question(run_id, payload, error=error), status_code=400)
     return RedirectResponse(f"/admin/plans/{run_id}", status_code=303)
 

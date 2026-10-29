@@ -71,12 +71,13 @@ def test_pending_badge_counts_zero_one_three_and_drops_saved_decisions(client):
 def test_plans_index_lists_pending_and_renders_empty_state(client):
     empty = client.get("/admin/plans")
     assert empty.status_code == 200
-    assert "Tidak ada rencana yang menunggu persetujuan." in empty.text
+    assert "Belum ada rencana menunggu." in empty.text
+    assert 'href="/admin/intake"' in empty.text and "Buat permintaan baru" in empty.text
 
     plan = build_plan("w1")
     page = client.get("/admin/plans")
     assert page.status_code == 200
-    assert "Tidak ada rencana yang menunggu persetujuan." not in page.text
+    assert "Belum ada rencana menunggu." not in page.text
     assert "/admin/plans/w1" in page.text
     assert "Hendra Saputra" in page.text
     assert "req" in page.text
@@ -130,7 +131,7 @@ def test_claim_page_decision_buttons_only_for_decision_gaps(client):
     assert r.status_code == 303
     row = _row(client.get(f"/admin/claims/{HERO}").text, "IT-1")
     assert "value='reject' disabled" in row
-    assert "Reviewer: Tolak" in row
+    assert "Peninjau: Tolak" in row
 
 
 def test_claim_page_states_amounts_come_from_rules_and_links_audit(client):

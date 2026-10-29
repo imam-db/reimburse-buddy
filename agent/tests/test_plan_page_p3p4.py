@@ -29,7 +29,7 @@ def make_plan() -> dict:
 def render() -> tuple[dict, str]:
     plan = make_plan()
     return plan, page.render(plan, JsonlAuditLog(), D, R.default_rules(),
-                             action_url="/admin/plans/p4/decide")
+                             action_url="/admin/plans/p4/decide", stylesheet_url="/static/app.css")
 
 
 def test_sentence_lines_for_each_action_type():
@@ -52,8 +52,7 @@ def test_cross_zone_times_assumption_and_influence_are_visible():
 def test_nothing_sent_line_and_reject_is_the_default():
     plan, html = render()
     assert "Belum ada yang dikirim sampai Anda menyetujui." in html
-    assert "Nothing is sent or scheduled until you approve." in html
     assert "value=approve checked" not in html
     assert html.count("value=reject checked") == len(plan["actions"])
-    assert "Setujui / Approve" in html and "Tolak / Reject" in html
-    assert "min-height:44px" in html
+    assert "Setujui" in html and "Tolak" in html
+    assert "<link rel=stylesheet href='/static/app.css'>" in html

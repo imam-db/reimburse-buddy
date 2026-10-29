@@ -14,6 +14,7 @@ import json
 import os
 import re
 import time
+from contextvars import ContextVar
 from datetime import date
 from decimal import Decimal
 from html import escape
@@ -22,6 +23,7 @@ from urllib.parse import quote
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from reimburse_buddy.data_store import DataStore
 from reimburse_buddy.decision import draft_decision
@@ -29,7 +31,7 @@ from reimburse_buddy.models import rupiah
 from reimburse_buddy.rules import check_claim
 from reimburse_buddy.triage import approve_cleared_batch, triage_claims
 
-from . import auth, plan_state, spend, users
+from . import auth, plan_state, spend, ui, users
 from .agent_bridge import NO_KEY_MESSAGE, Investigator, RateLimited, key_configured
 from .intake import router as intake_router
 from . import manager
@@ -44,9 +46,14 @@ BATCH = "2026-W43"
 OWN_BATCH = "2026-W44"
 WEB_BATCH = "web-submissions"
 MAILBOX = "reimburse@nusantara-niaga.example"
-SIGNED, UNSIGNED = "signed", '<span class="tag bad">unsigned</span>'
+SIGNED, UNSIGNED = label("ui_signed"), label("ui_unsigned")
 CHOICES = ("approve_full", "approve_capped", "reject")
 UPLOAD_DIR = Path(os.environ.get("REIMBURSE_WEB_UPLOADS", Path(__file__).resolve().parent.parent / "uploads"))
+# One stylesheet for every screen, served by StaticFiles (the plan confirmation page links it too).
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+STATIC_URL = "/static/app.css"
+# The path of the request being rendered, so the nav can mark the active item (aria-current).
+CURRENT_PATH: ContextVar[str] = ContextVar("rb_current_path", default="")
 
 # Startup order matters: refuse a production deployment without a Postgres audit log before doing any
 # work, then one without a user database / session key, then one that cannot cap or charge a model call,
@@ -59,6 +66,7 @@ app.include_router(plans_router)
 app.include_router(intake_router)
 app.include_router(manager_router)
 app.include_router(qa_router)
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 store = DataStore()
 # Reviewer working state per claim: evidence IDs attached so far and item decisions.
 REVIEW: dict[str, dict] = {}
@@ -77,28 +85,32 @@ def client_ip(request: Request) -> str:
 
 @app.middleware("http")
 async def require_demo_login(request: Request, call_next):
-    """Close every route except /login, /logout and /healthz when the login gate is on.
+    """Close every route except /login, /logout, /healthz and /static/ when the login gate is on.
 
     A browser navigation (GET/HEAD) is redirected to the form; anything else gets 401, so a script
     cannot post its way in. Each role may only open its own area (employee, manager, finance); a wrong-role
     navigation is sent to the role's landing page, anything else gets 403. With no user store or DSN outside production the gate
     is off and every request passes through untouched."""
-    if not auth.enabled() or request.url.path in auth.PUBLIC_PATHS:
-        return await call_next(request)
-    session = auth.session_of(request)
-    if session is None:
-        if request.method in ("GET", "HEAD"):
-            return RedirectResponse(auth.login_url(request.url.path), status_code=303)
-        return JSONResponse({"detail": "Silakan masuk dulu. / Please sign in first."}, status_code=401)
-    if not auth.may_open(session.role, request.url.path):
-        if request.method in ("GET", "HEAD"):
-            return RedirectResponse(auth.home_for(session.role), status_code=303)
-        return JSONResponse({"detail": "Akses ditolak. / Access denied."}, status_code=403)
-    token = auth.set_current(session.reviewer, session.role)
+    path_token = CURRENT_PATH.set(request.url.path)
     try:
-        return await call_next(request)
+        if not auth.enabled() or request.url.path in auth.PUBLIC_PATHS or request.url.path.startswith("/static/"):
+            return await call_next(request)
+        session = auth.session_of(request)
+        if session is None:
+            if request.method in ("GET", "HEAD"):
+                return RedirectResponse(auth.login_url(request.url.path), status_code=303)
+            return JSONResponse({"detail": "Silakan masuk dulu. / Please sign in first."}, status_code=401)
+        if not auth.may_open(session.role, request.url.path):
+            if request.method in ("GET", "HEAD"):
+                return RedirectResponse(auth.home_for(session.role), status_code=303)
+            return JSONResponse({"detail": "Akses ditolak. / Access denied."}, status_code=403)
+        token = auth.set_current(session.reviewer, session.role)
+        try:
+            return await call_next(request)
+        finally:
+            auth.reset_current(token)
     finally:
-        auth.reset_current(token)
+        CURRENT_PATH.reset(path_token)
 
 
 def review(cid: str) -> dict:
@@ -178,66 +190,63 @@ def investigate(cid: str):
 
 
 # --- HTML helpers -----------------------------------------------------------
-CSS = """*{box-sizing:border-box}body{font-family:system-ui,sans-serif;max-width:1100px;margin:0 auto;padding:16px;
-color:#1d1d1f;overflow-x:hidden}
-nav a{margin-right:14px}table{border-collapse:collapse;width:100%;margin:8px 0}td,th{border-bottom:1px solid #ddd;
-padding:6px;text-align:left;vertical-align:top}th{background:#f4f4f6}.num{text-align:right}.tag{display:inline-block;
-padding:1px 6px;border-radius:8px;background:#eef;font-size:12px;margin:1px}.warn{background:#fff3cd}.bad{background:#f8d7da}
-.ok{background:#d1e7dd}.low{background:#fff3cd;border:1px solid #e0a800}
-.table-wrap{overflow-x:auto;max-width:100%}img,pre{max-width:100%}
-.btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:6px 12px;
-border:1px solid #888;border-radius:6px;text-decoration:none;color:inherit}.drop{display:block;border:2px dashed #999;
-border-radius:10px;padding:30px;text-align:center;margin:10px 0}.drop.over{background:#eef}.cards{display:flex;flex-wrap:wrap;gap:12px}
-.card{border:1px solid #ccc;border-radius:8px;padding:10px;flex:1 1 300px;max-width:100%;box-sizing:border-box}
-.card label{display:block;font-size:13px;margin-top:4px}
-.err{color:#a00;font-size:13px}.box{border:1px solid #ddd;border-radius:8px;padding:12px;margin:12px 0}pre{white-space:pre-wrap;
-background:#f7f7f9;padding:10px;border-radius:6px}.note{color:#666;font-size:13px}
-.badge{display:inline-block;min-width:18px;padding:0 6px;border-radius:9px;background:#c62828;color:#fff;
-font-size:12px;text-align:center;line-height:18px}
-button{cursor:pointer;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
-.visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);
-white-space:nowrap;border:0}
-a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,label:focus-visible{outline:3px solid #1a5fb4;outline-offset:2px}"""
+ICON = ("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E"
+        "%3Crect width='32' height='32' rx='8' fill='%231a5fb4'/%3E"
+        "%3Ctext x='16' y='22' font-family='system-ui' font-size='18' font-weight='700' "
+        "fill='white' text-anchor='middle'%3ER%3C/text%3E%3C/svg%3E")
 
 
-def _pending_nav() -> str:
+def _pending_nav(path: str = "") -> str:
     """Link to the pending-plan list with its count. A broken plan store must never break every page."""
     try:
         from .plans import pending_count  # lazy: plans.py imports this module
         n = pending_count()
     except Exception:
         return ""
-    return (f'<a href="/admin/plans" id="nav-pending">{e(label("ui_nav_pending"))} '
+    current = ' aria-current="page"' if path == "/admin/plans" else ""
+    return (f'<a href="/admin/plans" id="nav-pending"{current}>{e(label("ui_nav_pending"))} '
             f'<span class="badge" id="pending-badge">{n}</span></a>')
 
 
-# Nav rules for pages rendered outside page() (the plan confirmation screen has its own stylesheet).
-NAV_CSS = ("nav{margin-bottom:12px}nav a{margin-right:14px}nav .note{margin-left:8px}"
-           ".badge{display:inline-block;min-width:18px;padding:0 6px;border-radius:9px;background:#c62828;color:#fff;"
-           "text-align:center;font-size:12px;margin-left:4px}")
+def _nav_link(href: str, text: str, path: str = "") -> str:
+    """One nav item; the current page is marked for assistive tech."""
+    current = ' aria-current="page"' if path == href else ""
+    return f'<a href="{href}"{current}>{e(text)}</a>'
 
 
 def nav_html() -> str:
-    """The nav for the signed-in role (docs/adr/0001-three-roles.md); the full dev nav when nobody is signed in."""
+    """The nav for the signed-in role (docs/adr/0001-three-roles.md); the full dev nav when nobody is signed in.
+
+    Below 720 px the links live in a details/summary menu; the account block stays visible. The nav
+    markup itself stays a bare `<nav>` element (tests read it by that tag)."""
+    path = CURRENT_PATH.get()
     cur = auth.current_session()
+    account = ""
     if not cur:
-        return (f'<nav><b>reimburse-buddy</b> &middot; <a href="/">{e(label("ui_nav_home"))}</a>\n'
-                f'<a href="/employee">{e(label("ui_nav_employee"))}</a> <a href="/admin">{e(label("ui_nav_finance_admin"))}</a> '
-                f'<a href="/admin/intake">{e(label("ui_nav_intake"))}</a>{_pending_nav()}{_budget_nav()}</nav>')
-    emp, role = cur
-    if users.is_finance(role):
-        links = (f'<a href="/admin">{e(label("ui_nav_triage"))}</a> '
-                 f'<a href="/admin/intake">{e(label("ui_nav_intake"))}</a>{_pending_nav()}{_budget_nav()}')
-    elif users.is_manager(role):
-        links = f'<a href="/manager">{e(label("ui_nav_approvals"))}</a>'
+        links = (_nav_link("/", label("ui_nav_home"), path)
+                 + _nav_link("/employee", label("ui_nav_employee"), path)
+                 + _nav_link("/admin", label("ui_nav_finance_admin"), path)
+                 + _nav_link("/admin/intake", label("ui_nav_intake"), path)
+                 + _pending_nav(path) + _budget_nav())
     else:
-        links = (f'<a href="/employee">{e(label("ui_nav_my_claims"))}</a> '
-                 f'<a href="/employee/new">{e(label("ui_nav_submit_claim"))}</a>')
-    account = (f'<span class="note" id="signed-in">{e(label("ui_nav_signed_in"))} <b>{e(auth.reviewer_name(emp))}</b> '
-               f'({e(users.ROLE_LABELS.get(role, role))})</span>'
-               f'<form method="post" action="/logout" style="display:inline">'
-               f'<button type="submit" id="logout">{e(label("ui_nav_sign_out"))}</button></form>')
-    return f'<nav><b>reimburse-buddy</b> &middot; {links}{account}</nav>'
+        emp, role = cur
+        if users.is_finance(role):
+            links = (_nav_link("/admin", label("ui_nav_triage"), path)
+                     + _nav_link("/admin/intake", label("ui_nav_intake"), path)
+                     + _pending_nav(path) + _budget_nav())
+        elif users.is_manager(role):
+            links = _nav_link("/manager", label("ui_nav_approvals"), path)
+        else:
+            links = (_nav_link("/employee", label("ui_nav_my_claims"), path)
+                     + _nav_link("/employee/new", label("ui_nav_submit_claim"), path))
+        account = (f'<div class="nav-account">'
+                   f'<span class="note" id="signed-in">{e(label("ui_nav_signed_in"))} '
+                   f'<b>{e(auth.reviewer_name(emp))}</b> ({e(users.ROLE_LABELS.get(role, role))})</span>'
+                   f'<form method="post" action="/logout">'
+                   f'<button type="submit" id="logout">{e(label("ui_nav_sign_out"))}</button></form></div>')
+    return (f'<nav><span class="brand">reimburse-buddy</span>'
+            f'<details class="nav-disclosure"><summary>{e(label("ui_nav_menu"))}</summary>'
+            f'<div class="nav-links">{links}</div></details>{account}</nav>')
 
 
 def _budget_nav() -> str:
@@ -259,11 +268,18 @@ def reset_form(text: str) -> str:
 
 
 def page(title: str, body: str, status_code: int = 200) -> HTMLResponse:
-    return HTMLResponse(f"""<!doctype html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>{escape(title)}</title>
-<style>{CSS}</style></head><body>{nav_html()}
-<h1>{escape(title)}</h1>{body}
-<p class="note" id="footer-note">Synthetic data. Simulation only.</p></body></html>""", status_code=status_code)
+    """The one page shell: language, head metadata, skip link, role-aware header, main and footer."""
+    return HTMLResponse(f"""<!doctype html><html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{escape(title)} · Reimburse Buddy</title>
+<meta name="description" content="Simulasi reimburse: triage finance, klaim karyawan, dan persetujuan rencana. Data sintetis.">
+<meta name="theme-color" content="#1a5fb4">
+<link rel="icon" href="{ICON}">
+<link rel="stylesheet" href="{STATIC_URL}"></head><body>
+{ui.skip_link()}<header class="site-header">{nav_html()}</header>
+<main id="main" tabindex="-1"><h1>{escape(title)}</h1>{body}</main>
+<footer class="site-footer"><p class="note" id="footer-note">Synthetic data. Simulation only.</p></footer>
+</body></html>""", status_code=status_code)
 
 
 def e(x) -> str:
@@ -298,21 +314,6 @@ def status_tag(s: str) -> str:
     return f'<span class="tag {cls}" title="{e(s)}">{e(icon + label(s))}</span>'
 
 
-LOGIN_CSS = """*{box-sizing:border-box}body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
-padding:16px;font-family:system-ui,sans-serif;color:#1d1d1f;background:#f4f5f8}
-.login-card{width:100%;max-width:380px;background:#fff;border:1px solid #e1e3ea;border-radius:12px;padding:28px 24px;
-box-shadow:0 4px 18px rgba(20,30,60,.08)}
-.login-card h1{font-size:22px;margin:0 0 4px}.login-card .sub{color:#555;font-size:14px;margin:0 0 20px}
-.login-card label{display:block;font-size:14px;font-weight:600;margin:14px 0 6px}
-.login-card input{width:100%;min-height:44px;padding:8px 12px;font-size:16px;border:1px solid #b9bcc6;border-radius:8px}
-.pw-row{display:flex;gap:8px}.pw-row input{flex:1;min-width:0}
-.pw-row button{min-width:92px;min-height:44px;padding:0 10px;border:1px solid #b9bcc6;border-radius:8px;background:#fff;font-size:14px;cursor:pointer}
-.login-card .submit{width:100%;margin-top:22px;min-height:46px;border:0;border-radius:8px;background:#1a5fb4;color:#fff;
-font-size:16px;font-weight:600;cursor:pointer}.login-card .submit:hover{background:#174f95}
-.login-error{background:#f8d7da;color:#842029;border:1px solid #f1aeb5;border-radius:8px;padding:10px 12px;font-size:14px;margin:0 0 6px}
-a:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid #1a5fb4;outline-offset:2px}"""
-
-
 # --- login / logout / health ---------------------------------------------------------------
 @app.get("/login", response_class=HTMLResponse)
 def login_page(next: str = "", error: str = "", email: str = ""):
@@ -330,8 +331,9 @@ def login_card(target: str, error: str, email: str, status_code: int) -> HTMLRes
     err = f'<p class="login-error" id="login-error" role="alert">{e(error)}</p>' if error else ""
     show, hide = e(label("show_password")), e(label("hide_password"))
     html = f"""<!doctype html><html lang="id"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>{e(label("sign_in"))} - Reimburse Buddy</title>
-<style>{LOGIN_CSS}</style></head><body>
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>{e(label("sign_in"))} · Reimburse Buddy</title>
+<meta name="theme-color" content="#1a5fb4"><link rel="icon" href="{ICON}">
+<link rel="stylesheet" href="{STATIC_URL}"></head><body class="login-shell">
 <main class="login-card" id="login">
 <h1>Reimburse Buddy</h1><p class="sub">{e(label("login_subtitle"))}</p>
 {err}
@@ -596,8 +598,8 @@ def admin(batch: str = BATCH, msg: str = ""):
                f"<td class=num>{e(rupiah(held))}</td>"
                f"<td>{''.join(gap_tag(g) for g in x['gaps'])}</td>"
                f"<td>{e(', '.join(x['rejected_items']))}</td>"
-               f"<td><form method=post action=\"/admin/claims/{e(x['claim_id'])}/investigate\">"
-               f"<button>Selidiki dengan agent</button></form></td></tr>")
+                f"<td><form method=post action=\"/admin/claims/{e(x['claim_id'])}/investigate\">"
+                f"<button>{e(label('ui_action_investigate'))}</button></form></td></tr>")
         rows.append((held, row))
     exc = "".join(row for _, row in sorted(rows, key=lambda r: r[0], reverse=True))
     cleared = t["auto_cleared"]
@@ -606,19 +608,19 @@ def admin(batch: str = BATCH, msg: str = ""):
                      f"<td title='{e(c['employee_id'])}'>{e(person(store, c['employee_id']))}</td>"
                      f"<td>{e(c.get('batch', ''))}</td><td>{status_tag(c['status'])}</td></tr>" for c in store.claims)
     est = t["time_saved_estimate"]
-    body = f"""{f'<p class="tag ok">{e(msg)}</p>' if msg else ''}
-<form method="get"><label>Batch <select name="batch" aria-label="Pilih batch" onchange="this.form.submit()">{options([(BATCH, BATCH), (OWN_BATCH, OWN_BATCH), (WEB_BATCH, WEB_BATCH)], batch)}</select></label></form>
-<div class="box"><h2>Triage: {t['claims']} claims, {len(cleared)} cleared, {len(t['exceptions'])} exceptions</h2>
-<p>Time saved: {e(est['minutes'])} min <span class="tag warn">estimate</span> <span class="note">{e(est['assumption'])}</span></p>
-<p class="note">Triage is read-only. Statuses change only after you confirm below.</p>
-<h3>Cleared</h3><p>{''.join(f'<span class=tag>{e(c)}</span>' for c in cleared) or '<span class=note>None left.</span>'}</p>
+    body = f"""{ui.alert(msg, tone="success") if msg else ''}
+<form method="get"><label>{e(label('ui_batch'))} <select name="batch" aria-label="Pilih batch" onchange="this.form.submit()">{options([(BATCH, BATCH), (OWN_BATCH, OWN_BATCH), (WEB_BATCH, WEB_BATCH)], batch)}</select></label></form>
+<div class="box"><h2>{e(label('ui_triage_summary').format(claims=t['claims'], cleared=len(cleared), exceptions=len(t['exceptions'])))}</h2>
+<p>{e(label('ui_time_saved'))}: {e(label('ui_minutes').format(n=est['minutes']))} <span class="tag warn">{e(label('ui_estimate'))}</span> <span class="note">{e(est['assumption'])}</span></p>
+<p class="note">{e(label('ui_triage_readonly'))}</p>
+<h3>{e(label('ui_cleared'))}</h3><p>{''.join(f'<span class=tag>{e(c)}</span>' for c in cleared) or '<span class=note>' + e(label('ui_cleared_none')) + '</span>'}</p>
 {f'''<form method="post" action="/admin/batch/approve"><input type="hidden" name="batch" value="{e(batch)}">{hidden}
-<label><input type="checkbox" name="reviewer_confirmed" value="true"> I reviewed these {len(cleared)} claims and approve them</label>
-<button type="submit">Approve cleared batch</button></form>''' if cleared else ''}
-<h3>Exceptions</h3><div class="table-wrap"><table><tr><th>Claim</th><th>Employee</th><th class=num>Uang tertahan</th><th>Yang kurang</th><th>Rejected items</th><th></th></tr>{exc}</table></div></div>
-<h2>All claims</h2><div class="table-wrap"><table><tr><th>Claim</th><th>Employee</th><th>Batch</th><th>Status</th></tr>{others}</table></div>
-{reset_form("Reset demo data")}"""
-    return page("Finance admin: triage", body)
+<label><input type="checkbox" name="reviewer_confirmed" value="true"> {e(label('ui_reviewed_approve').format(n=len(cleared)))}</label>
+<button type="submit">{e(label('ui_approve_cleared'))}</button></form>''' if cleared else ''}
+<h3>{e(label('ui_exceptions'))}</h3><div class="table-wrap"><table><tr><th>{e(label('ui_claims'))}</th><th>{e(label('ui_employee'))}</th><th class=num>{e(label('ui_held_money'))}</th><th>{e(label('ui_missing'))}</th><th>{e(label('ui_rejected_items'))}</th><th></th></tr>{exc}</table></div></div>
+<h2>{e(label('ui_all_claims'))}</h2><div class="table-wrap"><table><tr><th>{e(label('ui_claims'))}</th><th>{e(label('ui_employee'))}</th><th>{e(label('ui_batch'))}</th><th>{e(label('ui_status'))}</th></tr>{others}</table></div>
+{reset_form(label("ui_demo_reset"))}"""
+    return page(label("ui_triage_title"), body)
 
 
 @app.post("/admin/batch/approve")
@@ -642,17 +644,17 @@ def batch_approve(request: Request, batch: str = Form(...), claim_ids: list[str]
     held = [c for c in claim_ids if pending_items(c)]
     claim_ids = [c for c in claim_ids if c not in held]
     res = approve_cleared_batch(store, batch, claim_ids, reviewer_confirmed == "true")
-    text = f"Approved {res['count']} claims" if res["ok"] else "Not approved: " + res["error"]
-    return RedirectResponse(f"/admin?batch={batch}&msg={text.replace(' ', '+')}", status_code=303)
+    text = (label("ui_approved_n").format(n=res["count"]) if res["ok"]
+            else label("ui_batch_refused_note"))
+    return RedirectResponse(f"/admin?batch={batch}&msg={quote(text, safe='')}", status_code=303)
 
 
 @app.post("/admin/reset")
 def reset():
     if auth.is_production():
-        return JSONResponse({"detail": "Reset demo tidak tersedia di produksi. / Demo reset is disabled in production."},
-                            status_code=403)
+        return JSONResponse({"detail": "Reset demo tidak tersedia di produksi."}, status_code=403)
     reset_all()
-    return RedirectResponse("/admin?msg=Demo+data+reset", status_code=303)
+    return RedirectResponse(f"/admin?msg={quote(label('ui_msg_demo_reset'), safe='')}", status_code=303)
 
 
 def manager_cell(cid: str, item_id: str, owner: str) -> str:
@@ -696,29 +698,29 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
             dec = (f"<form method=post action='/admin/claims/{e(cid)}/decide' style='display:inline'>"
                    f"<input type=hidden name=item_id value='{e(it.item_id)}'>"
                    f"<button name=choice value='reject'{' disabled' if it.human_decision == 'reject' else ''}>"
-                   f"{e(label('reject'))}</button></form>"
-                   f"<div class=note>Perlu dokumen: {e(', '.join(label(g) for g in it.gaps))}</div>")
+                   f"{e(label('ui_action_reject'))}</button></form>"
+                   f"<div class=note>{e(label('ui_needs_document').format(documents=', '.join(label(g) for g in it.gaps)))}</div>")
             if it.human_decision:
-                dec += f"<div class=note>Reviewer: {e(label(it.human_decision))}</div>"
+                dec += f"<div class=note>{e(label('ui_reviewer_said').format(decision=label(it.human_decision)))}</div>"
         elif (decision_gaps or it.human_decision) and not pend:
             dec = (f"<form method=post action='/admin/claims/{e(cid)}/decide' style='display:inline'>"
                    f"<input type=hidden name=item_id value='{e(it.item_id)}'>"
                    + "".join(f"<button name=choice value='{ch}'{' disabled' if it.human_decision == ch else ''}>{e(label(ch))}</button> "
                              for ch in CHOICES) + "</form>")
             if it.human_decision:
-                dec += f"<div class=note>Reviewer: {e(label(it.human_decision))}</div>"
+                dec += f"<div class=note>{e(label('ui_reviewer_said').format(decision=label(it.human_decision)))}</div>"
         elif it.gaps and not pend:
-            dec = f"<div class=note>Perlu ditinjau: {e(', '.join(label(g) for g in it.gaps))}</div>"
+            dec = f"<div class=note>{e(label('ui_needs_review').format(gaps=', '.join(label(g) for g in it.gaps)))}</div>"
         status_cell = f"<span title='{e(it.status.value)}'>{e(label(it.status.value))}</span>"
         if pend:
-            status_cell = "<span class='tag warn'>pending review</span>"
+            status_cell = f"<span class='tag warn'>{e(label('ui_pending_review'))}</span>"
             for mid in pend:
                 p = r["pending"][mid]
                 why = ", ".join(label(x) for x in (p.get("reasons") or [p["reason"]]))
                 dec = (f"<form method=post action='/admin/claims/{e(cid)}/evidence/{e(mid)}/review' style='display:inline'>"
                        f"<div class=note>{e(mid)}: <span title='{e(p['reason'])}'>{e(why)}</span></div>"
-                       f"<button name=verdict value=accept>Accept evidence</button> "
-                       f"<button name=verdict value=reject>Reject evidence</button></form>") + dec
+                       f"<button name=verdict value=accept>{e(label('ui_accept_evidence'))}</button> "
+                       f"<button name=verdict value=reject>{e(label('ui_reject_evidence'))}</button></form>") + dec
         if self_blocked:  # UX only: the server refuses these requests anyway
             dec = f"<div class=note id='self-approval'>{e(label('self_approval_note'))}</div>"
         dec += manager_cell(cid, it.item_id, emp)
@@ -741,16 +743,16 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
         needs_you = "<div class='box' id='needs-you'>Klaim ini tidak butuh keputusan Anda.</div>"
     log_rows = "".join(f"<li>{e(x['at'])} {e(x['evidence_id'])} ({e(x['item_id'])}, "
                        f"<span title='{e(x['reason'])}'>{e(', '.join(label(v) for v in x['reason'].split(', ')))}</span>): "
-                       f"<b>{e(label(x['verdict']))}</b> by reviewer</li>" for x in r["evidence_log"])
+                       f"<b>{e(label(x['verdict']))}</b></li>" for x in r["evidence_log"])
     ignored = "".join(f"<li>{e(i.id)}: <span class='tag bad' title='{e(i.reason)}'>{e(label(i.reason))}</span></li>"
                       for i in c.ignored_evidence)
     warns = "".join(f"<li>{e(w.message)}</li>" for w in c.warnings)
 
     def attach_btn(eid: str) -> str:
         if eid in r["evidence"]:
-            return "<span class='tag ok'>attached</span>"
+            return f"<span class='tag ok'>{e(label('ui_attached'))}</span>"
         return (f"<form method=post action='/admin/claims/{e(cid)}/evidence' style='display:inline'>"
-                f"<input type=hidden name=evidence_id value='{e(eid)}'><input type=hidden name=q value='{e(q)}'><button>Attach</button></form>")
+                f"<input type=hidden name=evidence_id value='{e(eid)}'><input type=hidden name=q value='{e(q)}'><button>{e(label('ui_attach'))}</button></form>")
 
     hits = store.search_reimburse_mailbox(emp, q) if q else []
     hit_rows = "".join(f"<tr><td>{e(h['id'])}</td><td>{e(h['date'])}</td><td>{e(h['subject'])}<div class=note>{e(h['snippet'])}</div></td>"
@@ -762,45 +764,47 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
     memo_rows = "".join(f"<tr><td>{e(m['id'])}</td><td>{SIGNED if m.get('signed') else UNSIGNED}</td>"
                         f"<td>{e(m.get('reason', ''))}</td><td>{attach_btn(m['id'])}</td></tr>" for m in memos)
     sent = [m for m in store.outbox if m.get("claim_id") == cid]
-    sent_rows = "".join(f"<li>{e(m['id'])} to {e(m['to'])}: {e(m['subject'])}</li>" for m in sent)
+    sent_rows = "".join(f"<li>{e(m['id'])} {e(label('ui_to')).lower()} {e(m['to'])}: {e(m['subject'])}</li>" for m in sent)
     note = re.sub(r"\b[a-z]+(?:_[a-z]+)+\b", lambda m: label(m.group(0)),
-                  draft_decision(store, c, language="both"))
+                  draft_decision(store, c, language="id"))
+    note_en = re.sub(r"\b[a-z]+(?:_[a-z]+)+\b", lambda m: label(m.group(0)),
+                     draft_decision(store, c, language="en"))
     allowed_status = STATUS_FOR_DECISION[c.decision.value]
     if pending_items(cid):
         allowed_status = ["on_hold"]
     if self_blocked:
         status_form = (f"<div class='note' id='self-approval-status'>{e(label('self_approval_note'))}</div>")
     else:
-        status_form = (f"<form method=post action=\"/admin/claims/{e(cid)}/status\"><label>Final status "
-                       f"<select name=status aria-label=\"Status akhir\">{options([(s, label(s)) for s in allowed_status])}"
+        status_form = (f"<form method=post action=\"/admin/claims/{e(cid)}/status\"><label>{e(label('ui_final_status'))} "
+                       f"<select name=status aria-label=\"{e(label('ui_final_status'))}\">{options([(s, label(s)) for s in allowed_status])}"
                        f"</select></label>\n<label><input type=checkbox name=reviewer_confirmed value=true> "
-                       f"I confirm this decision</label> <button>Apply status</button></form>")
-    body = f"""<p><a href="/admin">&larr; Triage</a> &middot; <a href="/admin/claims/{e(cid)}/audit">Lihat jejak audit</a></p>{f'<p class="tag ok">{e(msg)}</p>' if msg else ''}
+                       f"{e(label('ui_confirm_decision'))}</label> <button>{e(label('ui_action_apply_status'))}</button></form>")
+    body = f"""<p><a href="/admin">&larr; {e(label('ui_back_to_triage'))}</a> &middot; <a href="/admin/claims/{e(cid)}/audit">{e(label('ui_audit_link'))}</a></p>{ui.alert(msg, tone="success") if msg else ''}
 <p><span title="{e(emp)}">{e(person(store, emp))}</span> &middot; {e(claim['purpose'])} &middot; {e(trip['destination'])}
-{e(trip['start_date'])} &rarr; {e(trip['end_date'])} &middot; status {status_tag(claim['status'])}</p>
-<div class="box"><h2>Rule engine: {e(label(c.decision.value))}</h2>
-<p>Approvable <b>{e(rupiah(c.total_approvable))}</b> of {e(rupiah(c.total_claimed))} &middot; pending {e(rupiah(c.total_pending))}</p>
-<p class="note">Semua angka dihitung oleh mesin aturan, bukan oleh AI. Evidence attached: {e(', '.join(r['evidence']) or 'none')}</p>
+{e(trip['start_date'])} &rarr; {e(trip['end_date'])} &middot; {e(label('ui_status'))} {status_tag(claim['status'])}</p>
+<div class="box"><h2>{e(label('ui_rule_engine').format(decision=label(c.decision.value)))}</h2>
+<p>{label('ui_engine_amounts').format(approvable=rupiah(c.total_approvable), claimed=rupiah(c.total_claimed), pending=rupiah(c.total_pending))}</p>
+<p class="note">{e(label('ui_engine_note'))} {e(label('ui_evidence_attached').format(evidence=', '.join(r['evidence']) or label('ui_none_attached')))}</p>
 {needs_you}
-<div class="table-wrap"><table><tr><th>Item</th><th>Category</th><th class=num>Claimed</th><th class=num>Approvable</th><th>Status</th><th>Findings / gaps</th><th>Evidence</th><th>Reviewer decision</th></tr>{item_rows}</table></div>
-{f'<h3>Evidence review log</h3><ul>{log_rows}</ul>' if log_rows else ''}{f'<h3>Ignored evidence</h3><ul>{ignored}</ul>' if ignored else ''}{f'<h3>Warnings</h3><ul>{warns}</ul>' if warns else ''}</div>
-<div class="box"><h2>Investigate</h2>
-<form method=post action="/admin/claims/{e(cid)}/investigate"><button>Selidiki dengan agent</button>
-<span class="note">Runs the LangGraph agent on this claim. It pauses for your approval before any write or decision message.</span></form>
-<p class="note">Or investigate by hand:</p>
-<h3>Search the reimburse mailbox</h3><form method=get><label>Cari di mailbox <input name=q aria-label="Cari di mailbox" value="{e(q)}" size=40 placeholder="boarding pass QZ 7520"></label><button>Search</button></form>
-{f'<div class="table-wrap"><table><tr><th>ID</th><th>Date</th><th>Subject</th><th>Attachments</th><th></th></tr>{hit_rows}</table></div>' if hits else ''}
-<h3>Calendar during the trip</h3><div class="table-wrap"><table><tr><th>ID</th><th>When</th><th>Title</th><th>Location</th><th></th></tr>{cal_rows}</table></div>
-<h3>Approval memos ({e(trip['destination'])})</h3><div class="table-wrap"><table><tr><th>ID</th><th>Signed</th><th>Reason</th><th></th></tr>{memo_rows}</table></div>
-<h3>Ask the employee</h3><form method=post action="/admin/claims/{e(cid)}/message">
-<label>Subjek <input name=subject aria-label="Subjek pesan" size=40 value="Claim {e(cid)}: missing document"></label>
-<label>Isi <input name=body aria-label="Isi pesan" size=60 placeholder="Mohon kirim struk taksi tanggal 3 Okt (IT-5)." required></label>
-<button>Send</button></form>{f'<ul>{sent_rows}</ul>' if sent_rows else ''}</div>
-<div class="box"><h2>Decision note preview (EN + ID)</h2><pre>{e(note)}</pre>
+<div class="table-wrap"><table><tr><th>{e(label('ui_item'))}</th><th>{e(label('ui_category'))}</th><th class=num>{e(label('ui_claimed'))}</th><th class=num>{e(label('ui_approvable'))}</th><th>{e(label('ui_status'))}</th><th>{e(label('ui_findings'))}</th><th>{e(label('ui_evidence'))}</th><th>{e(label('ui_reviewer_decision'))}</th></tr>{item_rows}</table></div>
+{f'<h3>' + e(label('ui_evidence_review_log')) + f'</h3><ul>{log_rows}</ul>' if log_rows else ''}{f'<h3>' + e(label('ui_ignored_evidence')) + f'</h3><ul>{ignored}</ul>' if ignored else ''}{f'<h3>' + e(label('ui_warnings')) + f'</h3><ul>{warns}</ul>' if warns else ''}</div>
+<div class="box"><h2>{e(label('ui_investigate'))}</h2>
+<form method=post action="/admin/claims/{e(cid)}/investigate"><button>{e(label('ui_action_investigate'))}</button>
+<span class="note">{e(label('ui_investigate_note'))}</span></form>
+<p class="note">{e(label('ui_investigate_manual'))}</p>
+<h3>{e(label('ui_search_mailbox'))}</h3><form method=get><label>{e(label('ui_search_mailbox'))} <input name=q aria-label="{e(label('ui_search_mailbox'))}" value="{e(q)}" size=40 placeholder="{e(label('ui_mailbox_placeholder'))}"></label><button>{e(label('ui_search'))}</button></form>
+{f'<div class="table-wrap"><table><tr><th>ID</th><th>{e(label("ui_col_date"))}</th><th>{e(label("ui_col_subject"))}</th><th>{e(label("ui_col_attachments"))}</th><th></th></tr>{hit_rows}</table></div>' if hits else ''}
+<h3>{e(label('ui_calendar_trip'))}</h3><div class="table-wrap"><table><tr><th>ID</th><th>{e(label("ui_col_date"))}</th><th>{e(label("ui_col_subject"))}</th><th>{e(label("ui_field_destination"))}</th><th></th></tr>{cal_rows}</table></div>
+<h3>{e(label('ui_memos').format(destination=trip['destination']))}</h3><div class="table-wrap"><table><tr><th>ID</th><th>{e(label('ui_signature'))}</th><th>{e(label('ui_col_reason'))}</th><th></th></tr>{memo_rows}</table></div>
+<h3>{e(label('ui_ask_employee'))}</h3><form method=post action="/admin/claims/{e(cid)}/message">
+<label>{e(label('ui_subject'))} <input name=subject aria-label="{e(label('ui_subject'))}" size=40 value="{e(label('ui_default_subject').format(cid=cid))}"></label>
+<label>{e(label('ui_body'))} <input name=body aria-label="{e(label('ui_body'))}" size=60 placeholder="Mohon kirim struk taksi tanggal 3 Okt (IT-5)." required></label>
+<button>{e(label('ui_send'))}</button></form>{f'<ul>{sent_rows}</ul>' if sent_rows else ''}</div>
+<div class="box"><h2>{e(label('ui_decision_note'))}</h2><pre>{e(note)}</pre>
+{ui.details(label("ui_english"), f"<pre>{e(note_en)}</pre>")}
 {status_form}
-<p class="note">Status options follow the engine decision ({e(label(c.decision.value))}). To override, record an item decision above.
-Status changes only after you confirm. Notes are sent only by you.</p></div>"""
-    return page(f"Claim {cid}", body)
+<p class="note">{e(label('ui_status_follows').format(decision=label(c.decision.value)))} {e(label('ui_status_confirmed_note'))}</p></div>"""
+    return page(label("ui_claim_title").format(cid=cid), body)
 
 
 @app.get("/admin/claims/{cid}/audit", response_class=HTMLResponse)
@@ -830,13 +834,13 @@ def claim_audit(cid: str):
         return ("<div class='table-wrap'><table><tr>"
                 + "".join(f"<th>{h}</th>" for h in head) + f"</tr>{rows}</table></div>")
 
-    body = f"""<p><a href="/admin/claims/{e(cid)}">&larr; Kembali ke klaim / Back to claim</a></p>
-<p class="note">Jejak audit mentah untuk {e(cid)}; kode sistem ditampilkan apa adanya.</p>
-<div class="box"><h2>Riwayat status</h2>{table(["Claim", "Dari", "Ke", "Catatan"], status_rows, "Tidak ada perubahan status.")}</div>
-<div class="box"><h2>Log bukti peninjau</h2>{table(["Waktu", "Bukti", "Item", "Alasan", "Verdict"], evidence_rows, "Tidak ada catatan bukti.")}</div>
-<div class="box"><h2>Keputusan item</h2>{table(["Item", "Keputusan"], decision_rows, "Tidak ada keputusan item.")}</div>
-<div class="box"><h2>Pesan keluar</h2>{table(["ID", "Ke", "Subjek", "Isi"], outbox_rows, "Tidak ada pesan keluar.")}</div>"""
-    return page(f"Jejak audit {cid}", body)
+    body = f"""<p><a href="/admin/claims/{e(cid)}">&larr; {e(label('ui_back_to_claim'))}</a></p>
+<p class="note">{e(label('ui_audit_note').format(cid=cid))}</p>
+<div class="box"><h2>{e(label('ui_status_history'))}</h2>{table([label('ui_claims'), 'Dari', label('ui_to'), label('ui_note')], status_rows, label('ui_no_status_changes'))}</div>
+<div class="box"><h2>{e(label('ui_evidence_log'))}</h2>{table(['Waktu', label('ui_evidence'), label('ui_item'), label('ui_col_reason'), label('ui_verdict')], evidence_rows, label('ui_no_evidence_records'))}</div>
+<div class="box"><h2>{e(label('ui_item_decisions'))}</h2>{table([label('ui_item'), label('ui_reviewer_decision')], decision_rows, label('ui_no_item_decisions'))}</div>
+<div class="box"><h2>{e(label('ui_outbound'))}</h2>{table(['ID', label('ui_to'), label('ui_subject'), label('ui_body')], outbox_rows, label('ui_no_outbound'))}</div>"""
+    return page(label("ui_audit_title").format(cid=cid), body)
 
 
 @app.post("/admin/claims/{cid}/evidence")
@@ -844,8 +848,8 @@ def add_evidence(cid: str, evidence_id: str = Form(...), q: str = Form("")):
     store.get_claim(cid)
     p = review(cid)["pending"].get(evidence_id)
     if p and p["state"] != "accepted":
-        return RedirectResponse(f"/admin/claims/{cid}?msg=Not+attached:+{evidence_id}+needs+Accept+evidence+first",
-                                status_code=303)
+        msg = label("ui_msg_evidence_not_attached").format(ref=evidence_id)
+        return RedirectResponse(f"/admin/claims/{cid}?msg={quote(msg, safe='')}", status_code=303)
     ev = review(cid)["evidence"]
     if evidence_id not in ev:
         ev.append(evidence_id)
@@ -877,7 +881,7 @@ def review_evidence(cid: str, mid: str, request: Request, verdict: str = Form(..
         r["evidence"].append(mid)
     r["evidence_log"].append({"at": datetime.now().strftime("%Y-%m-%d %H:%M"), "evidence_id": mid, "item_id": p["item_id"],
                               "reason": p["reason"], "verdict": p["state"]})
-    return RedirectResponse(f"/admin/claims/{cid}?msg=Evidence+{mid}+{p['state']}", status_code=303)
+    return RedirectResponse(f"/admin/claims/{cid}?msg={quote(label('ui_msg_evidence_state').format(ref=mid, state=label(p['state'])), safe='')}", status_code=303)
 
 
 @app.post("/admin/claims/{cid}/decide")
@@ -903,7 +907,8 @@ def decide(cid: str, request: Request, item_id: str = Form(...), choice: str = F
 def message(cid: str, subject: str = Form(...), body: str = Form(...)):
     claim = store.get_claim(cid)
     res = store.send_message(claim["employee_id"], body, subject, cid)
-    return RedirectResponse(f"/admin/claims/{cid}?msg=Sent+{res['message_id']}+replies+{res['replies_received']}", status_code=303)
+    msg = label("ui_msg_sent").format(ref=res["message_id"], replies=res["replies_received"])
+    return RedirectResponse(f"/admin/claims/{cid}?msg={quote(msg, safe='')}", status_code=303)
 
 
 @app.post("/admin/claims/{cid}/items/{iid}/manager")
@@ -928,20 +933,24 @@ def ask_manager(cid: str, iid: str, reason: str = Form("")):
 @app.post("/admin/claims/{cid}/status")
 def set_status(cid: str, request: Request, status: str = Form(...), reviewer_confirmed: str = Form("false")):
     if reviewer_confirmed != "true":
-        return RedirectResponse(f"/admin/claims/{cid}?msg=Not+changed:+tick+the+confirmation+first", status_code=303)
+        msg = label("ui_msg_not_changed").format(reason="centang konfirmasi dulu")
+        return RedirectResponse(f"/admin/claims/{cid}?msg={quote(msg, safe='')}", status_code=303)
     if status != "on_hold":  # holding your own claim is not an approval; anything else is
         refused = self_approval_refusal(request, cid, f"status:{status}")
         if refused:
             return back_to_claim(cid, refused)
     c = run_check(cid)
     if pending_items(cid) and status != "on_hold":
-        return RedirectResponse(f"/admin/claims/{cid}?msg=Not+changed:+evidence+is+awaiting+review", status_code=303)
+        msg = label("ui_msg_not_changed").format(reason="bukti masih menunggu tinjauan")
+        return RedirectResponse(f"/admin/claims/{cid}?msg={quote(msg, safe='')}", status_code=303)
     if status not in STATUS_FOR_DECISION[c.decision.value]:
-        return RedirectResponse(f"/admin/claims/{cid}?msg=Not+changed:+{label(status).replace(' ', '+')}"
-                                f"+is+not+allowed+while+the+engine+says+"
-                                f"{label(c.decision.value).replace(' ', '+')}", status_code=303)
-    store.update_claim_status(cid, status, f"Reviewer decision; rule engine approvable {rupiah(c.total_approvable)}")
-    return RedirectResponse(f"/admin/claims/{cid}?msg=Status+set+to+{label(status).replace(' ', '+')}", status_code=303)
+        reason = (f"{label(status)} tidak diizinkan selama mesin aturan menyatakan "
+                  f"{label(c.decision.value)}")
+        msg = label("ui_msg_not_changed").format(reason=reason)
+        return RedirectResponse(f"/admin/claims/{cid}?msg={quote(msg, safe='')}", status_code=303)
+    store.update_claim_status(cid, status, f"Keputusan peninjau; mesin aturan menyetujui {rupiah(c.total_approvable)}")
+    msg = label("ui_msg_status_set").format(status=label(status))
+    return RedirectResponse(f"/admin/claims/{cid}?msg={quote(msg, safe='')}", status_code=303)
 
 
 from .upload_flow import router as upload_router  # noqa: E402  (needs the names above)
@@ -977,24 +986,26 @@ def _audit_limit(cid: str, kind: str, **extra) -> None:
 @app.post("/admin/claims/{cid}/investigate")
 def investigate_start(cid: str):
     store.get_claim(cid)
+    back = f"<p><a href='/admin/claims/{e(cid)}'>&larr; {e(label('ui_back_to_claim'))}</a></p>"
     if not _agent_ready():
-        return page(f"Investigate {cid}", f"<p><a href='/admin/claims/{e(cid)}'>&larr; Claim</a></p>"
-                    f"<div class='box'><h2>Agent not configured</h2><p class='tag warn' id=no-key>{e(NO_KEY_MESSAGE)}</p></div>")
+        return page(label("ui_investigate_title").format(cid=cid),
+                    f"{back}<div class='box'><h2>{e(label('ui_agent_not_configured'))}</h2>"
+                    f"<p class='tag warn' id=no-key>{e(NO_KEY_MESSAGE)}</p></div>")
     if spend.is_production() and not spend.configured():
         # Defence in depth: startup already refuses this, and no uncapped run may start either way.
         _audit_limit(cid, "llm_budget_unconfigured")
-        return page(f"Investigate {cid}", f"<p><a href='/admin/claims/{e(cid)}'>&larr; Claim</a></p>"
-                    f"<div class='box'><p class='tag warn' id=budget-unconfigured>{e(label('budget_unconfigured'))}</p></div>")
+        return page(label("ui_investigate_title").format(cid=cid),
+                    f"{back}<div class='box'><p class='tag warn' id=budget-unconfigured>{e(label('budget_unconfigured'))}</p></div>")
     try:
         run = INVESTIGATOR.start(cid)
     except RateLimited as exc:
-        return page(f"Investigate {cid}", f"<p><a href='/admin/claims/{e(cid)}'>&larr; Claim</a></p>"
-                    f"<div class='box'><p class='tag warn' id=rate-limited>{e(exc)}</p></div>")
+        return page(label("ui_investigate_title").format(cid=cid),
+                    f"{back}<div class='box'><p class='tag warn' id=rate-limited>{e(exc)}</p></div>")
     except spend.LedgerUnavailable as exc:
         # The ledger could not be reached even after a reconnect: refuse the run, say so plainly. Do not
         # ask the ledger for the remaining budget here - it is the thing that is down.
-        return page(f"Investigate {cid}", f"<p><a href='/admin/claims/{e(cid)}'>&larr; Claim</a></p>"
-                    f"<div class='box'><p class='tag bad' id=ledger-unavailable>{e(str(exc))}</p></div>")
+        return page(label("ui_investigate_title").format(cid=cid),
+                    f"{back}<div class='box'><p class='tag bad' id=ledger-unavailable>{e(str(exc))}</p></div>")
     except spend.BudgetRefused:
         # A second ledger call here must not turn the refusal into a 500 if the database drops meanwhile.
         try:
@@ -1002,8 +1013,8 @@ def investigate_start(cid: str):
             _audit_limit(cid, "daily_llm_budget", budget=str(spend.budget()), committed=str(spend.committed()))
         except Exception:  # noqa: BLE001 - the refusal itself already happened
             left = "?"
-        return page(f"Investigate {cid}", f"<p><a href='/admin/claims/{e(cid)}'>&larr; Claim</a></p>"
-                    f"<div class='box'><p class='tag warn' id=budget-exhausted>{e(label('budget_exhausted'))}</p>"
+        return page(label("ui_investigate_title").format(cid=cid),
+                    f"{back}<div class='box'><p class='tag warn' id=budget-exhausted>{e(label('budget_exhausted'))}</p>"
                     f"<p class='note'>{e(label('budget_remaining'))}: {e(left)}</p></div>")
     return RedirectResponse(f"/admin/investigations/{run.id}", status_code=303)
 
@@ -1026,9 +1037,9 @@ def decision_box(d: dict | None) -> str:
         except (TypeError, ValueError):
             return e(v)
 
-    return (f"<div class=box id=rule-engine><b>Rule engine now (check_claim, no extra evidence):</b> "
-            f"decision <code>{e(d.get('decision'))}</code>, approvable {rp(d.get('total_approvable'))} "
-            f"of {rp(d.get('total_claimed'))}, pending {rp(d.get('total_pending'))}</div>")
+    return (f"<div class=box id=rule-engine><b>Mesin aturan saat ini (check_claim, tanpa bukti tambahan):</b> "
+            f"keputusan <code>{e(d.get('decision'))}</code>, disetujui {rp(d.get('total_approvable'))} "
+            f"dari {rp(d.get('total_claimed'))}, tertunda {rp(d.get('total_pending'))}</div>")
 
 
 def engine_box(engine: dict | None) -> str:
@@ -1042,11 +1053,11 @@ def engine_box(engine: dict | None) -> str:
         except (TypeError, ValueError):
             return e(v)
 
-    ev = ", ".join(str(x) for x in engine.get("evidence_ids") or []) or "tidak ada (none)"
+    ev = ", ".join(str(x) for x in engine.get("evidence_ids") or []) or label("ui_none_attached")
     hd = json.dumps(engine.get("human_decisions") or {}, ensure_ascii=False, sort_keys=True)
-    return (f"<div class=box id=approved-engine><b>Dasar persetujuan (what this approval is bound to):</b> "
-            f"status <code>{e(engine.get('status'))}</code>, approvable {rp(engine.get('approvable_amount'))} "
-            f"&middot; evidence {e(ev)} &middot; keputusan reviewer {e(hd)}</div>")
+    return (f"<div class=box id=approved-engine><b>Dasar persetujuan:</b> "
+            f"status <code>{e(engine.get('status'))}</code>, disetujui {rp(engine.get('approvable_amount'))} "
+            f"&middot; bukti {e(ev)} &middot; keputusan peninjau {e(hd)}</div>")
 
 
 PROGRESS_STEPS = {
@@ -1086,19 +1097,20 @@ def investigation_page(rid: str, request: Request):
     rows = ""
     for x in evs:
         if x["type"] == "step":
-            tag = " <span class='tag bad'>declined</span>" if x.get("declined") else ""
+            tag = f" <span class='tag bad'>{e(label('ui_action_reject'))}</span>" if x.get("declined") else ""
             rows += (f"<tr class=step><td>{x['n']}</td><td><code>{e(x['tool'])}</code>{tag}</td>"
                      f"<td><code>{e(x['args_summary'])}</code></td><td>{e(x['result_summary'])}</td></tr>")
         elif x["type"] == "auto_declined":
-            rows += "<tr><td></td><td colspan=3 class=note>No answer in time: auto-declined</td></tr>"
+            rows += f"<tr><td></td><td colspan=3 class=note>{e(label('ui_auto_declined'))}</td></tr>"
         elif x["type"] == "question":
-            rows += f"<tr><td></td><td colspan=3 class=note>Agent asked: {e(x['text'][:300])}</td></tr>"
+            rows += f"<tr><td></td><td colspan=3 class=note>{e(label('ui_agent_asked').format(text=x['text'][:300]))}</td></tr>"
         elif x["type"] == "reply_applied":
-            dec = ", ".join(f"{k}: {v}" for k, v in (x.get("decisions") or {}).items()) or "none"
-            rows += f"<tr><td></td><td colspan=3 class=note>Reviewer replied (decisions: {e(dec)})</td></tr>"
+            dec = ", ".join(f"{k}: {v}" for k, v in (x.get("decisions") or {}).items()) or label("ui_none_attached")
+            rows += f"<tr><td></td><td colspan=3 class=note>{e(label('ui_reviewer_replied'))} ({e(dec)})</td></tr>"
         elif x["type"] == "answer_applied":  # shown only once the worker acknowledged it
             who = (f" oleh {e(person(store, x['reviewer']))}" if x.get("reviewer") else "")
-            rows += (f"<tr><td></td><td colspan=3 class=note>Reviewer {'approved' if x['approved'] else 'declined'} "
+            verdict = label("ui_reviewer_approved") if x["approved"] else label("ui_reviewer_declined")
+            rows += (f"<tr><td></td><td colspan=3 class=note>{e(verdict)} "
                      f"<code>{e(x['tool'])}</code>{who}</td></tr>")
     pend = run.pending
     pending_html = ""
@@ -1106,69 +1118,70 @@ def investigation_page(rid: str, request: Request):
     if pend and not self_blocked:
         approve_form = (f"<form method=post action=\"/admin/investigations/{e(rid)}/resume\" style=\"display:inline\">"
                         f"<input type=hidden name=approval_id value=\"{e(pend['approval_id'])}\">"
-                        f"<input type=hidden name=approved value=true><button>Approve</button></form>")
+                        f"<input type=hidden name=approved value=true><button>{e(label('ui_approve'))}</button></form>")
     elif pend:
         approve_form = (f"<p class='note' id='self-approval'>{e(label('self_approval_note'))}</p>")
     if pend:
-        pending_html = f"""<div class="box" id=pending><h2>Pending write: awaiting your approval</h2>
+        pending_html = f"""<div class="box" id=pending><h2>{e(label('ui_pending_write'))}</h2>
 <p><code>{e(pend['tool'])}</code></p>{('<p><strong>' + e(pend['prompt']) + '</strong></p>') if pend.get('prompt') else ''}<pre>{e(json.dumps(pend['args'], ensure_ascii=False, indent=2))}</pre>
 {decision_box(pend.get('current_decision'))}
 {engine_box(pend.get('engine'))}
 <p class=note>{e(label("investigation_gate_note"))}</p>
 {approve_form}
 <form method=post action="/admin/investigations/{e(rid)}/resume" style="display:inline"><input type=hidden name=approval_id value="{e(pend['approval_id'])}"><input type=hidden name=approved value=false>
-<label>Alasan <input name=reason aria-label="Alasan penolakan (opsional)" size=40 placeholder="Reason (optional)"></label><button>Decline</button></form></div>"""
+<label>{e(label('ui_decline'))} <input name=reason aria-label="{e(label('ui_reason_optional'))}" size=40 placeholder="{e(label('ui_reason_optional'))}"></label><button>{e(label('ui_decline'))}</button></form></div>"""
     q = run.question
     if q:
         sel = "".join(
             f"<tr><td><code>{e(i['item_id'])}</code> {e(i.get('category') or '')}</td><td>{e(', '.join(i.get('gaps', [])))}</td>"
-            f"<td><select name='dec_{e(i['item_id'])}' aria-label='Keputusan untuk {e(i['item_id'])}'><option value=''>no decision</option>"
-            "<option value=approve_full>approve full</option><option value=approve_capped>approve capped</option>"
-            "<option value=reject>reject</option></select></td></tr>" for i in q.get("items", []))
-        pending_html += f"""<div class="box" id=question><h2>The agent is asking you</h2><pre>{e(q['text'])}</pre>
+            f"<td><select name='dec_{e(i['item_id'])}' aria-label='{e(label('ui_decision_for').format(item=i['item_id']))}'><option value=''>{e(label('ui_no_decision_option'))}</option>"
+            f"<option value=approve_full>{e(label('approve_full'))}</option><option value=approve_capped>{e(label('approve_capped'))}</option>"
+            f"<option value=reject>{e(label('reject'))}</option></select></td></tr>" for i in q.get("items", []))
+        pending_html += f"""<div class="box" id=question><h2>{e(label('ui_agent_asking'))}</h2><pre>{e(q['text'])}</pre>
 <form method=post action="/admin/investigations/{e(rid)}/reply"><input type=hidden name=question_id value="{e(q['question_id'])}">
-<div class="table-wrap"><table>{sel}</table></div><p><label>Jawaban <textarea name=reply aria-label="Jawaban bebas (opsional)" rows=3 cols=60 placeholder="Reply in your own words (optional)"></textarea></label></p>
-<p class=note>Decisions chosen here are the only ones the agent's tools will use; the agent cannot set them itself.</p>
-<button>Send and resume</button></form></div>"""
+<div class="table-wrap"><table>{sel}</table></div><p><label>{e(label('ui_reply'))} <textarea name=reply aria-label="{e(label('ui_reply'))}" rows=3 cols=60 placeholder="{e(label('ui_reply_placeholder'))}"></textarea></label></p>
+<p class=note>{e(label('ui_decisions_note'))}</p>
+<button>{e(label('ui_send_resume'))}</button></form></div>"""
     final = next((x for x in evs if x["type"] == "final"), None)
     err = next((x for x in evs if x["type"] == "error"), None)
-    status = ("finished" if final else "stopped" if err else "awaiting approval" if pend
-              else "awaiting your answer" if q else "running")
+    status = (label("ui_status_finished") if final else label("ui_status_stopped") if err
+              else label("ui_status_awaiting_approval") if pend
+              else label("ui_status_awaiting_answer") if q else label("ui_status_running"))
     progress_html = ""
     if not (final or err):
         steps = [progress_step_text(x["tool"]) for x in evs if x["type"] == "step"]
-        steps_text = " → ".join(steps) or "Menunggu langkah pertama…"
+        steps_text = " → ".join(steps) or label("ui_waiting_first_step")
         elapsed = max(0, int(time.time() - run_started_at(run, start)))
-        progress_html = f"""<div class="box" id="progress"><h2>Progres agent</h2>
+        progress_html = f"""<div class="box" id="progress"><h2>{e(label('ui_progress'))}</h2>
 <p id="progress-steps">{e(steps_text)}</p>
-<p>Waktu berjalan: <b id="elapsed">{elapsed}</b> detik</p>
+<p>{e(label('ui_elapsed'))}: <b id="elapsed">{elapsed}</b> {e(label('ui_seconds'))}</p>
 <script>(function(){{var n=document.getElementById('elapsed');if(!n)return;var s=parseInt(n.textContent,10)||0;
 setInterval(function(){{s+=1;n.textContent=s;}},1000);}})();</script></div>"""
     tail = ""
     if final:
         t = final.get("tokens", {})
         hit = f" ({t.get('cache_hit', 0)} cache hit)" if t.get("cache_hit") else ""
-        tail = (f"<div class=box id=final><h2>Agent's final note</h2><pre>{e(final['note'])}</pre>"
-                f"<p class=note>Tokens: {t.get('input', 0)} in{hit} / {t.get('output', 0)} out. Amounts come "
-                f"from tool results; verify against the rule engine.</p></div>")
+        tail = (f"<div class=box id=final><h2>{e(label('ui_agent_final_note'))}</h2><pre>{e(final['note'])}</pre>"
+                f"<p class=note>{e(label('ui_tokens').format(input=t.get('input', 0), output=t.get('output', 0)))}{hit} "
+                f"{e(label('ui_amounts_note'))}</p></div>")
     if err:
         msg = NO_KEY_MESSAGE if err.get("code") == "no_key" else err.get("message", "")
         tail += f"<div class=box id=error><p class='tag bad'>{e(msg)}</p>"
         log = run.stderr_tail(20)
         if log and err.get("code") not in ("no_key", "cancelled"):
-            tail += f"<details id=stderr><summary>Last log lines (redacted)</summary><pre>{e(log)}</pre></details>"
+            tail += ui.details(label("ui_last_log"), f"<pre>{e(log)}</pre>", id="stderr")
         tail += "</div>"
     if not (final or err):
         tail += (f"<form method=post action='/admin/investigations/{e(rid)}/cancel' id=cancel>"
-                 "<button>Cancel run</button></form>")
+                 f"<button>{e(label('ui_cancel_run'))}</button></form>")
     refresh = "" if (final or err or pend or q) else '<meta http-equiv="refresh" content="2">'
-    body = f"""{refresh}<p><a href="/admin/claims/{e(run.claim_id)}">&larr; Claim {e(run.claim_id)}</a></p>
-<div class="box"><h2>Agent investigation: {e(run.claim_id)}</h2>
-<p>Status <b id=status>{e(status)}</b> &middot; model {e(start.get('model', '...'))} &middot; compact mode {'on' if start.get('compact') else '...'}</p>
-<p class=note>The agent runs against its own MCP server session (fresh demo state), not this page's store.</p>
-<div class="table-wrap"><table id=trace style="table-layout:fixed;width:100%;word-break:break-word"><tr><th>#</th><th>Tool</th><th>Args</th><th>Result</th></tr>{rows}</table></div></div>
+    body = f"""{refresh}<p><a href="/admin/claims/{e(run.claim_id)}">&larr; {e(label('ui_claim_title').format(cid=run.claim_id))}</a></p>
+<div class="box"><h2>{e(label('ui_agent_investigation').format(cid=run.claim_id))}</h2>
+<p>{e(label('ui_status_word'))} <b id=status>{e(status)}</b> &middot; {e(label('ui_model'))} {e(start.get('model', '...'))} &middot; {e(label('ui_compact'))} {e(label('ui_on') if start.get('compact') else '...')}</p>
+<p class=note>{e(label('ui_agent_note'))}</p>
+<div class="table-wrap"><table id=trace style="table-layout:fixed;width:100%;word-break:break-word"><tr><th>#</th><th>{e(label('ui_tool'))}</th><th>{e(label('ui_args'))}</th><th>{e(label('ui_result'))}</th></tr>{rows}</table></div></div>
 {progress_html}{pending_html}{tail}"""
-    return page(f"Investigate {run.claim_id}", body)
+    return page(label("ui_investigate_title").format(cid=run.claim_id), body)
 
 
 @app.post("/admin/investigations/{rid}/resume")

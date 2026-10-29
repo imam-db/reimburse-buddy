@@ -443,8 +443,8 @@ async def update_draft(did: str, request: Request):
     return RedirectResponse(f"/employee/drafts/{did}", status_code=303)
 
 
-AWAITING = "Menunggu verifikasi finance / Awaiting finance review"
-REVIEWING = f"{UNDER_REVIEW['note_id'].rstrip('.')} / {UNDER_REVIEW['note_en'].rstrip('.')}"
+AWAITING = "Menunggu verifikasi finance"
+REVIEWING = UNDER_REVIEW["note_id"].rstrip(".")
 
 
 @router.get("/employee/claims/{cid}", response_class=HTMLResponse)

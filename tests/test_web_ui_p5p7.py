@@ -16,7 +16,6 @@ from fastapi.testclient import TestClient
 
 from reimburse_web import app as web
 from reimburse_web.agent_bridge import Investigator
-from reimburse_agent.office import page as office_page
 
 HERO = "CLM-2026-0110"
 
@@ -37,7 +36,7 @@ def test_landing_page_explains_roles_and_links_the_demo_claim(client):
     assert r.status_code == 200
     html = r.text
     assert "Selamat datang di reimburse-buddy" in html
-    assert '<a href="/">Beranda</a>' in html
+    assert re.search(r'<a href="/"[^>]*>Beranda</a>', html)
     assert '<a class="btn" href="/admin">Lihat triage finance</a>' in html
     assert f'<a class="btn" href="/admin/claims/{HERO}">Buka klaim contoh (Rina, Surabaya)</a>' in html
     assert "Coba tanya sebagai karyawan" not in html  # finance cannot open employee pages
@@ -79,13 +78,30 @@ def test_employee_evidence_status_rejected(client):
     assert "✕ Ditolak" in html
 
 
-def test_focus_visible_style_is_visible_on_both_surfaces():
-    rule = ":focus-visible{outline:3px solid #1a5fb4;outline-offset:2px}"
-    assert rule in web.CSS
-    assert rule in office_page.CSS
-    for css in (web.CSS, office_page.CSS):
-        for element in ("a", "button", "input", "select", "textarea", "label"):
-            assert f"{element}:focus-visible" in css
+def test_focus_visible_style_is_visible_on_both_surfaces(client):
+    css = client.get("/static/app.css").text
+    assert "outline:3px solid #1a5fb4" in css and "outline-offset:2px" in css
+    for element in ("a", "button", "input", "select", "textarea", "label"):
+        assert f"{element}:focus-visible" in css
+
+
+def test_one_stylesheet_is_served_and_every_page_links_it(client):
+    css = client.get("/static/app.css")
+    assert css.status_code == 200
+    assert ":root" in css.text and "--brand:" in css.text
+    for url in ("/", "/admin", "/employee", "/employee/new", "/admin/plans"):
+        html = client.get(url).text
+        assert '<link rel="stylesheet" href="/static/app.css">' in html, url
+        assert "<style>" not in html, url
+
+
+def test_page_shell_has_language_skip_link_and_one_h1(client):
+    html = client.get("/admin").text
+    assert '<html lang="id">' in html
+    assert 'class="skip-link" href="#main"' in html
+    assert '<main id="main"' in html
+    assert html.count("<h1>") == 1
+    assert 'id="footer-note"' in html
 
 
 # --- P6 drop zone --------------------------------------------------------------
@@ -247,7 +263,7 @@ ROW = re.compile(r"<tr><td><a href='/admin/claims/(CLM-[^']+)'.*?</tr>", re.S)
 
 
 def _exception_rows(html: str) -> list[tuple[str, str]]:
-    section = html.split("<h3>Exceptions</h3>", 1)[1].split("</table>", 1)[0]
+    section = html.split("<h3>Pengecualian</h3>", 1)[1].split("</table>", 1)[0]
     return [(m.group(1), m.group(0)) for m in ROW.finditer(section)]
 
 
@@ -270,7 +286,7 @@ def test_triage_exceptions_sorted_by_held_money_and_show_engine_amounts(client):
         assert "Selidiki dengan agent" in row
 
 
-def test_triage_keeps_legacy_counts_and_reset(client):
+def test_triage_keeps_counts_and_reset(client):
     html = client.get("/admin").text
-    assert "10 claims, 7 cleared, 3 exceptions" in html
+    assert "10 klaim, 7 bersih, 3 pengecualian" in html
     assert 'action="/admin/reset"' in html
