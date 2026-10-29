@@ -160,7 +160,7 @@ CATEGORY_JS = """<script>(function(){
 document.querySelectorAll('[data-card]').forEach(function(card){
 var sel=card.querySelector("select[data-role=category]");if(!sel)return;
 function sync(){var cat=sel.value;
-card.querySelectorAll('.cat-field').forEach(function(f){
+card.querySelectorAll('.cat-field[data-cat]').forEach(function(f){
 var on=f.getAttribute('data-cat')===cat;f.hidden=!on;
 f.querySelectorAll('input,select,textarea').forEach(function(x){x.disabled=!on;});});}
 sel.addEventListener('change',sync);});
@@ -275,9 +275,9 @@ def _input(card: dict, k: str, allowed_cats: list[str], cat) -> str:
         ctl = f"<input name='{name}' value='{e(v)}' size=3{low}{off}>"
     else:
         ctl = f"<input name='{name}' value='{e(v)}' size=22{low}{off}>"
-    attrs = f" data-cat='{extra}'" if extra else ""
+    attrs = f" class='cat-field' data-cat='{extra}'" if extra else ""  # only category-only fields toggle
     hidden = "" if applies else " hidden"
-    return f"<label class='cat-field'{attrs}{hidden}>{e(label('ui_field_' + k))} {_badge(f)}<br>{ctl}</label>"
+    return f"<label{attrs}{hidden}>{e(label('ui_field_' + k))} {_badge(f)}<br>{ctl}</label>"
 
 
 @router.get("/employee/drafts/{did}", response_class=HTMLResponse)

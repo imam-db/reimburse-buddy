@@ -300,6 +300,12 @@ def test_category_fields_are_rendered_and_toggled(client, monkeypatch):
     assert "data-cat='hotel' hidden" in markup
     assert "data-role='category'" in markup
     assert "x.disabled=!on" in markup
+    # The toggle only reaches category-only fields: category, date, amount and merchant never carry it.
+    assert ".cat-field[data-cat]" in markup
+    for k in ("category", "date", "amount", "merchant"):
+        start = markup.index(f"name='c_{taxi}_{k}'")
+        opening = markup[markup.rindex("<label", 0, start):start]
+        assert "cat-field" not in opening and "data-cat" not in opening, k
 
 
 def test_hotel_validation_still_requires_nights(client, monkeypatch):
