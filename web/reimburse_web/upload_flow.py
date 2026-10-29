@@ -172,7 +172,11 @@ def _badge(f: dict) -> str:
 
 
 def _err(f: dict) -> str:
-    return f"<div class=err>{e(label('ui_could_not_read'))} {e(f['error'])}</div>" if f["error"] else ""
+    """One fixed Indonesian sentence for any extraction error; the raw error stays in `title` only."""
+    if not f["error"]:
+        return ""
+    return (f'<div class="err" title="{e(f["error"])}">'
+            f'{e(label("ui_could_not_read"))} {e(label("ui_fill_manual"))}</div>')
 
 
 def _input(card: dict, k: str, allowed_cats: list[str]) -> str:
