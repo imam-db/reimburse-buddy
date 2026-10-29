@@ -57,7 +57,8 @@ def test_intake_form_lists_the_directory_and_nav_link(client):
     assert '<textarea name="document"' in page.text
     assert '<option value="EMP-101" selected>' in page.text
     assert "EMP-202" in page.text
-    assert '<a href="/admin/intake">Permintaan baru</a>' in page.text
+    assert re.search(r'<a href="/admin/intake"[^>]*>Permintaan baru</a>', page.text)
+    assert 'aria-current="page"' in page.text  # the nav marks the page being shown
 
 
 def test_handbook_example_1_clarify_answer_then_plan(client):
@@ -71,7 +72,7 @@ def test_handbook_example_1_clarify_answer_then_plan(client):
                  "Jakarta", "Jayapura", "WIB", "WIT", "EMP-201", "EMP-202"):
         assert text in page.text, text
     # The question is open: nothing is staged and there is no approve control.
-    assert "Setujui / Approve" not in page.text
+    assert "Setujui" not in page.text
     assert "name='decision:" not in page.text
     assert not [e for e in events(run_id) if e["event_type"] == "staged_action"]
 
@@ -87,9 +88,9 @@ def test_handbook_example_1_clarify_answer_then_plan(client):
     page = c.get(f"/admin/plans/{run_id}")
     assert "EMP-202" in page.text and "Budi Hartono" in page.text
     # The resolved "Jumat siang" slot with the time-zone label of each participant.
-    assert "Fri 30 Oct 2026 13:00 WIB" in page.text
-    assert "Fri 30 Oct 2026 15:00 WIT" in page.text
-    assert "Setujui / Approve" in page.text
+    assert "Jumat, 30 Okt 13.00 WIB" in page.text
+    assert "Jumat, 30 Okt 15.00 WIT" in page.text
+    assert "Setujui" in page.text
 
     evs = events(run_id)
     staged = [e for e in evs if e["event_type"] == "staged_action"]
@@ -114,10 +115,10 @@ def test_handbook_example_2_document_injection_produces_no_action(client):
 
     page = c.get(f"/admin/plans/{run_id}")
     assert page.status_code == 200
-    assert "Injection notice" in page.text
+    assert "Peringatan injeksi" in page.text
     assert "DOC-1" in page.text
-    assert "Rencana tidak dibuat / Plan not staged" in page.text
-    assert "Setujui / Approve" not in page.text
+    assert "Rencana tidak dibuat" in page.text
+    assert "Setujui" not in page.text
 
     evs = events(run_id)
     assert [e for e in evs if e["event_type"] == "injection_detected"]
@@ -138,10 +139,10 @@ def test_handbook_example_2_broad_audience_asks_for_one_recipient(client):
 
     page = c.get(f"/admin/plans/{run_id}")
     assert page.status_code == 200
-    assert "Pertanyaan dari agen / Question from the agent" in page.text
+    assert "Pertanyaan dari agen" in page.text
     assert "tidak dikirim massal" in page.text
     assert "EMP-201" in page.text and "Budi Santoso" in page.text
-    assert "Setujui / Approve" not in page.text
+    assert "Setujui" not in page.text
     assert not [e for e in events(run_id) if e["event_type"] == "staged_action"]
 
     r = c.post(f"/admin/plans/{run_id}/answer", data={"answer": "EMP-201"}, follow_redirects=False)
@@ -170,7 +171,7 @@ def test_rerun_starts_a_new_run_from_the_stored_request(client):
     assert "Rencana ini sudah kedaluwarsa" in page.text
     assert "Jalankan ulang" in page.text
     assert f"action='/admin/intake/rerun/{run_id}'" in page.text
-    assert "Setujui / Approve" not in page.text
+    assert "Setujui" not in page.text
 
     clock["now"] = NEXT_FROZEN
     r = c.post(f"/admin/intake/rerun/{run_id}", follow_redirects=False)

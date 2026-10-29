@@ -108,7 +108,7 @@ def test_flag_off_keeps_existing_claim_page(client, monkeypatch):
     monkeypatch.setenv("EMPLOYEE_QA", "0")
     login(client, "EMP-001")
     page = client.get("/employee/claims/CLM-2026-0101")
-    assert page.status_code == 200 and "Tambah file" in page.text and "Tanya-jawab" not in page.text
+    assert page.status_code == 200 and "Tambah berkas" in page.text and "Tanya-jawab" not in page.text
 
 
 def test_signed_out_is_sent_to_login(client):
@@ -165,8 +165,8 @@ def test_log_container_holds_turns_and_form_stays_below(client):
     assert "role='log'" in html and "aria-live='polite'" in html
     assert "class='q'>Berapa plafon hotel?" in log and "POL-4" in log
     assert html.index("class='ask'") > end > start
-    assert "maxlength='500'" in html and "aria-label='Pertanyaan'" in html
-    assert "scrollTop" in html and "Menjawab... / Answering..." in html
+    assert "maxlength='500'" in html and "aria-label='Tulis pertanyaan'" in html
+    assert "scrollTop" in html and "Menjawab..." in html
 
 
 def test_empty_state_hint_disappears_after_a_question(client):
@@ -180,7 +180,7 @@ def test_empty_state_hint_disappears_after_a_question(client):
 def test_box_on_employee_portal(client):
     login(client, "EMP-001")
     html = client.get("/employee").text
-    assert "id='qa'" in html and "Ask about reimbursement" in html and "claim_id' value=''" in html
+    assert "id='qa'" in html and "Tanya-jawab reimburse" in html and "claim_id' value=''" in html
     assert html.index("id='qa'") > html.index("CLM-2026-0101")
 
 
@@ -208,7 +208,7 @@ def test_sources_use_readable_names_and_own_claims_are_links(client):
     assert "Pasal 4, Plafon hotel per malam" in client.get("/employee/claims/CLM-2026-0101").text
     client.post("/employee/qa", data={"question": "Apa yang kurang?", "claim_id": "CLM-2026-0101"})
     html = client.get("/employee/claims/CLM-2026-0101").text
-    sources = html.rsplit("Sumber / Sources: ", 1)[1].split("</div>", 1)[0]
+    sources = html.rsplit("Sumber: ", 1)[1].split("</div>", 1)[0]
     assert "<a href='/employee/claims/CLM-2026-0101'>CLM-2026-0101</a>" in sources
     assert "IT-" not in sources
     audit = [e for e in plans.log().list() if e["event_type"] == "qa_answer"][-1]
@@ -224,7 +224,7 @@ def test_sources_are_separated_by_a_middle_dot(client):
 
 
 def _sources_line(html):
-    return html.rsplit("Sumber / Sources: ", 1)[1].split("</div>", 1)[0]
+    return html.rsplit("Sumber: ", 1)[1].split("</div>", 1)[0]
 
 
 def test_english_answer_names_the_english_article_title(client):

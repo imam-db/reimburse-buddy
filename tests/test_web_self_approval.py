@@ -202,7 +202,7 @@ def test_plan_page_disables_approve_for_the_requester_and_the_submitter(client):
     page = c.get(f"/admin/plans/{run_id}").text
     assert "id='self-approval'" in page
     assert re.search(r"value=approve disabled", page)
-    assert "Tolak / Reject" in page
+    assert "Tolak" in page
 
     # The submitter is blocked too, with its own wording.
     login(c, "EMP-100")

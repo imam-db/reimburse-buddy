@@ -26,6 +26,7 @@ from reimburse_buddy.rules import check_claim
 from . import app as core
 from . import auth
 from . import plans  # noqa: F401  # puts agent/ on sys.path
+from . import ui
 from .labels import label
 from reimburse_agent.qa.tools import UNDER_REVIEW, is_sensitive_item  # noqa: E402  # same masking as Q&A
 from reimburse_buddy.models import to_jsonable  # noqa: E402
@@ -220,11 +221,11 @@ def draft_page(did: str, request: Request):
         errs = "".join(f"<div class=err>{e(x)}</div>" for x in c["errors"])
         cards_html += (f"<div class=card><b>{e(label('ui_card'))} {n + 1}</b>{errs}{''.join(_input(c, k, allowed) for k in keys)}"
                        f"<div class=note>{e(label('ui_col_files'))}</div><ul>{files or '<li class=note>' + e(label('ui_no_file_yet')) + '</li>'}</ul>"
-                       f"{merge} {split} <button name=action value='delete:{c['id']}'>{e(label('ui_delete'))}</button></div>")
+                       f"{merge} {split} <button class='btn quiet-danger' name=action value='delete:{c['id']}' onclick='return confirm(&quot;Hapus item ini?&quot;)'>{e(label('ui_delete'))}</button></div>")
     errs = "".join(f"<p class=err>{e(x)}</p>" for x in d["errors"])
-    body = f"""<p>{e(h['purpose'])} &middot; {e(h['destination'])} {e(h['start_date'])} &rarr; {e(h['end_date'])}</p>
+    body = f"""<p>{e(h['purpose'])} &middot; {e(h['destination'])} {core.date_html(h['start_date'])} &rarr; {core.date_html(h['end_date'])}</p>
 <p class="note">{e(label('ui_check_note').format(flag=label('self_declared')))}</p>{errs}
-<form method="post" action="/employee/drafts/{e(did)}"><div class="cards">{cards_html}</div>
+<form method="post" action="/employee/drafts/{e(did)}"><div class="cards" id="draft-cards" tabindex="-1">{cards_html}</div>
 <p><button name=action value="save">{e(label('ui_save_changes'))}</button> <button name=action value="add">{e(label('ui_add_item'))}</button>
 <button name=action value="submit" style="font-weight:bold">{e(label('ui_submit_claim'))}</button></p></form>"""
     return core.page(label("ui_check_title"), body)
@@ -440,11 +441,12 @@ async def update_draft(did: str, request: Request):
         if _validate(d):
             cid = _submit(d)
             return RedirectResponse(f"/employee/claims/{cid}?msg=Submitted", status_code=303)
-    return RedirectResponse(f"/employee/drafts/{did}", status_code=303)
+    target = f"/employee/drafts/{did}" + ("#draft-cards" if verb in ("add", "delete") else "")
+    return RedirectResponse(target, status_code=303)
 
 
-AWAITING = "Menunggu verifikasi finance / Awaiting finance review"
-REVIEWING = f"{UNDER_REVIEW['note_id'].rstrip('.')} / {UNDER_REVIEW['note_en'].rstrip('.')}"
+AWAITING = "Menunggu verifikasi finance"
+REVIEWING = UNDER_REVIEW["note_id"].rstrip(".")
 
 
 @router.get("/employee/claims/{cid}", response_class=HTMLResponse)
@@ -465,7 +467,7 @@ def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: i
             if a.get("claim_id") == cid and a.get("item_id"):
                 files_by_item.setdefault(a["item_id"], []).append(a["name"])
     pending = core.pending_items(cid)
-    rows = ""
+    rows: list[list[str]] = []
     for it, res in zip(claim["items"], chk.items):
         have = list(dict.fromkeys(files_by_item.get(it["id"], [])))
         missing = list(dict.fromkeys(REVIEWING if str(g) in B_ONLY else label(str(g)) for g in res.gaps))
@@ -479,17 +481,20 @@ def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: i
             status, cls = "! " + label("ui_needs_action") + ": " + ", ".join(missing), "warn"
         else:
             status, cls = "✓ " + label("ui_status_done"), "ok"
-        add = (f"<form method=post action='/employee/claims/{e(cid)}/items/{e(it['id'])}/files' enctype='multipart/form-data'>"
+        add = (f"<details><summary>{e(label('ui_add_file'))}</summary>"
+               f"<form method=post action='/employee/claims/{e(cid)}/items/{e(it['id'])}/files' enctype='multipart/form-data'>"
                f"<input type=file name=file aria-label='Berkas bukti untuk {e(it['id'])}' accept='.pdf,.png,.jpg,.jpeg' required> "
-               f"<button>{e(label('ui_add_file'))}</button></form>")
-        rows += (f"<tr><td>{e(label(it['category']))}<div class=note>{e(it['description'])}</div></td><td>{e(it['date'])}</td>"
-                 f"<td class=num>{e(rupiah(res.claimed))}</td><td>{e(', '.join(have)) or '<span class=note>' + e(label('none')) + '</span>'}</td>"
-                 f"<td><span class='tag {cls}'>{e(status)}</span></td><td>{add}</td></tr>")
+               f"<button>{e(label('ui_add_file'))}</button></form></details>")
+        files_cell = (ui.chips(have, tone="ok") if have
+                      else f"<span class=note>{e(label('none'))}</span>")
+        rows.append([f"{e(label(it['category']))}<div class=note>{e(it['description'])}</div>", core.date_html(it["date"]),
+                     e(rupiah(res.claimed)), files_cell, f"<span class='tag {cls}'>{e(status)}</span>", add])
     body = f"""<p><a href="/employee">&larr; {e(label('ui_my_claims'))}</a></p>
-{f'<p class="tag ok">{e(label("ui_forwarded_note").format(flash=core.flash_text(msg), mailbox=core.MAILBOX))}</p>' if msg else ''}
-<p>{e(claim['purpose'])} &middot; {e(claim['trip']['destination'])} {e(claim['trip']['start_date'])} &rarr;
-{e(claim['trip']['end_date'])} &middot; status {core.status_tag(claim['status'])}</p>
-<div class="table-wrap"><table><tr><th>{e(label('ui_col_item'))}</th><th>{e(label('ui_col_date'))}</th><th class=num>{e(label('ui_col_claimed'))}</th><th>{e(label('ui_col_files'))}</th><th>{e(label('ui_col_evidence'))}</th><th></th></tr>{rows}</table></div>
+{ui.alert(label("ui_forwarded_note").format(flash=core.flash_text(msg), mailbox=core.MAILBOX), tone="success") if msg else ''}
+<p>{e(claim['purpose'])} &middot; {e(claim['trip']['destination'])} {core.date_html(claim['trip']['start_date'])} &rarr;
+{core.date_html(claim['trip']['end_date'])} &middot; {e(label('ui_status'))} {core.status_tag(claim['status'])}</p>
+{ui.table([label('ui_col_item'), label('ui_col_date'), label('ui_col_claimed'), label('ui_col_files'),
+           label('ui_col_evidence'), ''], rows, num=(2,), caption=label('ui_claim'))}
 <p class="note">{e(label('ui_finance_note'))}</p>"""
     return core.page(f"{label('ui_claim')} {cid}", qa_top + body + qa_box)
 

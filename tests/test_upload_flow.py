@@ -139,9 +139,9 @@ def submitted_with_unreadable(client):
 
 def test_unreadable_evidence_needs_explicit_acceptance(client):
     cid, loc = submitted_with_unreadable(client)
-    assert "Awaiting finance review" in client.get(loc).text and "Menunggu verifikasi finance" in client.get(loc).text
+    assert "Menunggu verifikasi finance" in client.get(loc).text
     admin = client.get(f"/admin/claims/{cid}").text
-    assert "pending review" in admin and "Accept evidence" in admin and "Reject evidence" in admin
+    assert "Menunggu tinjauan" in admin and "Terima bukti" in admin and "Tolak bukti" in admin
     assert "unreadable_file" in admin
     assert web.run_check(cid).decision.value == "needs_info"
     # Neither the mailbox Attach button nor a status change can treat it as cleared.

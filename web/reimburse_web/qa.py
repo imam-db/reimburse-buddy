@@ -70,33 +70,20 @@ def _sign_in_notice() -> str:
     return auth.sign_in_notice()
 
 
-CSS = """.qa{border:2px solid #3a7bd5;border-radius:10px;padding:12px 16px;margin:16px 0;background:#f6f9ff;max-width:100%;box-sizing:border-box}
-.qa-log{max-height:min(55vh,480px);overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:8px;margin:8px 0;
-background:#fff;border:1px solid #d5dae3;border-radius:8px}
-.qa .q{align-self:flex-end;max-width:85%;background:#3a7bd5;color:#fff;border-radius:14px 14px 2px 14px;padding:6px 12px;
-overflow-wrap:anywhere}
-.qa .a{align-self:flex-start;max-width:92%;white-space:pre-wrap;overflow-wrap:anywhere;background:#eef1f6;border:1px solid #d5dae3;
-border-radius:14px 14px 14px 2px;padding:8px 12px}
-.qa .src{align-self:flex-start;font-size:12px;color:#445;margin:-2px 0 6px 4px;overflow-wrap:anywhere}
-.qa .refused{border-color:#e08a00;background:#fff8ec}
-.qa .hint{color:#556;font-size:14px;margin:4px}
-.qa form.ask{display:flex;gap:8px;margin:8px 0 0}.qa form.ask input[type=text]{flex:1;min-width:0;padding:6px}
-.qa form.quick{margin:8px 0 0}.qa form.new{margin:8px 0 0}.qa button[disabled]{opacity:.6;cursor:wait}
-.qa .quota{font-size:13px;color:#445;margin:4px 0}.qa .quota.limit{color:#8a4b00;font-weight:600}
-.demo{background:#fff3cd;border:1px dashed #b38600;padding:8px;border-radius:6px}"""
-
 JS = """<script>(function(){var l=document.getElementById('qa-log');if(l)l.scrollTop=l.scrollHeight;
 var b=document.getElementById('qa');if(!b)return;
 b.querySelectorAll('form').forEach(function(f){f.addEventListener('submit',function(e){
 var n=b.querySelectorAll('button');var s=e.submitter;
 if(s&&s.name){var h=document.createElement('input');h.type='hidden';h.name=s.name;h.value=s.value;f.appendChild(h);}
 setTimeout(function(){n.forEach(function(x){x.disabled=true;});
-if(s)s.textContent='Menjawab... / Answering...';},0);});});})();</script>"""
+if(s)s.textContent='Menjawab...';},0);});});})();</script>"""
 
-EMPTY_HINT = ("<p class='hint'>Belum ada pertanyaan. Coba: \"Apa yang kurang?\" atau \"Berapa plafon hotel?\"<br>"
-              "No questions yet. Try: \"What's missing?\" or \"Hotel cap?\"</p>")
-LIMIT_EMPTY_HINT = ("<p class='hint'>Percakapan dikosongkan. Batas pertanyaan sesi ini sudah tercapai.<br>"
-                    "Conversation cleared. This session's question limit is reached.</p>")
+EMPTY_HINT = (f"<p class='hint'>{escape(label('ui_qa_empty'))}</p>"
+              + (f"<details><summary>{escape(label('ui_english'))}</summary>"
+                 "<p class='hint'>No questions yet. Try: \"What's missing?\" or \"Hotel cap?\"</p></details>"))
+LIMIT_EMPTY_HINT = (f"<p class='hint'>{escape(label('ui_qa_empty_cleared'))}</p>"
+                    + (f"<details><summary>{escape(label('ui_english'))}</summary>"
+                       "<p class='hint'>Conversation cleared. This session's question limit is reached.</p></details>"))
 
 
 def _labelled(text: str) -> str:
@@ -149,28 +136,27 @@ def _qa_box(sess: Session, cid: str) -> str:
     hist = STATE.setdefault("history", {}).get(sess.session_id, [])
     turns = "".join(
         f"<div class='q'>{escape(q)}</div><div class='a{' refused' if r['refused'] else ''}'>{_answer_html(r, turn_cid)}</div>"
-        f"<div class='src'>Sumber / Sources: {_sources(r)}</div>" for q, r, turn_cid in hist[-6:])
+        f"<div class='src'>{escape(label('ui_qa_sources'))} {_sources(r)}</div>" for q, r, turn_cid in hist[-6:])
     left, total = service().remaining_questions(sess), service().config.max_questions
     empty = LIMIT_EMPTY_HINT if not left else EMPTY_HINT
     log = f"<div class='qa-log' id='qa-log' role='log' aria-live='polite'>{turns or empty}</div>"
-    quota = f"<p class='quota'>Sisa pertanyaan: {left} dari {total} / Questions left: {left} of {total}</p>"
+    quota = f"<p class='quota'>{escape(label('ui_qa_quota').format(left=left, total=total))}</p>"
     if not left:
-        quota += (f"<p class='quota limit'>Batas pertanyaan untuk sesi ini sudah tercapai. Hubungi "
+        quota += (f"<p class='quota limit'>{escape(label('ui_qa_limit_prefix'))} "
                   f"{_finance_link(cid)}.</p>")
     off = "" if left else " disabled"
     quick = "".join(f"<button name='quick' value='{escape(q)}'{off}>{escape(q)}</button> "
                     for q in (QUICK_CLAIM if cid else QUICK_PORTAL))
-    title = "Tanya-jawab / Ask about this claim" if cid else "Tanya-jawab reimburse / Ask about reimbursement"
-    return (f"<div class='qa' id='qa'><h2>{title}</h2>"
-            f"<p class='note'>Hanya kebijakan dan klaim Anda sendiri. Jawaban tidak mengubah klaim; keputusan akhir ada di finance."
-            f" / Policy and your own claims only; answers never change a claim.</p>{quota}{log}"
+    title = label("ui_qa_title_claim") if cid else label("ui_qa_title_portal")
+    return (f"<div class='qa' id='qa'><h2>{escape(title)}</h2>"
+            f"<p class='note'>{escape(label('ui_qa_scope'))}</p>{quota}{log}"
             f"<form method='post' action='/employee/qa/new' class='new'><input type='hidden' name='claim_id' value='{escape(cid)}'>"
-            f"<button>Percakapan baru / New conversation</button></form>"
+            f"<button>{escape(label('ui_qa_new'))}</button></form>"
             # Two forms: pressing Enter in the text box must submit the text, not the first quick button.
             f"<form method='post' action='/employee/qa' class='quick'><input type='hidden' name='claim_id' value='{escape(cid)}'>{quick}</form>"
             f"<form method='post' action='/employee/qa' class='ask'><input type='hidden' name='claim_id' value='{escape(cid)}'>"
-            f"<input type='text' name='question' aria-label='Pertanyaan' maxlength='500' placeholder='Tulis pertanyaan / Ask a question'{off}>"
-            f"<button{off}>Tanya / Ask</button></form>{JS}</div>")
+            f"<input type='text' name='question' aria-label='{escape(label('ui_qa_placeholder'))}' maxlength='500' placeholder='{escape(label('ui_qa_placeholder'))}'{off}>"
+            f"<button{off}>{escape(label('ui_qa_ask'))}</button></form>{JS}</div>")
 
 
 def portal_box(request: Request) -> str:
@@ -178,7 +164,7 @@ def portal_box(request: Request) -> str:
     if not qa_engine.enabled():
         return ""
     sess = session_of(request)
-    return f"<style>{CSS}</style>{_qa_box(sess, '')}" if sess else ""
+    return _qa_box(sess, '') if sess else ""
 
 
 @router.get("/employee/claims")
@@ -198,7 +184,7 @@ def claim_page_parts(request: Request | None, cid: str, owner: str) -> tuple[str
         return web.page("Klaim / Claim", _sign_in_notice())
     if owner != sess.employee_id:
         raise HTTPException(404, f"Unknown claim {cid}")
-    return f"<style>{CSS}</style>", _qa_box(sess, cid)
+    return "", _qa_box(sess, cid)
 
 
 @router.post("/employee/qa/new")

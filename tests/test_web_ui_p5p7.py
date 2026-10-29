@@ -16,7 +16,6 @@ from fastapi.testclient import TestClient
 
 from reimburse_web import app as web
 from reimburse_web.agent_bridge import Investigator
-from reimburse_agent.office import page as office_page
 
 HERO = "CLM-2026-0110"
 
@@ -37,7 +36,7 @@ def test_landing_page_explains_roles_and_links_the_demo_claim(client):
     assert r.status_code == 200
     html = r.text
     assert "Selamat datang di reimburse-buddy" in html
-    assert '<a href="/">Beranda</a>' in html
+    assert re.search(r'<a href="/"[^>]*>Beranda</a>', html)
     assert '<a class="btn" href="/admin">Lihat triage finance</a>' in html
     assert f'<a class="btn" href="/admin/claims/{HERO}">Buka klaim contoh (Rina, Surabaya)</a>' in html
     assert "Coba tanya sebagai karyawan" not in html  # finance cannot open employee pages
@@ -79,13 +78,30 @@ def test_employee_evidence_status_rejected(client):
     assert "✕ Ditolak" in html
 
 
-def test_focus_visible_style_is_visible_on_both_surfaces():
-    rule = ":focus-visible{outline:3px solid #1a5fb4;outline-offset:2px}"
-    assert rule in web.CSS
-    assert rule in office_page.CSS
-    for css in (web.CSS, office_page.CSS):
-        for element in ("a", "button", "input", "select", "textarea", "label"):
-            assert f"{element}:focus-visible" in css
+def test_focus_visible_style_is_visible_on_both_surfaces(client):
+    css = client.get("/static/app.css").text
+    assert "outline:3px solid #1a5fb4" in css and "outline-offset:2px" in css
+    for element in ("a", "button", "input", "select", "textarea", "label"):
+        assert f"{element}:focus-visible" in css
+
+
+def test_one_stylesheet_is_served_and_every_page_links_it(client):
+    css = client.get("/static/app.css")
+    assert css.status_code == 200
+    assert ":root" in css.text and "--brand:" in css.text
+    for url in ("/", "/admin", "/employee", "/employee/new", "/admin/plans"):
+        html = client.get(url).text
+        assert '<link rel="stylesheet" href="/static/app.css">' in html, url
+        assert "<style>" not in html, url
+
+
+def test_page_shell_has_language_skip_link_and_one_h1(client):
+    html = client.get("/admin").text
+    assert '<html lang="id">' in html
+    assert 'class="skip-link" href="#main"' in html
+    assert '<main id="main"' in html
+    assert html.count("<h1>") == 1
+    assert 'id="footer-note"' in html
 
 
 # --- P6 drop zone --------------------------------------------------------------
@@ -236,41 +252,105 @@ def test_progress_box_maps_steps_and_counts_seconds(client, monkeypatch, tmp_pat
     assert 'id="progress"' in html
     assert "Menghitung dengan mesin aturan…" in html
     assert "Mencari boarding pass/struk di mailbox…" in html
-    assert "Menghitung dengan mesin aturan… → Mencari boarding pass/struk di mailbox…" in html
+    assert '<ol class="stepper" id="progress-steps" aria-live="polite"' in html
+    assert 'aria-current="step"' in html
     assert re.search(r"Waktu berjalan: <b id=\"elapsed\">\d+</b> detik", html)
     assert "setInterval" in html
     client.post(f"/admin/investigations/{rid}/cancel")
 
 
 # --- P7 triage ----------------------------------------------------------------
-ROW = re.compile(r"<tr><td><a href='/admin/claims/(CLM-[^']+)'.*?</tr>", re.S)
+CARD = re.compile(r'<article class="item-card" id="exception-(CLM-[^"]+)" data-held="(\d+)"(.*?)</article>', re.S)
 
 
-def _exception_rows(html: str) -> list[tuple[str, str]]:
-    section = html.split("<h3>Exceptions</h3>", 1)[1].split("</table>", 1)[0]
-    return [(m.group(1), m.group(0)) for m in ROW.finditer(section)]
+def _exception_cards(html: str) -> list[tuple[str, int, str]]:
+    return [(m.group(1), int(m.group(2)), m.group(0)) for m in CARD.finditer(html)]
 
 
 def test_triage_exceptions_sorted_by_held_money_and_show_engine_amounts(client):
     html = client.get("/admin").text
-    rows = _exception_rows(html)
-    assert "Uang tertahan" in html and "Yang kurang" in html
-    ids = [cid for cid, _ in rows]
+    cards = _exception_cards(html)
+    assert "Uang tertahan" in html and "Pengecualian" in html
+    ids = [cid for cid, _, _ in cards]
     assert ids == [HERO, "CLM-2026-0101", "CLM-2026-0104"]  # 2.05m, 1.45m, 0.57m held
 
     held = {cid: web.run_check(cid).total_pending for cid in ids}
-    assert ids == sorted(ids, key=lambda cid: held[cid], reverse=True)
+    assert [value for _, value, _ in cards] == [int(held[cid]) for cid in ids]
 
     from reimburse_buddy.models import rupiah
 
-    for cid, row in rows:
-        shown = re.search(r"<td class=num>(Rp[^<]+)</td>", row).group(1)
+    for cid, _, card in cards:
+        shown = re.search(r'<div class="amount">(Rp[^<]+)</div>', card).group(1)
         assert shown == rupiah(held[cid]), cid
-        assert f'action="/admin/claims/{cid}/investigate"' in row
-        assert "Selidiki dengan agent" in row
+        assert f'action="/admin/claims/{cid}/investigate"' in card
+        assert "Selidiki dengan agent" in card
 
 
-def test_triage_keeps_legacy_counts_and_reset(client):
+def test_triage_keeps_counts_and_reset(client):
     html = client.get("/admin").text
-    assert "10 claims, 7 cleared, 3 exceptions" in html
+    assert "10 klaim, 7 bersih, 3 pengecualian" in html
     assert 'action="/admin/reset"' in html
+
+
+# --- P2 responsive lists -------------------------------------------------------
+def test_every_data_table_cell_has_a_label_for_the_stacked_view(client):
+    for url in ("/employee", "/admin", f"/admin/claims/{HERO}", f"/admin/claims/{HERO}/audit"):
+        html = client.get(url).text
+        missing = re.findall(r"<td(?![^>]*data-label=)[^>]*>", html)
+        assert missing == [], (url, missing[:3])
+
+
+def test_triage_summary_is_stats_and_exceptions_are_cards(client):
+    html = client.get("/admin").text
+    assert 'id="triage-stats"' in html and html.count('class="stat"') == 4
+    assert 'class="item-card" id="exception-' in html
+
+
+def test_employee_claim_has_one_styled_file_control_per_item(client):
+    html = client.get(f"/employee/claims/{HERO}").text
+    items = web.store.get_claim(HERO)["items"]
+    assert html.count("<details><summary>Tambah berkas</summary>") == len(items)
+    for chunk in html.split("<details><summary>Tambah berkas</summary>")[1:]:
+        assert "type=file" in chunk.split("</details>", 1)[0]
+
+
+# --- P5 accessibility and feedback ---------------------------------------------
+def test_failed_navigation_renders_an_html_page_and_scripts_still_get_json(client):
+    page = client.get("/admin/claims/CLM-NOPE", headers={"accept": "text/html"})
+    assert page.status_code == 404
+    assert '<html lang="id">' in page.text and 'role="alert"' in page.text
+    assert "Halaman atau data yang Anda cari tidak ditemukan." in page.text
+    assert 'href="/"' in page.text and "Kembali ke beranda" in page.text
+
+    script = client.get("/admin/claims/CLM-NOPE")
+    assert script.status_code == 404 and script.json()["detail"] == "Unknown claim CLM-NOPE"
+
+    post = client.post("/manager/requests/APR-999", data={"decision": "approved"})
+    assert post.status_code == 404 and post.json()["detail"] == "Unknown request APR-999"
+
+
+def test_flash_message_is_a_focusable_status_region(client):
+    html = client.get("/employee?msg=File+added").text
+    assert 'class="alert"' in html and 'role="status"' in html and 'tabindex="-1"' in html
+    assert "querySelector('.alert')" in html and "a.focus()" in html
+
+
+# --- P6 polish -----------------------------------------------------------------
+def test_dates_are_indonesian_with_the_iso_value_in_the_title(client):
+    claim = client.get(f"/employee/claims/{HERO}").text
+    assert '<time datetime="2026-10-02" title="2026-10-02">2 Okt 2026</time>' in claim
+    portal = client.get("/employee").text
+    assert '<time datetime="2026-10-12"' in portal and "Okt 2026" in portal
+
+
+def test_destructive_actions_ask_first(client):
+    assert "confirm('Reset data demo?')" in client.get("/admin").text
+    did = _employee_draft(client)
+    assert "Hapus item ini?" in client.get(f"/employee/drafts/{did}").text
+
+
+def test_stylesheet_has_a_dark_theme_and_honours_reduced_motion(client):
+    css = client.get("/static/app.css").text
+    assert "@media (prefers-color-scheme: dark)" in css and "color-scheme: dark" in css
+    assert "@media (prefers-reduced-motion: reduce)" in css
+    assert "tabular-nums" in css

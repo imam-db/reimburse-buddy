@@ -16,6 +16,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from . import auth
+from . import ui
 from .labels import label, person
 
 router = APIRouter()
@@ -63,7 +64,7 @@ def manager_home(request: Request, msg: str = ""):
     if not me:
         return web.page(label("ui_nav_approvals"), auth.sign_in_notice())
     mine = [r for r in web.store.approval_requests if r["manager_id"] == me]
-    rows = ""
+    rows: list[list[str]] = []
     for r in mine:
         claim = web.store.get_claim(r["claim_id"])
         it = _item(claim, r["item_id"])
@@ -74,20 +75,18 @@ def manager_home(request: Request, msg: str = ""):
                    f"<button name=decision value=approved>{e(label('ui_req_approve'))}</button> "
                    f"<button name=decision value=rejected>{e(label('ui_req_reject'))}</button></form>")
         else:
-            act = (f"<span class=note>{e(r.get('answered_at', ''))}</span>"
+            act = (f"<span class=note>{web.moment_html(r['answered_at']) if r.get('answered_at') else ''}</span>"
                    + (f"<div class=note>{e(r['note'])}</div>" if r.get("note") else ""))
-        rows += (f"<tr id='req-{e(r['id'])}'><td>{e(r['claim_id'])}</td>"
-                 f"<td>{e(person(web.store, claim['employee_id']))}</td>"
-                 f"<td>{e(label(it.get('category', '')))}<div class=note>{e(it.get('description', r['item_id']))}</div></td>"
-                 f"<td class=num>{e(web.rupiah(Decimal(it['amount']))) if it.get('amount') else ''}</td>"
-                 f"<td>{e(r.get('reason', ''))}</td><td>{e(status_text(r))}</td><td>{act}</td></tr>")
-    flash = f'<p class="tag ok">{e(msg)}</p>' if msg else ""
-    body = (f"{flash}<p class=note>{e(label('ui_req_explain'))}</p>"
-            f"<div class=\"table-wrap\"><table><tr><th>{e(label('ui_col_claim'))}</th>"
-            f"<th>{e(label('ui_col_employee'))}</th><th>{e(label('ui_col_item'))}</th>"
-            f"<th class=num>{e(label('ui_col_claimed'))}</th>"
-            f"<th>{e(label('ui_col_reason'))}</th><th>{e(label('ui_col_status'))}</th><th></th></tr>{rows}</table></div>"
-            if rows else f"{flash}<p>{e(label('ui_no_approval_requests'))}</p>")
+        rows.append([e(r["claim_id"]), e(person(web.store, claim["employee_id"])),
+                     f"{e(label(it.get('category', '')))}<div class=note>{e(it.get('description', r['item_id']))}</div>",
+                     e(web.rupiah(Decimal(it["amount"]))) if it.get("amount") else "",
+                     e(r.get("reason", "")), e(status_text(r)), act])
+    flash = ui.alert(msg, tone="success") if msg else ""
+    table = ui.table([label("ui_col_claim"), label("ui_col_employee"), label("ui_col_item"),
+                      label("ui_col_claimed"), label("ui_col_reason"), label("ui_col_status"), ""],
+                     rows, num=(3,), caption=label("ui_nav_approvals"),
+                     empty=label("ui_no_approval_requests"))
+    body = f"{flash}<p class=note>{e(label('ui_req_explain'))}</p>{table}"
     return web.page(label("ui_nav_approvals"), body)
 
 

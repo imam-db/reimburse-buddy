@@ -18,14 +18,14 @@ def client(tmp_path, monkeypatch):
 def test_triage_page_is_read_only(client):
     r = client.get("/admin")
     assert r.status_code == 200
-    assert "10 claims, 7 cleared, 3 exceptions" in r.text and "estimate" in r.text
+    assert "10 klaim, 7 bersih, 3 pengecualian" in r.text and "perkiraan" in r.text
     assert web.store.status_log == []
 
 
 def test_bulk_approve_needs_confirmation(client):
     cleared = web.triage_claims(web.store, web.BATCH)["auto_cleared"]
     r = client.post("/admin/batch/approve", data={"batch": web.BATCH, "claim_ids": cleared})
-    assert "Not approved" in r.text
+    assert "Tidak disetujui" in r.text
     assert web.store.status_log == []
     client.post("/admin/batch/approve", data={"batch": web.BATCH, "claim_ids": cleared, "reviewer_confirmed": "true"})
     assert all(web.store.get_claim(c)["status"] == "approved" for c in cleared)
@@ -39,7 +39,7 @@ def test_hero_reviewer_flow(client):
     client.post(f"/admin/claims/{HERO}/evidence", data={"evidence_id": "MSG-5203"})
     client.post(f"/admin/claims/{HERO}/decide", data={"item_id": "IT-3", "choice": "approve_capped"})
     r = client.get(f"/admin/claims/{HERO}")
-    assert "Rp6.590.000</b> of Rp6.890.000" in r.text
+    assert "Rp6.590.000</b> dari Rp6.890.000" in r.text
     assert "memo_unsigned" in r.text and "no_matching_item" in r.text
     assert web.store.get_claim(HERO)["status"] == "submitted"
     client.post(f"/admin/claims/{HERO}/status", data={"status": "partially_approved"})

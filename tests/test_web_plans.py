@@ -37,7 +37,7 @@ def test_page_renders_and_logs_notice_once(client):
     for _ in range(2):
         r = c.get("/admin/plans/w1")
         assert r.status_code == 200
-        assert "Fri 30 Oct 2026 13:00 WIB" in r.text and "Fri 30 Oct 2026 15:00 WIT" in r.text
+        assert "Jumat, 30 Okt 13.00 WIB" in r.text and "Jumat, 30 Okt 15.00 WIT" in r.text
     shown = [e for e in plans.log().list("w1") if e["event_type"] == "notice_shown"]
     assert len(shown) == 1
     assert c.get("/admin/plans/nope").status_code == 404
@@ -58,4 +58,4 @@ def test_decide_stores_decision_map_only(client):
 def test_stale_form_is_not_saved(client):
     c, plan, store = client
     r = c.post("/admin/plans/w1/decide", data={"plan_id": "w1:v0"}, follow_redirects=False)
-    assert "Stale" in r.headers["location"] and store.load_decisions("w1", 1) is None
+    assert "Formulir" in r.headers["location"] and store.load_decisions("w1", 1) is None

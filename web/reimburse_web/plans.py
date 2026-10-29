@@ -18,7 +18,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from . import auth, plan_state
+from . import auth, plan_state, ui
 from .agent_bridge import AGENT_DIR
 from .labels import label
 
@@ -156,18 +156,18 @@ def plans_index():
 
     pending = _pending_plans()
     if not pending:
-        body = "<p>Tidak ada rencana yang menunggu persetujuan.</p>"
+        body = ui.empty_state(
+            label("ui_plans_empty"),
+            f'<a class="btn primary" href="/admin/intake">{escape(label("ui_new_request"))}</a>')
     else:
-        rows = "".join(
-            f"<tr><td><a href='/admin/plans/{escape(run_id)}'>{escape(run_id)}</a></td>"
-            f"<td>{escape(_requester_name(plan.get('requester')))}</td>"
-            f"<td>{escape(plan.get('request', ''))}</td>"
-            f"<td class=num>{len(plan.get('actions', []))}</td></tr>"
-            for run_id, plan in pending)
-        body = ("<div class='table-wrap'><table><tr><th>Run</th><th>Peminta / Requester</th>"
-                "<th>Permintaan / Request</th><th class=num>Aksi / Actions</th></tr>"
-                f"{rows}</table></div>")
-    return web.page("Rencana menunggu / Pending plans", body)
+        rows = [[f"<a href='/admin/plans/{escape(run_id)}'>{escape(run_id)}</a>",
+                 escape(_requester_name(plan.get("requester"))),
+                 escape(plan.get("request", "")),
+                 f"{len(plan.get('actions', []))}"] for run_id, plan in pending]
+        body = ui.table([label("ui_plan_run"), label("ui_intake_requester"),
+                         label("ui_intake_request"), label("ui_plan_actions")],
+                        rows, num=(3,))
+    return web.page(label("ui_plans_title"), body)
 
 
 @router.get("/admin/plans/{run_id}", response_class=HTMLResponse)
@@ -196,9 +196,8 @@ def plan_page(run_id: str, request: Request, msg: str = "", stale: int = 0):
                          action_url=f"/admin/plans/{run_id}/decide", msg=msg, allow_approve=block is None,
                          blocked_note=(label("self_approval_submitted_note") if block == "submitted_by"
                                        else None),
-                         stale=bool(stale))
-    markup = markup.replace("</head>", f"<style>{web.NAV_CSS}</style></head>", 1)
-    return HTMLResponse(markup.replace("<body>", f"<body>{web.nav_html()}", 1))
+                         stale=bool(stale), stylesheet_url=web.STATIC_URL, nav_html=web.nav_html())
+    return HTMLResponse(markup)
 
 
 @router.post("/admin/plans/{run_id}/decide")
@@ -208,7 +207,7 @@ async def decide(run_id: str, request: Request):
         raise HTTPException(404, "no such plan")
     form = await request.form()
     if form.get("plan_id") != plan["plan_id"]:
-        return RedirectResponse(f"/admin/plans/{run_id}?msg=Stale+form:+the+plan+changed", status_code=303)
+        return RedirectResponse(f"/admin/plans/{run_id}?msg={quote(label('ui_msg_stale_form'), safe='')}", status_code=303)
     ids = {a["action_id"] for a in plan["actions"]}
     decisions = {k.split(":", 1)[1]: v for k, v in form.items()
                  if k.startswith("decision:") and k.split(":", 1)[1] in ids and v in ("approve", "reject")}
@@ -234,4 +233,4 @@ async def decide(run_id: str, request: Request):
     # reported as saved: the plan will never execute. The page says so and offers "Jalankan ulang".
     if intake.resume_if_live(run_id, dict(decision)) == intake.CANNOT_RESUME:
         return RedirectResponse(f"/admin/plans/{run_id}?stale=1", status_code=303)
-    return RedirectResponse(f"/admin/plans/{run_id}?msg=Keputusan+disimpan+/+decisions+saved", status_code=303)
+    return RedirectResponse(f"/admin/plans/{run_id}?msg={quote(label('ui_msg_decisions_saved'), safe='')}", status_code=303)

@@ -35,7 +35,7 @@ def test_employee_page_masks_duplicate(client, monkeypatch, flag):
     text = _visible(r.text)
     for s in SENSITIVE_TEXT:
         assert s not in text, s
-    assert "Sedang ditinjau finance" in r.text and "Under finance review" in r.text
+    assert "Sedang ditinjau finance" in r.text
 
 
 def test_masking_uses_qa_source_of_truth():

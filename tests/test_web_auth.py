@@ -508,3 +508,17 @@ def test_portal_lists_only_own_claims_with_links(client):
     page = client.get("/employee").text
     assert "href='/employee/claims/CLM-2026-0104'" in page
     assert "CLM-2026-0101" not in page
+
+
+def test_stylesheet_is_public_and_pages_link_it(client):
+    """The shell needs its stylesheet before anyone signs in; no page carries inline CSS."""
+    css = client.get("/static/app.css")
+    assert css.status_code == 200
+    assert ":root" in css.text and "--brand:" in css.text
+    login_as(client, "EMP-102")
+    html = client.get("/admin").text
+    assert '<link rel="stylesheet" href="/static/app.css">' in html
+    assert "<style>" not in html
+    login = client.get("/login").text
+    assert '<link rel="stylesheet" href="/static/app.css">' in login
+    assert "<style>" not in login

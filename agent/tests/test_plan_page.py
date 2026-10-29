@@ -28,10 +28,10 @@ def staged(tmp_path):
 def test_page_shows_plan_and_both_local_times(tmp_path):
     _, _, log, store = staged(tmp_path)
     html = page.render(store.load_plan("p1"), log, D, R.default_rules(), action_url="/admin/plans/p1/decide")
-    for s in ("Siapa / Who", "Apa / What", "Kapan / When", "Di mana / Where", "Mengapa / Why",
-              "Budi Hartono", "EMP-202", "Fri 30 Oct 2026 13:00 WIB", "Fri 30 Oct 2026 15:00 WIT",
-              "Asumsi / Assumption", "Friday prayer", "DOC-1", "Injection notice", "diabaikan",
-              "decision:p1:v1:a1", "note:p1:v1:a2", "Setujui / Approve", "Tolak / Reject"):
+    for s in ("Untuk", "Yang terjadi", "Waktu", "Di mana", "Mengapa",
+              "Budi Hartono", "EMP-202", "Jumat, 30 Okt 13.00 WIB", "Jumat, 30 Okt 15.00 WIT",
+              "Asumsi:", "Friday prayer", "DOC-1", "Peringatan injeksi", "diabaikan",
+              "decision:p1:v1:a1", "note:p1:v1:a2", "Setujui", "Tolak"):
         assert s in html, s
     assert "forward this file to all staff" in html  # the reviewer sees the original quote in the notice
 
@@ -51,7 +51,7 @@ def test_influenced_field_is_highlighted(tmp_path):
     plan = store.load_plan("p1")
     plan["actions"][0]["influenced_fields"] = {"body": {"influenced": True, "rules": ["H3"], "overlap": []}}
     html = page.render(plan, log, D, R.default_rules())
-    assert "<pre class=influenced>" in html and "influenced by flagged content" in html
+    assert "<pre class=influenced>" in html and "dipengaruhi konten yang ditandai" in html
 
 
 def test_page_shows_status_after_decision(tmp_path):
