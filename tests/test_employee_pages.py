@@ -103,3 +103,36 @@ def test_new_claim_with_pending_files_asks_nothing_of_the_employee(client, monke
 def test_hero_claim_still_asks_for_the_boarding_pass(client):
     page = client.get(f"/employee/claims/{HERO}").text
     assert "! Perlu tindakan: Boarding pass belum ada" in page
+
+
+# --- item 2: summary and next step -----------------------------------------------
+def test_summary_for_a_claim_that_needs_an_upload(client):
+    page = client.get(f"/employee/claims/{HERO}").text
+    assert 'id="claim-summary"' in page and "Total diajukan" in page
+    assert "Unggah berkas yang diminta. Finance baru bisa memutuskan setelah itu." in page
+    first = next(i["id"] for i in web.store.get_claim(HERO)["items"]
+                 if i["category"] == "flight")
+    link = re.search(r"<a href='#item-([^']+)'>Ke item pertama</a>", page)
+    assert link and link.group(1) == first
+
+
+def test_summary_for_a_claim_waiting_on_finance(client, monkeypatch):
+    cid = submit_new_claim(client, monkeypatch)
+    text = visible(client.get(f"/employee/claims/{cid}").text)
+    assert "Tidak ada yang perlu Anda lakukan. Finance sedang meninjau klaim ini." in text
+    assert "Unggah berkas yang diminta" not in text
+    assert "Total diajukan Rp230.000" in text
+
+
+def test_summary_for_a_claim_with_complete_evidence(client):
+    text = visible(client.get("/employee/claims/CLM-2026-0116").text)
+    assert "Bukti lengkap. Tinggal menunggu keputusan finance." in text
+
+
+def test_claim_page_never_shows_the_engine_totals(client):
+    chk = web.run_check(HERO)
+    assert chk.total_approvable != chk.total_claimed and chk.total_pending != chk.total_claimed
+    page = client.get(f"/employee/claims/{HERO}").text
+    for amount in (chk.total_approvable, chk.total_pending):
+        assert web.rupiah(amount) not in page
+    assert web.rupiah(chk.total_claimed) in page

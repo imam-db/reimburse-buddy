@@ -244,6 +244,13 @@ LABELS = {
     "ui_state_complete": "Bukti lengkap",
     "ui_state_awaiting": "Menunggu verifikasi finance",
     "ui_state_decision": "Menunggu keputusan finance",
+    "ui_total_claimed": "Total diajukan",
+    "ui_count_action": "Perlu tindakan Anda",
+    "ui_count_waiting": "Menunggu finance",
+    "ui_next_action": "Unggah berkas yang diminta. Finance baru bisa memutuskan setelah itu.",
+    "ui_next_go": "Ke item pertama",
+    "ui_next_wait": "Tidak ada yang perlu Anda lakukan. Finance sedang meninjau klaim ini.",
+    "ui_next_done": "Bukti lengkap. Tinggal menunggu keputusan finance.",
     "ui_needs_action": "Perlu tindakan",
     "ui_finance_note": ("Finance meninjau setiap klaim. Nominal yang tampil adalah yang Anda ajukan; "
                         "finance yang memutuskan apa yang disetujui."),

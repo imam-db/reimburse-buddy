@@ -668,6 +668,32 @@ def item_state(res, pending: dict) -> ItemState:
     return ItemState("done", "ok", "✓ " + label("ui_state_complete"), False, False)
 
 
+def claim_summary(claim: dict, items: list, states: list[ItemState]) -> str:
+    """Status, claimed total, the count per state and one next-step sentence. Claimed amounts only:
+    the engine's approvable and pending totals never reach the employee."""
+    count = {k: sum(1 for s in states if s.key == k) for k in ("action", "rejected", "done")}
+    waiting = sum(1 for s in states if s.key in ("review", "wait"))
+    total = sum((Decimal(i["amount"]) for i in items), Decimal(0))
+    cells = [ui.stat(label("ui_status"), label(claim["status"])),
+             ui.stat(label("ui_total_claimed"), rupiah(total)),
+             ui.stat(label("ui_count_action"), count["action"], tone="warn" if count["action"] else ""),
+             ui.stat(label("ui_count_waiting"), waiting),
+             ui.stat(label("ui_state_complete"), count["done"])]
+    if count["rejected"]:
+        cells.append(ui.stat(label("rejected"), count["rejected"], tone="danger"))
+    first = next((i["id"] for i, s in zip(items, states) if s.key == "action"), "")
+    if first:
+        step = (f"{e(label('ui_next_action'))} "
+                f"<a href='#item-{e(first)}'>{e(label('ui_next_go'))}</a>")
+    elif waiting:
+        step = e(label("ui_next_wait"))
+    elif count["done"]:
+        step = e(label("ui_next_done"))
+    else:
+        step = ""
+    return ui.stats(cells, id="claim-summary") + (f"<p class='next-step' id='next-step'>{step}</p>" if step else "")
+
+
 @router.get("/employee/claims/{cid}", response_class=HTMLResponse)
 def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: ignore[assignment]  # direct calls pass no request
     from . import qa as qa_web  # Employee Q&A hook; a no-op unless EMPLOYEE_QA is on
@@ -687,9 +713,9 @@ def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: i
                 files_by_item.setdefault(a["item_id"], []).append(a["name"])
     pending = core.pending_items(cid)
     rows: list[list[str]] = []
-    for it, res in zip(claim["items"], chk.items):
+    states = [item_state(res, pending) for res in chk.items]
+    for it, res, state in zip(claim["items"], chk.items, states):
         have = list(dict.fromkeys(files_by_item.get(it["id"], [])))
-        state = item_state(res, pending)
         status, cls = state.text, state.tone
         add = (f"<details><summary>{e(label('ui_add_file'))}</summary>"
                f"<form method=post action='/employee/claims/{e(cid)}/items/{e(it['id'])}/files' enctype='multipart/form-data'>"
@@ -702,7 +728,8 @@ def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: i
     body = f"""<p><a href="/employee">&larr; {e(label('ui_my_claims'))}</a></p>
 {ui.alert(label("ui_forwarded_note").format(flash=core.flash_text(msg), mailbox=core.MAILBOX), tone="success") if msg else ''}
 <p>{e(claim['purpose'])} &middot; {e(claim['trip']['destination'])} {core.date_html(claim['trip']['start_date'])} &rarr;
-{core.date_html(claim['trip']['end_date'])} &middot; {e(label('ui_status'))} {core.status_tag(claim['status'])}</p>
+{core.date_html(claim['trip']['end_date'])}</p>
+{claim_summary(claim, claim["items"], states)}
 {ui.table([label('ui_col_item'), label('ui_col_date'), label('ui_col_claimed'), label('ui_col_files'),
            label('ui_col_evidence'), ''], rows, num=(2,), caption=label('ui_claim'))}
 <p class="note">{e(label('ui_finance_note'))}</p>"""
