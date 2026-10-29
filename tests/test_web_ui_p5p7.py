@@ -63,7 +63,7 @@ def test_status_tag_is_not_colour_only():
 def test_employee_evidence_status_uses_icons(client, monkeypatch):
     monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", web.store.get_claim("CLM-2026-0102")["employee_id"])
     complete = client.get("/employee/claims/CLM-2026-0102").text
-    assert "✓ Beres" in complete
+    assert "✓ Bukti lengkap" in complete
 
     monkeypatch.setenv("REIMBURSE_DEV_EMPLOYEE", web.store.get_claim(HERO)["employee_id"])
     missing = client.get(f"/employee/claims/{HERO}").text
@@ -309,8 +309,10 @@ def test_triage_summary_is_stats_and_exceptions_are_cards(client):
 def test_employee_claim_has_one_styled_file_control_per_item(client):
     html = client.get(f"/employee/claims/{HERO}").text
     items = web.store.get_claim(HERO)["items"]
-    assert html.count("<details><summary>Tambah berkas</summary>") == len(items)
-    for chunk in html.split("<details><summary>Tambah berkas</summary>")[1:]:
+    assert html.count("<input class='visually-hidden' type=file") == len(items)
+    actions = html.count("tag warn'>! Perlu tindakan")
+    assert html.count("<summary>Tambah berkas</summary>") == len(items) - actions
+    for chunk in html.split("<summary>Tambah berkas</summary>")[1:]:
         assert "type=file" in chunk.split("</details>", 1)[0]
 
 

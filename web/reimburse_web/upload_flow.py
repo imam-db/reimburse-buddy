@@ -12,6 +12,8 @@ import json
 import os
 import re
 import uuid
+from urllib.parse import quote
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -627,12 +629,151 @@ def draft_file(did: str, fid: str, request: Request):
     })
 
 
-AWAITING = "Menunggu verifikasi finance"
+AWAITING = label("ui_state_awaiting")
 REVIEWING = UNDER_REVIEW["note_id"].rstrip(".")
 
 
+@dataclass(frozen=True)
+class ItemState:
+    """What the employee sees for one claim item. `key` is rejected | review | wait | action | done."""
+    key: str
+    tone: str
+    text: str  # the whole tag text, icon included
+    masked: bool  # sensitive finding or B-only gap: nothing more specific than REVIEWING, no mailbox files
+    pending: bool  # an uploaded file still awaits a reviewer
+
+
+def item_state(res, pending: dict) -> ItemState:
+    """The one place that decides the employee-facing state of an item (claim page and portal).
+
+    `res` is the item's ItemResult, `pending` is core.pending_items(cid). Only document gaps are
+    "action": uploading a file is the only thing the employee can do. A masked item never gets more
+    specific than REVIEWING. A rejected item shows only "Ditolak", never a gap, and stays masked for files
+    (a reviewer's rejection is itself a sensitive finding in the Q&A masking)."""
+    gaps = [str(g) for g in res.gaps]
+    masked = is_sensitive_item(to_jsonable(res)) or any(g in B_ONLY for g in gaps)
+    waiting = res.item_id in pending
+    if res.status.value == "rejected":
+        return ItemState("rejected", "bad", "✕ " + label("rejected"), masked, waiting)
+    if masked:
+        return ItemState("review", "info", "◷ " + REVIEWING, True, waiting)
+    if waiting:
+        return ItemState("wait", "info", "◷ " + AWAITING, False, True)
+    docs = [g for g in gaps if g in core.DOCUMENT_GAPS]
+    if docs:
+        names = ", ".join(dict.fromkeys(label(g) for g in docs))
+        return ItemState("action", "warn", "! " + label("ui_needs_action") + ": " + names, False, False)
+    if gaps:
+        names = ", ".join(dict.fromkeys(label(g) for g in gaps))
+        return ItemState("wait", "info", "◷ " + label("ui_state_decision") + ": " + names, False, False)
+    return ItemState("done", "ok", "✓ " + label("ui_state_complete"), False, False)
+
+
+UPLOAD_JS = """<script>(function(){
+document.querySelectorAll('form.upload input[type=file]').forEach(function(i){
+var n=i.closest('form').querySelector('.file-name');if(!n)return;
+i.addEventListener('change',function(){n.textContent=i.files.length?i.files[0].name:n.dataset.empty;});
+});
+})();</script>"""
+
+
+def upload_control(cid: str, iid: str, primary: bool) -> str:
+    """The upload form of one item. The real file input is visually hidden inside a button-styled label;
+    the chosen file name is filled in by UPLOAD_JS when scripts run, and the form works without it."""
+    empty = label("ui_no_file_chosen")
+    return (f"<form class='upload' method=post action='/employee/claims/{e(cid)}/items/{e(iid)}/files' "
+            f"enctype='multipart/form-data'>"
+            f"<label class='btn file-pick'>{e(label('ui_pick_file'))}"
+            f"<input class='visually-hidden' type=file name=file accept='.pdf,.png,.jpg,.jpeg' required "
+            f"aria-label='{e(label('ui_file_for_item').format(item=iid))}'></label>"
+            f"<span class='note file-name' data-empty='{e(empty)}'>{e(empty)}</span>"
+            f"{ui.button(label('ui_upload'), variant='primary' if primary else 'secondary')}</form>")
+
+
+def item_files(emp: str, cid: str, iid: str, res, state: ItemState, pending: dict, item: dict | None = None) -> str:
+    """The files cell: web uploads for the item, plus the attachments of the mailbox messages the engine
+    used as its evidence. Only messages the signed-in employee owns, and never mailbox files for a masked
+    item (its uploads stay, in the neutral tone). Chip tone: ok = used by the engine, warn = awaiting a
+    reviewer, neutral = anything else. With no file, an item whose receipt / boarding pass was declared
+    at submission says so instead of "none"."""
+    origin = core.review(cid).get("origin", {})
+    used, waiting = set(res.evidence_used), set(pending.get(iid, []))
+    rank = {"ok": 0, "warn": 1, "": 2}
+    found: dict[str, str] = {}
+
+    def add(name: str, tone: str) -> None:
+        if name not in found or rank[tone] < rank[found[name]]:
+            found[name] = tone
+
+    for m in core.store.inbox:
+        if m.get("owner_id") != emp:
+            continue
+        atts = m.get("attachments", [])
+        uploaded = origin.get(m["id"]) == "employee_upload"
+        if uploaded:
+            for a in atts:
+                if a.get("linked_claim") == cid and a.get("linked_item") == iid:
+                    tone = "" if state.masked else "warn" if m["id"] in waiting else "ok" if m["id"] in used else ""
+                    add(a["name"], tone)
+        elif m["id"] in used and not state.masked:
+            for a in atts:
+                add(a["name"], "ok")
+    if not found:
+        item = item or {}
+        if item.get("receipt") and item.get("boarding_pass"):
+            return f"<span class=note>{e(label('ui_with_submission_receipt_bp'))}</span>"
+        if item.get("receipt"):
+            return f"<span class=note>{e(label('ui_with_submission_receipt'))}</span>"
+        return f"<span class=note>{e(label('none'))}</span>"
+    chips = [ui.badge(f"{n} ({label('ui_file_pending')})" if t == "warn" else n, t) for n, t in found.items()]
+    return f'<div class="chips">{"".join(chips)}</div>'
+
+
+def action_count(cid: str) -> int:
+    """How many items of a claim need the employee (document gaps only). Masked items never count."""
+    pending = core.pending_items(cid)
+    return sum(1 for res in core.run_check(cid).items if item_state(res, pending).key == "action")
+
+
+def claim_summary(claim: dict, items: list, states: list[ItemState]) -> str:
+    """Status, claimed total, the count per state and one next-step sentence. Claimed amounts only:
+    the engine's approvable and pending totals never reach the employee."""
+    count = {k: sum(1 for s in states if s.key == k) for k in ("action", "rejected", "done")}
+    waiting = sum(1 for s in states if s.key in ("review", "wait"))
+    total = sum((Decimal(i["amount"]) for i in items), Decimal(0))
+    cells = [ui.stat(label("ui_status"), label(claim["status"])),
+             ui.stat(label("ui_total_claimed"), rupiah(total)),
+             ui.stat(label("ui_count_action"), count["action"], tone="warn" if count["action"] else ""),
+             ui.stat(label("ui_count_waiting"), waiting),
+             ui.stat(label("ui_state_complete"), count["done"])]
+    if count["rejected"]:
+        cells.append(ui.stat(label("rejected"), count["rejected"], tone="danger"))
+    first = next((i["id"] for i, s in zip(items, states) if s.key == "action"), "")
+    if first:
+        step = (f"{e(label('ui_next_action'))} "
+                f"<a href='#item-{e(first)}'>{e(label('ui_next_go'))}</a>")
+    elif waiting:
+        step = e(label("ui_next_wait"))
+    elif count["done"]:
+        step = e(label("ui_next_done"))
+    else:
+        step = ""
+    return ui.stats(cells, id="claim-summary") + (f"<p class='next-step' id='next-step'>{step}</p>" if step else "")
+
+
+def _item_name(claim: dict, iid: str) -> str:
+    """Readable name of one of the claim's own items ("" for an unknown id): category, plus the description
+    when it says more than the category."""
+    it = next((i for i in claim["items"] if i["id"] == iid), None)
+    if not it:
+        return ""
+    desc = str(it["description"] or "").strip()
+    name = label(it["category"])
+    return name if desc.lower() == str(it["category"]).strip().lower() or not desc else f"{name} ({desc})"
+
+
 @router.get("/employee/claims/{cid}", response_class=HTMLResponse)
-def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: ignore[assignment]  # direct calls pass no request
+def employee_claim(cid: str, request: Request = None, msg: str = "", item: str = ""):  # type: ignore[assignment]  # direct calls pass no request
     from . import qa as qa_web  # Employee Q&A hook; a no-op unless EMPLOYEE_QA is on
     emp = auth.current_employee(request)
     if not emp:
@@ -643,41 +784,27 @@ def employee_claim(cid: str, request: Request = None, msg: str = ""):  # type: i
         return parts
     qa_top, qa_box = parts
     chk = core.run_check(cid)
-    files_by_item: dict[str, list] = {}
-    for m in core.store.inbox:
-        for a in m.get("attachments", []):
-            if a.get("claim_id") == cid and a.get("item_id"):
-                files_by_item.setdefault(a["item_id"], []).append(a["name"])
     pending = core.pending_items(cid)
     rows: list[list[str]] = []
-    for it, res in zip(claim["items"], chk.items):
-        have = list(dict.fromkeys(files_by_item.get(it["id"], [])))
-        missing = list(dict.fromkeys(REVIEWING if str(g) in B_ONLY else label(str(g)) for g in res.gaps))
-        if is_sensitive_item(to_jsonable(res)):  # fraud/suspicion signals: never detailed to the employee
-            missing = [REVIEWING]
-        if it["id"] in pending:
-            missing = [AWAITING]
-        if res.status.value == "rejected":
-            status, cls = "✕ " + label("rejected"), "bad"
-        elif missing:
-            status, cls = "! " + label("ui_needs_action") + ": " + ", ".join(missing), "warn"
-        else:
-            status, cls = "✓ " + label("ui_status_done"), "ok"
-        add = (f"<details><summary>{e(label('ui_add_file'))}</summary>"
-               f"<form method=post action='/employee/claims/{e(cid)}/items/{e(it['id'])}/files' enctype='multipart/form-data'>"
-               f"<input type=file name=file aria-label='Berkas bukti untuk {e(it['id'])}' accept='.pdf,.png,.jpg,.jpeg' required> "
-               f"<button>{e(label('ui_add_file'))}</button></form></details>")
-        files_cell = (ui.chips(have, tone="ok") if have
-                      else f"<span class=note>{e(label('none'))}</span>")
-        rows.append([f"{e(label(it['category']))}<div class=note>{e(it['description'])}</div>", core.date_html(it["date"]),
+    states = [item_state(res, pending) for res in chk.items]
+    for it, res, state in zip(claim["items"], chk.items, states):
+        status, cls = state.text, state.tone
+        form = upload_control(cid, it["id"], primary=state.key == "action")
+        add = form if state.key == "action" else ui.details(label("ui_add_file"), form)
+        files_cell = item_files(emp, cid, it["id"], res, state, pending, it)
+        desc = str(it["description"] or "").strip()
+        note = "" if desc.lower() == str(it["category"]).strip().lower() else f"<div class=note>{e(desc)}</div>"
+        rows.append([f"{e(label(it['category']))}{note}", core.date_html(it["date"]),
                      e(rupiah(res.claimed)), files_cell, f"<span class='tag {cls}'>{e(status)}</span>", add])
     body = f"""<p><a href="/employee">&larr; {e(label('ui_my_claims'))}</a></p>
-{ui.alert(label("ui_forwarded_note").format(flash=core.flash_text(msg), mailbox=core.MAILBOX), tone="success") if msg else ''}
+{ui.alert(core.flash_text(msg, _item_name(claim, item)), tone="success") if msg else ''}
 <p>{e(claim['purpose'])} &middot; {e(claim['trip']['destination'])} {core.date_html(claim['trip']['start_date'])} &rarr;
-{core.date_html(claim['trip']['end_date'])} &middot; {e(label('ui_status'))} {core.status_tag(claim['status'])}</p>
+{core.date_html(claim['trip']['end_date'])}</p>
+{claim_summary(claim, claim["items"], states)}
 {ui.table([label('ui_col_item'), label('ui_col_date'), label('ui_col_claimed'), label('ui_col_files'),
-           label('ui_col_evidence'), ''], rows, num=(2,), caption=label('ui_claim'))}
-<p class="note">{e(label('ui_finance_note'))}</p>"""
+           label('ui_col_evidence'), ''], rows, num=(2,), caption=label('ui_claim'),
+           row_ids=[f"item-{i['id']}" for i in claim['items']])}
+<p class="note">{e(label('ui_finance_note'))}</p>{UPLOAD_JS}"""
     return core.page(f"{label('ui_claim')} {cid}", qa_top + body + qa_box)
 
 
@@ -689,4 +816,4 @@ async def add_file(cid: str, iid: str, request: Request, file: UploadFile = File
         raise HTTPException(404, f"Unknown item {iid}")
     entry = await _save_and_extract(file, cid)
     forward_files(claim["employee_id"], cid, claim["trip"], [(item, entry)])
-    return RedirectResponse(f"/employee/claims/{cid}?msg=File+added", status_code=303)
+    return RedirectResponse(f"/employee/claims/{cid}?msg=File+added&item={quote(iid)}#item-{quote(iid)}", status_code=303)

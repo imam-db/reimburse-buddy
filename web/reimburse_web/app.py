@@ -534,8 +534,15 @@ def owned_claim(cid: str, emp: str) -> dict:
     return claim
 
 
-def flash_text(msg: str) -> str:
-    """Text for a flash message the redirects carry (?msg=...). Unknown text is shown as it was sent."""
+def flash_text(msg: str, item: str = "") -> str:
+    """Text for a flash message the redirects carry (?msg=...). Unknown text is shown as it was sent.
+
+    A bare "Submitted" is the new-claim flow (files were forwarded); "Submitted CLM-..." is the older
+    text form, which forwards nothing. `item` is the readable name of the item a file was added to."""
+    if msg == "Submitted":
+        return label("ui_flash_submitted_files")
+    if msg == "File added" and item:
+        return label("ui_flash_file_added_to").format(item=item)
     for english, code in (("Submitted", "ui_flash_submitted"), ("File added", "ui_flash_file_added")):
         if msg == english or msg.startswith(english + " "):
             return label(code) + msg[len(english):]
@@ -548,32 +555,54 @@ def employee_page(request: Request, msg: str = ""):
     if not emp:
         return page(label("ui_portal_title"), auth.sign_in_notice())
     me = store.get_employee(emp)
+    from .upload_flow import action_count  # lazy: upload_flow imports this module
     claims = [c for c in store.claims if c["employee_id"] == emp]
+    needs = {c["id"]: action_count(c["id"]) for c in claims}
+    # claims that need the employee first, then newest submitted, ties by ID descending
+    claims.sort(key=lambda c: (str(c.get("submitted_at") or ""), c["id"]), reverse=True)
+    claims.sort(key=lambda c: needs[c["id"]] == 0)
+
+    def status_cell(c: dict) -> str:
+        n = needs[c["id"]]
+        return status_tag(c["status"]) + (ui.badge(label("ui_n_need_action").format(n=n), "warn") if n else "")
+
     rows = [[f"<a href='/employee/claims/{e(c['id'])}'>{e(c['id'])}</a>", e(c["purpose"]),
              f"{e(c['trip']['destination'])} {date_html(c['trip']['start_date'])} "
              f"&rarr; {date_html(c['trip']['end_date'])}",
-             e(rupiah(sum(Decimal(i["amount"]) for i in c["items"]))), status_tag(c["status"])]
+             e(rupiah(sum(Decimal(i["amount"]) for i in c["items"]))), status_cell(c)]
             for c in claims]
+    cards = "".join(
+        f"<li class='claim-card'><div class='line1'><a href='/employee/claims/{e(c['id'])}'>{e(c['purpose'])}</a> "
+        f"{status_cell(c)}</div>"
+        f"<div class='line2'>{e(c['trip']['destination'])} {date_html(c['trip']['start_date'])} "
+        f"&rarr; {date_html(c['trip']['end_date'])}</div>"
+        f"<div class='line3 note'>{e(rupiah(sum(Decimal(i['amount']) for i in c['items'])))} &middot; {e(c['id'])}</div></li>"
+        for c in claims)
+    claims_html = ui.table([label('ui_col_id'), label('ui_col_purpose'), label('ui_col_trip'), label('ui_col_claimed'),
+                            label('ui_col_status')], rows, num=(3,), caption=label('ui_my_claims'),
+                           empty=label('ui_no_claims'))
+    if rows:  # a table on wide screens, one compact block per claim below 720 px
+        claims_html = f"<div class='claims-wide'>{claims_html}</div><ul class='claims-compact'>{cards}</ul>"
     inbox = [m for m in store.outbox if m["to"] == emp]
     msgs = [[e(m["claim_id"]), e(m["subject"]), e(m["body"])] for m in inbox]
+    messages_html = ""  # only when finance wrote to this employee, right after "Klaim saya"
+    if msgs:
+        messages_html = (f"<h2>{e(label('ui_messages_from_finance'))}</h2>"
+                         + ui.table([label('ui_col_claim'), label('ui_col_subject'), label('ui_col_body')], msgs,
+                                    caption=label('ui_messages_from_finance')))
     fwd = [m for m in store.inbox if m.get("owner_id") == emp]
     fwd_rows = [[date_html(m["date"]), e(m["subject"]),
                  e(", ".join(a["name"] for a in m.get("attachments", [])))] for m in fwd]
+    history_table = ui.table([label('ui_col_date'), label('ui_col_subject'), label('ui_col_attachments')], fwd_rows,
+                             caption=label('ui_forwarded_mailbox'), empty=label('ui_no_forwarded'))
     body = f"""
 {ui.alert(flash_text(msg), tone="success") if msg else ''}
+{ui.page_header("", label('ui_new_claim_hint'), '<a class="btn primary" href="/employee/new">' + e(label('ui_start_new_claim')) + '</a>')}
 <h2>{e(label('ui_my_claims'))}</h2>
-{ui.table([label('ui_col_id'), label('ui_col_purpose'), label('ui_col_trip'), label('ui_col_claimed'),
-           label('ui_col_status')], rows, num=(3,), caption=label('ui_my_claims'),
-          empty=label('ui_no_claims'))}
+{claims_html}
+{messages_html}
 {portal_box(request)}
-<h2>{e(label('ui_messages_from_finance'))}</h2>
-{ui.table([label('ui_col_claim'), label('ui_col_subject'), label('ui_col_body')], msgs,
-          caption=label('ui_messages_from_finance'), empty=label('ui_no_messages'))}
-<div class="box"><h2>{e(label('ui_new_claim'))}</h2><p>{e(label('ui_new_claim_hint'))}</p>
-<p><a class="btn primary" href="/employee/new">{e(label('ui_start_new_claim'))}</a></p></div>
-<h2>{e(label('ui_forwarded_mailbox'))}</h2>
-{ui.table([label('ui_col_date'), label('ui_col_subject'), label('ui_col_attachments')], fwd_rows,
-          caption=label('ui_forwarded_mailbox'), empty=label('ui_no_forwarded'))}
+{ui.details(label('ui_forwarded_history').format(n=len(fwd_rows)), history_table)}
 <p class="note">{e(label('ui_employee_footer'))} {e(me['name'])} &middot; {e(me['email'])}</p>"""
     return page(label("ui_portal_title"), body)
 

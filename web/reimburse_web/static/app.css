@@ -614,6 +614,12 @@ main:focus {
   color: var(--danger);
 }
 
+.tag.info {
+  background: var(--brand-soft);
+  border-color: #c4d8f2;
+  color: var(--brand);
+}
+
 .tag.low {
   outline: 1px solid #e0a800;
 }
@@ -1368,6 +1374,70 @@ textarea::placeholder {
   display: block;
 }
 
+tr:target {
+  background: var(--brand-soft);
+}
+
+.claims-compact {
+  display: none;
+  list-style: none;
+  margin: 0 0 var(--sp-4);
+  padding: 0;
+}
+
+.claim-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-2);
+  overflow-wrap: anywhere;
+}
+
+.claim-card .line1 a {
+  font-weight: 600;
+}
+
+.claim-card .line2,
+.claim-card .line3 {
+  margin-top: 2px;
+}
+
+.claims-wide td:first-child a {
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .claims-wide {
+    display: none;
+  }
+
+  .claims-compact {
+    display: block;
+  }
+}
+
+.upload {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.file-pick {
+  position: relative;
+}
+
+.file-pick:focus-within {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.upload .file-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .picked {
   list-style: none;
   padding: 0;
@@ -1660,6 +1730,10 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 
   .tag.bad {
     border-color: #5a2a2d;
+  }
+
+  .tag.info {
+    border-color: #2f4a70;
   }
 
   .login-error {
