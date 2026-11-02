@@ -110,10 +110,10 @@ def test_summary_banner_lists_unreadable_files_and_incomplete_cards(client, monk
     assert 'class="alert"' in markup and 'role="status"' in markup
     assert "1 dari 2 berkas belum terbaca." in markup
     bad_card = d["cards"][0]["id"]
-    assert "Lengkapi kartu <a href='#card-" in markup
+    assert "Lengkapi: <a href='#card-" in markup  # ADR 0009 #9: each card with its first reason
     assert f"href='#card-{bad_card}'" in markup
     assert f"id='card-{bad_card}'" in markup
-    assert "Lengkapi kartu 1" in visible(markup)
+    assert "Kartu 1</a>: kategori belum dipilih" in markup
 
 
 def test_summary_banner_is_absent_when_everything_is_readable(client, monkeypatch):

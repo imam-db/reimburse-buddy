@@ -24,12 +24,13 @@ from urllib.parse import quote
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from reimburse_buddy.data_store import DataStore
 from reimburse_buddy.decision import draft_decision
+from reimburse_buddy.messages import render as render_message
 from reimburse_buddy.models import rupiah
 from reimburse_buddy.rules import check_claim
 from reimburse_buddy.triage import approve_cleared_batch, triage_claims
@@ -288,7 +289,7 @@ def page(title: str, body: str, status_code: int = 200) -> HTMLResponse:
 <link rel="stylesheet" href="{STATIC_URL}"></head><body>
 {ui.skip_link()}<header class="site-header">{nav_html()}</header>
 <main id="main" tabindex="-1"><h1>{escape(title)}</h1>{body}</main>
-<footer class="site-footer"><p class="note" id="footer-note">Synthetic data. Simulation only.</p></footer>
+<footer class="site-footer"><p class="note" id="footer-note">{e(label("ui_footer_note"))}</p></footer>
 <script>window.addEventListener('load',function(){{var a=document.querySelector('.alert');if(a&&!location.hash)a.focus();}});</script>
 </body></html>""", status_code=status_code)
 
@@ -369,18 +370,39 @@ def options(values, selected=None) -> str:
     return "".join(f'<option value="{e(v)}"{" selected" if v == selected else ""}>{e(label)}</option>' for v, label in values)
 
 
+def finding_text(f) -> str:
+    """One engine finding in Indonesian (messages.render); the English text stays in the title attribute.
+
+    A finding without a key, or one the template cannot format, falls back to its own text."""
+    text = f.message
+    if getattr(f, "key", ""):
+        params = dict(f.params)
+        if f.key == "human_resolved" and "choice" in params:
+            params["choice"] = label(params["choice"])  # "Setujui sebatas plafon", not the code
+        try:
+            text = render_message(f.key, params, "id")
+        except (KeyError, IndexError, ValueError):
+            text = f.message
+    return f"<span title='{e(f.message)}'>{e(text)}</span>"
+
+
 def provenance_badges(item: dict) -> str:
     prov = item.get("provenance") or {}
     if not prov:
         return ""
     def badge(k, v):
         cls = "warn" if v == "self_declared" else "ok"
-        return f"<span class='tag {cls}' title='{e(k)}: {e(v)}'>{e(label(k))}: {e(label(v))}</span>"
+        return f"<span class='tag {cls}' title='{e(k)}: {e(v)}'>{e(label('prov_' + k))}: {e(label(v))}</span>"
     return "<div>" + "".join(badge(k, v) for k, v in prov.items()) + "</div>"
 
 
 def gap_tag(g: str, cls: str = "") -> str:
     return f'<span class="tag {cls}" title="{e(g)}">{e(label(g))}</span>'
+
+
+def open_gaps(item) -> list[str]:
+    """The item's gaps that still need someone: a decision gap the reviewer already decided is closed."""
+    return [str(g) for g in item.gaps if not (item.human_decision and str(g) in DECISION_GAPS)]
 
 
 STATUS_ICON = {"approved": "✓ ", "rejected": "✕ ", "on_hold": "! ", "partially_approved": "! ",
@@ -500,17 +522,19 @@ def index():
     cid = demo_claim_id()
     owner = next((c["employee_id"] for c in store.claims if c["id"] == cid), "EMP-001")
     first_name = person(store, owner).split()[0]
+    reset = reset_form("Reset demo")  # "" in production
+    demo_tools = ui.details(label("ui_demo_tools"), reset, id="demo-tools") if reset else ""  # closed by default
     body = f"""<div class="cards">
-<div class="card"><h2>Finance</h2><p>Triage klaim masuk, tinjau pengecualian, dan setujui rencana.
+<div class="card"><h2><a href="/admin">Finance</a></h2><p>Triage klaim masuk, tinjau pengecualian, dan setujui rencana.
 Semua angka dan keputusan tetap di tangan Anda.</p></div>
-<div class="card"><h2>Karyawan</h2><p>Kirim klaim, unggah bukti, dan tanyakan status klaim Anda sendiri.</p></div>
+<div class="card"><h2><a href="/employee">Karyawan</a></h2><p>Kirim klaim, unggah bukti, dan tanyakan status klaim Anda sendiri.</p></div>
 </div>
 <div class="box"><h2>Panduan singkat</h2>
 <p><a class="btn" href="/admin">Lihat triage finance</a>
 <a class="btn" href="/admin/claims/{e(cid)}">Buka klaim contoh ({e(first_name)}, Surabaya)</a>
+<a class="btn" href="/employee/new">Kirim klaim sebagai karyawan</a>
 </p>
-{reset_form("Reset demo")}</div>
-<p class="note">Data sintetis. Tidak ada email atau pesan sungguhan yang dikirim.</p>"""
+{demo_tools}</div>"""
     return page("Selamat datang di reimburse-buddy", body)
 
 
@@ -584,7 +608,12 @@ def employee_page(request: Request, msg: str = ""):
     if rows:  # a table on wide screens, one compact block per claim below 720 px
         claims_html = f"<div class='claims-wide'>{claims_html}</div><ul class='claims-compact'>{cards}</ul>"
     inbox = [m for m in store.outbox if m["to"] == emp]
-    msgs = [[e(m["claim_id"]), e(m["subject"]), e(m["body"])] for m in inbox]
+    own_ids = {c["id"] for c in claims}  # link only to the employee's own claims
+
+    def claim_link(cid: str) -> str:
+        return f"<a href='/employee/claims/{e(cid)}'>{e(cid)}</a>" if cid in own_ids else e(cid)
+
+    msgs = [[claim_link(m["claim_id"]), e(m["subject"]), e(m["body"])] for m in inbox]
     messages_html = ""  # only when finance wrote to this employee, right after "Klaim saya"
     if msgs:
         messages_html = (f"<h2>{e(label('ui_messages_from_finance'))}</h2>"
@@ -710,9 +739,15 @@ def admin(batch: str = BATCH, msg: str = ""):
     held_total = sum((held for held, _ in entries), Decimal("0"))
     cards = []
     for held, x in entries:
-        gaps = "".join(gap_tag(g) for g in x["gaps"])
-        rejected = (f'<p class="note">{e(label("ui_rejected_items"))}: {e(", ".join(x["rejected_items"]))}</p>'
-                    if x["rejected_items"] else "")
+        # Chips and rejected items come from the reviewed state (ADR 0009 #1); membership, the injection
+        # flag and needs_review stay as triage reports them.
+        chk = run_check(x["claim_id"])
+        gap_codes = ({g for i in chk.items for g in open_gaps(i)} | {w.gap for w in chk.warnings if w.gap}
+                     | ({"embedded_instructions"} if x.get("needs_review") else set()))
+        gaps = "".join(gap_tag(g) for g in sorted(gap_codes))
+        rejected_ids = [i.item_id for i in chk.items if i.status.value == "rejected"]
+        rejected = (f'<p class="note">{e(label("ui_rejected_items"))}: {e(", ".join(rejected_ids))}</p>'
+                    if rejected_ids else "")
         cards.append(
             f'<article class="item-card" id="exception-{e(x["claim_id"])}" data-held="{int(held)}">'
             f'<div class="item-head"><a href="/admin/claims/{e(x["claim_id"])}">{e(x["claim_id"])}</a>'
@@ -729,14 +764,22 @@ def admin(batch: str = BATCH, msg: str = ""):
     est = t["time_saved_estimate"]
     summary = label("ui_triage_summary").format(claims=t["claims"], cleared=len(cleared),
                                                 exceptions=len(entries))
-    body = f"""{ui.alert(msg, tone="success") if msg else ''}
-<form method="get" class="filter"><label>{e(label('ui_batch'))} <select name="batch" aria-label="Pilih batch" onchange="this.form.submit()">{options([(BATCH, BATCH), (OWN_BATCH, OWN_BATCH), (WEB_BATCH, WEB_BATCH)], batch)}</select></label></form>
+    new_claims = [c for c in store.claims if c.get("batch") == WEB_BATCH and c["status"] == "submitted"]
+    new_notice = ""
+    if batch != WEB_BATCH and new_claims:
+        new_notice = (f'<div class="box" id="new-claims-notice" role="status">'
+                      f'{e(label("ui_new_claims_notice").format(n=len(new_claims)))} '
+                      f'<a href="/admin?batch={e(WEB_BATCH)}">{e(label("ui_new_claims_link"))}</a></div>')
+    batch_options = [(BATCH, BATCH), (OWN_BATCH, label("ui_batch_own").format(batch=OWN_BATCH)),
+                     (WEB_BATCH, label("ui_batch_web"))]
+    body = f"""{ui.alert(msg, tone="success") if msg else ''}{new_notice}
+<form method="get" class="filter"><label>{e(label('ui_batch'))} <select name="batch" aria-label="Pilih batch" onchange="this.form.submit()">{options(batch_options, batch)}</select></label></form>
 <h2 class="visually-hidden">{e(summary)}</h2>
 {ui.stats([ui.stat(label('ui_claims'), t['claims']), ui.stat(label('ui_cleared'), len(cleared)),
            ui.stat(label('ui_exceptions'), len(entries), tone='warn' if entries else ''),
            ui.stat(label('ui_held_money'), rupiah(held_total), tone='warn' if held_total else '')],
           id='triage-stats')}
-<div class="box"><p>{e(label('ui_time_saved'))}: {e(label('ui_minutes').format(n=est['minutes']))} <span class="tag warn">{e(label('ui_estimate'))}</span> <span class="note">{e(est['assumption'])}</span></p>
+<div class="box"><p>{e(label('ui_time_saved'))}: {e(label('ui_minutes').format(n=est['minutes']))} <span class="tag warn">{e(label('ui_estimate'))}</span> <span class="note" id="time-assumption">{e(label('ui_time_assumption').format(n=store.policy['triage']['manual_review_minutes_per_claim']))}</span></p>
 <p class="note">{e(label('ui_triage_readonly'))}</p>
 <h3>{e(label('ui_cleared'))}</h3><p>{''.join(f'<span class=tag>{e(c)}</span>' for c in cleared) or '<span class=note>' + e(label('ui_cleared_none')) + '</span>'}</p>
 {f'''<form method="post" action="/admin/batch/approve"><input type="hidden" name="batch" value="{e(batch)}">{hidden}
@@ -785,6 +828,71 @@ def reset():
     return RedirectResponse(f"/admin?msg={quote(label('ui_msg_demo_reset'), safe='')}", status_code=303)
 
 
+EVIDENCE_TYPES = {".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
+
+
+def claim_file(cid: str, mid: str) -> tuple[Path, str, str] | None:
+    """(path, media type, display name) of the stored file behind message `mid` for claim `cid`, else None.
+
+    The message must be in the mailbox and carry an attachment linked to this claim with a stored name.
+    The path is built from that stored name only and must stay inside UPLOAD_DIR."""
+    for m in store.inbox:
+        if m["id"] != mid:
+            continue
+        for a in m.get("attachments") or []:
+            stored = a.get("stored_as")
+            if not stored or (a.get("linked_claim") or a.get("claim_id")) != cid:
+                continue
+            media = EVIDENCE_TYPES.get(Path(str(stored)).suffix.lower())
+            root = UPLOAD_DIR.resolve()
+            path = (root / str(stored)).resolve()
+            if media and root in path.parents and path.is_file():
+                return path, media, str(a.get("name") or stored)
+    return None
+
+
+def file_url(cid: str, mid: str) -> str:
+    """The finance link for an evidence message with a stored file, else ''."""
+    return f"/admin/claims/{quote(cid, safe='')}/files/{quote(mid, safe='')}" if claim_file(cid, mid) else ""
+
+
+def evidence_chips(cid: str, ids: list[str], tone: str = "ok") -> str:
+    """Evidence chips; one with a stored file is a link that opens it in a new tab, a seed message stays plain."""
+    out = []
+    for mid in ids:
+        url = file_url(cid, mid)
+        out.append(f'<a class="tag {e(tone)}" href="{e(url)}" target="_blank" rel="noopener" '
+                   f'title="{e(label("ui_open_file"))}">{e(mid)}</a>' if url else ui.badge(mid, tone))
+    return f'<div class="chips">{"".join(out)}</div>'
+
+
+def evidence_preview(cid: str, mid: str) -> str:
+    """A thumbnail (image) or a PDF mark next to the accept / reject buttons; '' without a stored file."""
+    found = claim_file(cid, mid)
+    if not found:
+        return ""
+    _, media, name = found
+    url = file_url(cid, mid)
+    inner = (f'<img class="evidence-thumb" src="{e(url)}" alt="{e(label("ui_file_preview").format(name=name))}" '
+             f'loading="lazy">' if media.startswith("image/")
+             else f'<span class="evidence-pdf" aria-hidden="true">PDF</span> {e(name)}')
+    return f'<a class="evidence-link" href="{e(url)}" target="_blank" rel="noopener">{inner}</a>'
+
+
+@app.get("/admin/claims/{cid}/files/{mid}")
+def claim_evidence_file(cid: str, mid: str):
+    """Serve one stored evidence file to finance (the /admin guard in the login middleware applies)."""
+    found = claim_file(cid, mid)
+    if not found:
+        raise HTTPException(404, f"Unknown file {mid}")
+    path, media, _ = found
+    return FileResponse(path, media_type=media, headers={
+        "X-Content-Type-Options": "nosniff",
+        "Content-Disposition": "inline",
+        "Cache-Control": "private, no-store",
+    })
+
+
 def manager_cell(cid: str, item_id: str, owner: str) -> str:
     """The manager's answers for one item, and the form to ask when nothing is pending (docs/adr/0003)."""
     reqs = [r for r in manager.requests_for(cid) if r["item_id"] == item_id]
@@ -815,7 +923,7 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
     item_cards: list[str] = []
     for it in c.items:
         src = next(x for x in claim["items"] if x["id"] == it.item_id)
-        finds = "<br>".join(f"<span class=tag title='{e(f.rule)}'>{e(label(f.rule))}</span> {e(f.message)}"
+        finds = "<br>".join(f"<span class=tag title='{e(f.rule)}'>{e(label(f.rule))}</span> {finding_text(f)}"
                             for f in it.findings)
         gaps = "".join(f"<span class='tag warn' title='{e(g)}'>{e(label(g))}</span>" for g in it.gaps)
         pend = pending.get(it.item_id, [])
@@ -843,7 +951,11 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
                 dec += f"<div class=note>{e(label('ui_reviewer_said').format(decision=label(it.human_decision)))}</div>"
         elif it.gaps and not pend:
             dec = f"<div class=note>{e(label('ui_needs_review').format(gaps=', '.join(label(g) for g in it.gaps)))}</div>"
-        status_cell = f"<span title='{e(it.status.value)}'>{e(label(it.status.value))}</span>"
+        status_text = label(it.status.value)
+        if (it.status.value == "needs_evidence" and it.gaps and set(it.gaps) <= DECISION_GAPS
+                and not set(it.gaps) & DOCUMENT_GAPS):
+            status_text = label("ui_needs_decision")  # only a reviewer decision is open, not a document
+        status_cell = f"<span title='{e(it.status.value)}'>{e(status_text)}</span>"
         if pend:
             status_cell = f"<span class='tag warn'>{e(label('ui_pending_review'))}</span>"
             for mid in pend:
@@ -851,13 +963,30 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
                 why = ", ".join(label(x) for x in (p.get("reasons") or [p["reason"]]))
                 dec = (f"<form method=post action='/admin/claims/{e(cid)}/evidence/{e(mid)}/review' style='display:inline'>"
                        f"<div class=note>{e(mid)}: <span title='{e(p['reason'])}'>{e(why)}</span></div>"
+                       f"{evidence_preview(cid, mid)}"
                        f"<button name=verdict value=accept>{e(label('ui_accept_evidence'))}</button> "
                        f"<button name=verdict value=reject>{e(label('ui_reject_evidence'))}</button></form>") + dec
         if self_blocked:  # UX only: the server refuses these requests anyway
             dec = f"<div class=note id='self-approval'>{e(label('self_approval_note'))}</div>"
         if decision_gaps or document_only:  # one action row, only when the item needs a decision
             dec += manager_cell(cid, it.item_id, emp)
-        evidence = (ui.chips(list(it.evidence_used), tone="ok") if it.evidence_used
+        ask = ""
+        open_docs = [g for g in it.gaps if g in DOCUMENT_GAPS]
+        if open_docs:  # ask the employee right where the gap is; finance edits the text before sending
+            # Same words as the employee page: a flight lacks its ticket, not a receipt.
+            docs = " dan ".join(label("ui_doc_name_ticket") if g == "receipt_missing" and it.category == "flight"
+                                else label("ui_doc_name_" + g) for g in open_docs)
+            ask_body = label("ui_request_doc_body").format(
+                documents=docs, item=f"{label(it.category)} ({it.item_id})", date=fmt_date(src["date"]))
+            ask = ui.details(label("ui_request_doc"), (
+                f"<form method=post action='/admin/claims/{e(cid)}/message' class='ask-form'>"
+                f"<label>{e(label('ui_subject'))} <input name=subject aria-label='{e(label('ui_subject'))}' "
+                f"value='{e(label('ui_default_subject').format(cid=cid))}' required></label>"
+                f"<label>{e(label('ui_body'))} <textarea name=body rows=3 aria-label='{e(label('ui_body'))}' "
+                f"required>{e(ask_body)}</textarea></label>"
+                f"<button>{e(label('ui_send'))}</button></form>"
+                f"<p class='note'>{e(label('ui_request_doc_note'))}</p>"), id=f"ask-{it.item_id}")
+        evidence = (evidence_chips(cid, list(it.evidence_used)) if it.evidence_used
                     else f"<span class=note>{e(label('ui_none_attached'))}</span>")
         item_cards.append(
             f"<article class='item-card' id='item-{e(it.item_id)}' tabindex='-1'>"
@@ -869,7 +998,7 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
             f"<div class='chips'>{gaps}</div>"
             f"<p class='note'>{e(label('ui_evidence'))}: {evidence}</p>"
             + (f"<div class='btn-row'>{dec}</div>" if dec else "")
-            + "</article>")
+            + ask + "</article>")
     needs = [(it, [g for g in it.gaps if g in DECISION_GAPS]) for it in c.items
              if any(g in DECISION_GAPS for g in it.gaps) and not it.human_decision
              and it.item_id not in pending]
@@ -932,25 +1061,28 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
 <h3>{e(label('ui_memos').format(destination=trip['destination']))}</h3>{ui.table(['ID', label('ui_signature'), label('ui_col_reason'), ''], memo_rows, caption=label('ui_memos').format(destination=trip['destination']), empty=label('ui_memos_empty'))}
 <h3>{e(label('ui_ask_employee'))}</h3><form method=post action="/admin/claims/{e(cid)}/message">
 <label>{e(label('ui_subject'))} <input name=subject aria-label="{e(label('ui_subject'))}" size=40 value="{e(label('ui_default_subject').format(cid=cid))}"></label>
-<label>{e(label('ui_body'))} <input name=body aria-label="{e(label('ui_body'))}" size=60 placeholder="Mohon kirim struk taksi tanggal 3 Okt (IT-5)." required></label>
+<label>{e(label('ui_body'))} <input name=body aria-label="{e(label('ui_body'))}" size=60 required></label>
 <button>{e(label('ui_send'))}</button></form>{f'<ul>{sent_rows}</ul>' if sent_rows else ''}"""
     body = f"""<p><a href="/admin">&larr; {e(label('ui_back_to_triage'))}</a></p>{ui.alert(msg, tone="success") if msg else ''}
 <section class="claim-summary" id="claim-summary" aria-label="{e(label('ui_claim_summary'))}">
-<div class="summary-body">
-<h2>{e(label('ui_rule_engine').format(decision=label(c.decision.value)))}</h2>
-<p class="note"><span class="tag">{e(cid)}</span> <span title="{e(emp)}">{e(person(store, emp))}</span> &middot; {e(claim['purpose'])} &middot; {e(trip['destination'])}
-{date_html(trip['start_date'])} &rarr; {date_html(trip['end_date'])} &middot; {e(label('ui_status'))} {status_tag(claim['status'])}</p>
-<p>{engine_amounts}</p>
-<p class="note">{e(label('ui_engine_note'))} {e(label('ui_evidence_attached').format(evidence=', '.join(r['evidence']) or label('ui_none_attached')))}</p>
-</div>
+<div class="summary-line">
+<span class="summary-id"><span class="tag">{e(cid)}</span> {status_tag(claim['status'])}</span>
+<span class="summary-money">{engine_amounts}</span>
 <div class="summary-actions">
 <form method=post action="/admin/claims/{e(cid)}/investigate"><button class="primary">{e(label('ui_action_investigate'))}</button></form>
 <a class="btn" href="#claim-items">{e(label('ui_view_items'))}</a>
-<a class="btn" href="/admin/claims/{e(cid)}/audit">{e(label('ui_audit_link'))}</a>
 </div>
+</div>
+<div class="summary-rest">
+<h2>{e(label('ui_rule_engine').format(decision=label(c.decision.value)))}</h2>
+<p class="note"><span title="{e(emp)}">{e(person(store, emp))}</span> &middot; {e(claim['purpose'])} &middot; {e(trip['destination'])}
+{date_html(trip['start_date'])} &rarr; {date_html(trip['end_date'])}</p>
+<p class="note">{e(label('ui_engine_note'))} {e(label('ui_evidence_attached').format(evidence=', '.join(r['evidence']) or label('ui_none_attached')))}
+<a href="/admin/claims/{e(cid)}/audit">{e(label('ui_audit_link'))}</a></p>
 {needs_you}
+</div>
 </section>
-<div class="item-list" id="claim-items">{''.join(item_cards)}</div>
+<div class="item-list sticky-offset" id="claim-items">{''.join(item_cards)}</div>
 {ui.details(label('ui_investigate_manual'), manual, id='manual')}
 <div class="box" id="decision-note-box"><h2>{e(label('ui_decision_note'))}</h2>
 <p class="btn-row"><button type="button" class="btn" id="copy-note">{e(label('ui_copy_note'))}</button></p>
@@ -1052,7 +1184,7 @@ def decide(cid: str, request: Request, item_id: str = Form(...), choice: str = F
 def message(cid: str, subject: str = Form(...), body: str = Form(...)):
     claim = store.get_claim(cid)
     res = store.send_message(claim["employee_id"], body, subject, cid)
-    msg = label("ui_msg_sent").format(ref=res["message_id"], replies=res["replies_received"])
+    msg = label("ui_msg_sent_to").format(name=person(store, claim["employee_id"]))  # simulated outbox only
     return RedirectResponse(f"/admin/claims/{cid}?msg={quote(msg, safe='')}", status_code=303)
 
 

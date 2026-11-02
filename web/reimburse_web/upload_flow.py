@@ -168,7 +168,31 @@ f.querySelectorAll('input,select,textarea').forEach(function(x){x.disabled=!on;}
 sel.addEventListener('change',sync);});
 })();</script>"""
 
-DATE_MIN_JS = """<script>(function(){
+# Recomputes the submit bar as amounts change. Presentation only: the server value is rendered first and
+# the same rules (_card_problems) still decide on save and submit.
+LIVE_BAR_JS = """<script>(function(){
+var f=document.getElementById('draft-form'),bar=document.getElementById('draft-bar');
+var tot=document.getElementById('bar-total'),inc=document.getElementById('bar-incomplete');
+if(!f||!bar||!tot||!inc)return;
+var AMT=/^(\\d+|\\d{1,3}(\\.\\d{3})+)$/;
+function rp(n){return 'Rp'+String(n).replace(/\\B(?=(\\d{3})+(?!\\d))/g,'.');}
+function val(card,k){var el=card.querySelector('[name="c_'+card.getAttribute('data-card')+'_'+k+'"]');
+return el&&!el.disabled?el.value.trim():'';}
+function amount(card){var v=val(card,'amount');return AMT.test(v)?parseInt(v.replace(/\\./g,''),10):0;}
+function incomplete(card){
+var sel=card.querySelector('select[data-role=category]'),cat=sel?sel.value:'',d=val(card,'date');
+if(!cat||!d||d<bar.dataset.start||d>bar.dataset.end||amount(card)<=0)return true;
+if(cat==='flight'&&!val(card,'flight_no'))return true;
+if(cat==='hotel'&&!/^\\d+$/.test(val(card,'nights')))return true;
+return false;}
+function update(){var sum=0,bad=0;
+f.querySelectorAll('[data-card]').forEach(function(c){sum+=amount(c);if(incomplete(c))bad++;});
+tot.textContent=bar.dataset.tTotal.replace('{total}',rp(sum));
+inc.textContent=bar.dataset.tIncomplete.replace('{n}',bad);}
+f.addEventListener('input',update);f.addEventListener('change',update);
+})();</script>"""
+
+DATE_MIN_JS ="""<script>(function(){
 var s=document.getElementById('start-date'),e=document.getElementById('end-date');
 if(!s||!e)return;
 function sync(){e.min=s.value;if(e.value&&s.value&&e.value<s.value)e.value='';}
@@ -322,7 +346,10 @@ def draft_page(did: str, request: Request):
                   f"{moves}{merge}{split}"
                   f"<button class='btn quiet-danger' name=action value='delete:{c['id']}' onclick='return confirm(&quot;Hapus item ini?&quot;)'>{e(label('ui_delete'))}</button>"
                   f"</details>")
-        errs = "".join(f"<div class=err>{e(x)}</div>" for x in c["errors"])
+        if c["errors"]:  # after a save or submit: errors, as before
+            errs = "".join(f"<div class=err>{e(x)}</div>" for x in c["errors"])
+        else:  # before the first save: the same problems as muted hints
+            errs = "".join(f"<div class='hint note'>{e(x)}</div>" for x in _card_errors(c, h))
         cards_html += (f"<div class='card' id='card-{e(c['id'])}' data-card='{e(c['id'])}' tabindex='-1'><b>{e(label('ui_card'))} {n + 1}</b>{errs}{''.join(_input(c, k, allowed, cat) for k in keys)}"
                        f"<div class=note>{e(label('ui_col_files'))}</div><ul>{files or '<li class=note>' + e(label('ui_no_file_yet')) + '</li>'}</ul>"
                        f"{manage}</div>")
@@ -335,7 +362,7 @@ def draft_page(did: str, request: Request):
 <form method="post" action="/employee/drafts/{e(did)}" id="draft-form"><div class="cards" id="draft-cards" tabindex="-1">{cards_html}</div>
 <p class="draft-add">{ui.button(label("ui_add_item"), variant="secondary", name="action", value="add")}</p>
 {_submit_bar(d)}</form>
-<div class="draft-spacer" aria-hidden="true"></div>{BUSY_SUBMIT_JS}{FOCUS_JS}{CATEGORY_JS}"""
+<div class="draft-spacer" aria-hidden="true"></div>{BUSY_SUBMIT_JS}{FOCUS_JS}{CATEGORY_JS}{LIVE_BAR_JS}"""
     return core.page(label("ui_check_title"), body)
 
 
@@ -365,22 +392,31 @@ def _apply_edits(d: dict, form) -> None:
                 f["doc_type"], f["doc_type_source"] = v, "self_declared"
 
 
-def _card_errors(c: dict, h: dict) -> list[str]:
-    """Validation errors for one card, without mutating it (the banner and _validate share this)."""
+def _card_problems(c: dict, h: dict) -> list[tuple[str, str]]:
+    """(code, Indonesian sentence) for each problem of one card, without mutating it."""
     allowed = core.store.policy["allowed_categories"]
     f = {k: v["value"] for k, v in c["fields"].items()}
-    errors = []
+    problems = []
     if f["category"] not in allowed:
-        errors.append(label("ui_err_category"))
+        problems.append(("category", label("ui_err_category")))
     if not f["date"] or not (h["start_date"] <= str(f["date"]) <= h["end_date"]):
-        errors.append(label("ui_err_date"))
-    if not isinstance(f["amount"], int) or f["amount"] <= 0:
-        errors.append(label("ui_err_amount"))
+        problems.append(("date", label("ui_err_date")))
+    if f["amount"] in (None, ""):
+        problems.append(("amount_empty", label("ui_err_amount_empty")))
+        if f["category"] == "flight" and c["files"] and all(x["doc_type"] == "boarding_pass" for x in c["files"]):
+            problems.append(("amount_bp", label("ui_err_amount_boarding_pass")))
+    elif not isinstance(f["amount"], int) or f["amount"] <= 0:
+        problems.append(("amount", label("ui_err_amount")))
     if f["category"] == "flight" and not f["flight_no"]:
-        errors.append(label("ui_err_flight_no"))
+        problems.append(("flight_no", label("ui_err_flight_no")))
     if f["category"] == "hotel" and not str(f["nights"] or "").isdigit():
-        errors.append(label("ui_err_nights"))
-    return errors
+        problems.append(("nights", label("ui_err_nights")))
+    return problems
+
+
+def _card_errors(c: dict, h: dict) -> list[str]:
+    """Validation errors for one card, without mutating it (the banner and _validate share this)."""
+    return [text for _, text in _card_problems(c, h)]
 
 
 def _validate(d: dict) -> bool:
@@ -399,14 +435,17 @@ def _summary(d: dict) -> str:
     """Banner above the cards: unreadable files and incomplete card numbers (linked to their anchor)."""
     files = [f for c in d["cards"] for f in c["files"]]
     unreadable = [f for f in files if f["error"]]
-    incomplete = [n for n, c in enumerate(d["cards"], 1) if _card_errors(c, d["header"])]
+    incomplete = [(n, _card_problems(c, d["header"])) for n, c in enumerate(d["cards"], 1)]
+    incomplete = [(n, p) for n, p in incomplete if p]
     if not unreadable and not incomplete:
         return ""
     parts = []
     if unreadable:
         parts.append(e(label("ui_summary_unreadable").format(bad=len(unreadable), total=len(files))))
     if incomplete:
-        links = ", ".join(f"<a href='#card-{e(d['cards'][n - 1]['id'])}'>{n}</a>" for n in incomplete)
+        # "Kartu 3: nominal belum diisi": each card with its first reason, linked to its anchor
+        links = "; ".join(f"<a href='#card-{e(d['cards'][n - 1]['id'])}'>{e(label('ui_card'))} {n}</a>: "
+                          f"{e(label('ui_why_' + p[0][0]))}" for n, p in incomplete)
         parts.append(e(label("ui_summary_incomplete")).replace("{cards}", links))
     return ui.alert_html(" ".join(parts), tone="warn")
 
@@ -422,9 +461,11 @@ def _submit_bar(d: dict) -> str:
     """The sticky bar: item count, claimed total and incomplete-card count, then save/submit."""
     incomplete = len([c for c in d["cards"] if _card_errors(c, d["header"])])
     summary = (f'{e(label("ui_bar_items").format(n=len(d["cards"])))} &middot; '
-               f'{e(label("ui_bar_total").format(total=rupiah(_draft_total(d))))} &middot; '
-               f'{e(label("ui_bar_incomplete").format(n=incomplete))}')
-    return (f'<div class="draft-bar" id="draft-bar">'
+               f'<span id="bar-total">{e(label("ui_bar_total").format(total=rupiah(_draft_total(d))))}</span> &middot; '
+               f'<span id="bar-incomplete">{e(label("ui_bar_incomplete").format(n=incomplete))}</span>')
+    h = d["header"]
+    return (f'<div class="draft-bar" id="draft-bar" data-start="{e(h["start_date"])}" data-end="{e(h["end_date"])}" '
+            f'data-t-total="{e(label("ui_bar_total"))}" data-t-incomplete="{e(label("ui_bar_incomplete"))}">'
             f'<p class="bar-summary">{summary}</p>'
             f'{ui.button(label("ui_save_changes"), variant="secondary", name="action", value="save")}'
             f'{ui.button(label("ui_submit_claim"), variant="primary", name="action", value="submit", id="submit-claim")}'
@@ -643,7 +684,25 @@ class ItemState:
     pending: bool  # an uploaded file still awaits a reviewer
 
 
-def item_state(res, pending: dict) -> ItemState:
+def rejected_uploads(cid: str) -> dict[str, set[str]]:
+    """item_id -> message IDs of the employee's uploads that finance rejected on this claim.
+
+    Used only to tell the employee, without any reason, that an earlier file was not accepted."""
+    out: dict[str, set[str]] = {}
+    for mid, p in core.review(cid).get("pending", {}).items():
+        if p.get("state") == "rejected":
+            out.setdefault(p["item_id"], set()).add(mid)
+    return out
+
+
+def doc_name(gap: str, category: str) -> str:
+    """The employee-facing name of a missing document: a flight lacks its ticket, not a receipt."""
+    if gap == "receipt_missing" and category == "flight":
+        return label("ui_ticket_missing")
+    return label(gap)
+
+
+def item_state(res, pending: dict, rejected: dict | None = None) -> ItemState:
     """The one place that decides the employee-facing state of an item (claim page and portal).
 
     `res` is the item's ItemResult, `pending` is core.pending_items(cid). Only document gaps are
@@ -661,7 +720,10 @@ def item_state(res, pending: dict) -> ItemState:
         return ItemState("wait", "info", "◷ " + AWAITING, False, True)
     docs = [g for g in gaps if g in core.DOCUMENT_GAPS]
     if docs:
-        names = ", ".join(dict.fromkeys(label(g) for g in docs))
+        if res.item_id in (rejected or {}):  # a generic hint; the reviewer's reason is never shown
+            names = label("ui_file_rejected_reupload")
+        else:
+            names = ", ".join(dict.fromkeys(doc_name(g, res.category) for g in docs))
         return ItemState("action", "warn", "! " + label("ui_needs_action") + ": " + names, False, False)
     if gaps:
         names = ", ".join(dict.fromkeys(label(g) for g in gaps))
@@ -690,7 +752,8 @@ def upload_control(cid: str, iid: str, primary: bool) -> str:
             f"{ui.button(label('ui_upload'), variant='primary' if primary else 'secondary')}</form>")
 
 
-def item_files(emp: str, cid: str, iid: str, res, state: ItemState, pending: dict, item: dict | None = None) -> str:
+def item_files(emp: str, cid: str, iid: str, res, state: ItemState, pending: dict, item: dict | None = None,
+               rejected_mids: set | frozenset = frozenset()) -> str:
     """The files cell: web uploads for the item, plus the attachments of the mailbox messages the engine
     used as its evidence. Only messages the signed-in employee owns, and never mailbox files for a masked
     item (its uploads stay, in the neutral tone). Chip tone: ok = used by the engine, warn = awaiting a
@@ -714,7 +777,10 @@ def item_files(emp: str, cid: str, iid: str, res, state: ItemState, pending: dic
             for a in atts:
                 if a.get("linked_claim") == cid and a.get("linked_item") == iid:
                     tone = "" if state.masked else "warn" if m["id"] in waiting else "ok" if m["id"] in used else ""
-                    add(a["name"], tone)
+                    name = a["name"]
+                    if m["id"] in rejected_mids and not state.masked:  # neutral tone, no reason
+                        name = f"{name} ({label('ui_file_not_accepted')})"
+                    add(name, tone)
         elif m["id"] in used and not state.masked:
             for a in atts:
                 add(a["name"], "ok")
@@ -732,7 +798,7 @@ def item_files(emp: str, cid: str, iid: str, res, state: ItemState, pending: dic
 def action_count(cid: str) -> int:
     """How many items of a claim need the employee (document gaps only). Masked items never count."""
     pending = core.pending_items(cid)
-    return sum(1 for res in core.run_check(cid).items if item_state(res, pending).key == "action")
+    return sum(1 for res in core.run_check(cid).items if item_state(res, pending).key == "action")  # same key with or without the rejected hint
 
 
 def claim_summary(claim: dict, items: list, states: list[ItemState]) -> str:
@@ -786,12 +852,13 @@ def employee_claim(cid: str, request: Request = None, msg: str = "", item: str =
     chk = core.run_check(cid)
     pending = core.pending_items(cid)
     rows: list[list[str]] = []
-    states = [item_state(res, pending) for res in chk.items]
+    rejected = rejected_uploads(cid)
+    states = [item_state(res, pending, rejected) for res in chk.items]
     for it, res, state in zip(claim["items"], chk.items, states):
         status, cls = state.text, state.tone
         form = upload_control(cid, it["id"], primary=state.key == "action")
         add = form if state.key == "action" else ui.details(label("ui_add_file"), form)
-        files_cell = item_files(emp, cid, it["id"], res, state, pending, it)
+        files_cell = item_files(emp, cid, it["id"], res, state, pending, it, rejected.get(it["id"], set()))
         desc = str(it["description"] or "").strip()
         note = "" if desc.lower() == str(it["category"]).strip().lower() else f"<div class=note>{e(desc)}</div>"
         rows.append([f"{e(label(it['category']))}{note}", core.date_html(it["date"]),

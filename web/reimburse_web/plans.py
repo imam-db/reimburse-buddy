@@ -233,4 +233,7 @@ async def decide(run_id: str, request: Request):
     # reported as saved: the plan will never execute. The page says so and offers "Jalankan ulang".
     if intake.resume_if_live(run_id, dict(decision)) == intake.CANNOT_RESUME:
         return RedirectResponse(f"/admin/plans/{run_id}?stale=1", status_code=303)
-    return RedirectResponse(f"/admin/plans/{run_id}?msg={quote(label('ui_msg_decisions_saved'), safe='')}", status_code=303)
+    saved = label("ui_msg_decisions_saved_counts").format(
+        approved=sum(1 for v in decisions.values() if v == "approve"),
+        rejected=sum(1 for v in decisions.values() if v == "reject"))
+    return RedirectResponse(f"/admin/plans/{run_id}?msg={quote(saved, safe='')}", status_code=303)
