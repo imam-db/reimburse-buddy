@@ -282,52 +282,36 @@ class PostgresClaimRows:
         return bytes(row[0]) if row and row[0] is not None else None
 
     # --- startup replay ------------------------------------------------------------------------
-    def hydrate(self, store, review: dict, drafts: dict) -> None:
-        """Replay the stored rows on top of the seed (ADR 0010 §4). Reads only; nothing is written."""
+    def load(self) -> dict:
+        """The stored rows of the current epoch, in the order they were written."""
         epoch = self.epoch()
         with self._cursor() as cur:
             cur.execute("SELECT claim FROM web_claims WHERE epoch = %s ORDER BY created_at, claim_id",
                         (epoch,))
-            for (row,) in cur.fetchall():
-                store.claims.append(_decode(row))
+            claims = [_decode(row[0]) for row in cur.fetchall()]
             cur.execute("SELECT message FROM web_messages WHERE epoch = %s ORDER BY created_at, message_id",
                         (epoch,))
-            for (row,) in cur.fetchall():
-                store.inbox.append(_decode(row))
+            messages = [_decode(row[0]) for row in cur.fetchall()]
             cur.execute("SELECT claim_id, from_status, to_status, note FROM claim_status_changes "
                         "WHERE epoch = %s ORDER BY id", (epoch,))
-            changes = cur.fetchall()
+            changes = [{"claim_id": row[0], "from": row[1], "to": row[2], "note": row[3]}
+                       for row in cur.fetchall()]
             cur.execute("SELECT claim_id, review FROM claim_reviews WHERE epoch = %s", (epoch,))
-            for claim_id, row in cur.fetchall():
-                review[claim_id] = _decode(row)
+            reviews = [(row[0], _decode(row[1])) for row in cur.fetchall()]
             cur.execute("SELECT draft FROM employee_drafts WHERE epoch = %s AND submitted_at IS NULL "
                         "ORDER BY updated_at, draft_id", (epoch,))
-            for (row,) in cur.fetchall():
-                draft = _decode(row)
-                drafts[draft["id"]] = draft
+            drafts = [_decode(row[0]) for row in cur.fetchall()]
             cur.execute("SELECT message FROM outbox_messages WHERE epoch = %s ORDER BY created_at, message_id",
                         (epoch,))
-            for (row,) in cur.fetchall():
-                store.outbox.append(_decode(row))
+            outbox = [_decode(row[0]) for row in cur.fetchall()]
             cur.execute("SELECT request FROM approval_requests WHERE epoch = %s "
                         "ORDER BY created_at, request_id", (epoch,))
-            for (row,) in cur.fetchall():
-                store.approval_requests.append(_decode(row))
+            requests = [_decode(row[0]) for row in cur.fetchall()]
+        return {"claims": claims, "messages": messages, "changes": changes, "reviews": reviews,
+                "drafts": drafts, "outbox": outbox, "requests": requests}
 
-        # Status changes come after the claims they move, in the order they were written.
-        for claim_id, from_status, to_status, note in changes:
-            try:
-                store.get_claim(claim_id)["status"] = to_status
-            except KeyError:  # a change for a claim of an older epoch: nothing to move
-                continue
-            store.status_log.append({"claim_id": claim_id, "from": from_status, "to": to_status,
-                                     "note": note})
-
-        # A scripted reply counts as delivered when its reply message is among the stored messages.
-        present = {m["id"] for m in store.inbox}
-        for scripted in store.replies:
-            if scripted.get("reply", {}).get("id") in present:
-                scripted["_delivered"] = True
+    def hydrate(self, store, review: dict, drafts: dict) -> None:
+        replay(store, review, drafts, self.load())
 
 
 # --- the process store ---------------------------------------------------------------------
@@ -412,6 +396,40 @@ def transaction():
 
 def hydrate(store, review: dict, drafts: dict) -> None:
     rows().hydrate(store, review, drafts)
+
+
+def replay(store, review: dict, drafts: dict, data: dict) -> None:
+    """Put stored rows on top of the seed (ADR 0010 §4). Reads only; nothing is written back.
+
+    `data` holds the lists in the order they were written: claims before the status changes that move
+    them, drafts that were never submitted, and the messages whose presence marks a scripted reply as
+    already delivered.
+    """
+    for claim in data.get("claims", []):
+        store.claims.append(claim)
+    for message in data.get("messages", []):
+        store.inbox.append(message)
+    for change in data.get("changes", []):
+        try:
+            store.get_claim(change["claim_id"])["status"] = change["to"]
+        except KeyError:  # a change for a claim of an older epoch: nothing to move
+            continue
+        store.status_log.append({"claim_id": change["claim_id"], "from": change["from"],
+                                 "to": change["to"], "note": change["note"]})
+    for claim_id, row in data.get("reviews", []):
+        review[claim_id] = row
+    for draft in data.get("drafts", []):
+        drafts[draft["id"]] = draft
+    for message in data.get("outbox", []):
+        store.outbox.append(message)
+    for request in data.get("requests", []):
+        store.approval_requests.append(request)
+
+    # A scripted reply counts as delivered when its reply message is among the stored messages.
+    present = {m["id"] for m in store.inbox}
+    for scripted in store.replies:
+        if scripted.get("reply", {}).get("id") in present:
+            scripted["_delivered"] = True
 
 
 # --- file paths ----------------------------------------------------------------------------
