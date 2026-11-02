@@ -10,10 +10,13 @@ login in auth.py (email + password against app_users; always on in production).
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import json
 import os
 import re
 import time
+import uuid
 from contextvars import ContextVar
 from datetime import date
 from decimal import Decimal
@@ -147,6 +150,16 @@ def self_approval_refusal(request: Request, cid: str, attempt: str) -> str | Non
 def back_to_claim(cid: str, message: str) -> RedirectResponse:
     """Redirect to the claim page with the message in `msg` (the page shows it as a tag)."""
     return RedirectResponse(f"/admin/claims/{cid}?msg={quote(message, safe='')}", status_code=303)
+
+
+def state_not_saved(exc: Exception) -> HTTPException:
+    """503 for a write the claim-state database did not keep (ADR 0010 §3).
+
+    The caller raises this before touching memory, so a write the database did not keep never looks kept.
+    """
+    error = HTTPException(503, label("ui_state_not_saved"))
+    error.__cause__ = exc
+    return error
 
 
 def submitter_of(request: Request) -> str:
@@ -644,6 +657,8 @@ AMOUNT_RE = re.compile(r"^(\d+|\d{1,3}(?:\.\d{3})+)$")  # 1350000 or 1.350.000; 
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 # No .txt: a text file is typed by the sender, so it can never be evidence read from a document.
 ALLOWED_UPLOAD_EXT = {".pdf", ".png", ".jpg", ".jpeg"}
+# The content type of a stored upload, kept with its bytes in `uploaded_files` (ADR 0010 §5).
+CONTENT_TYPES = {".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 # Final statuses the reviewer may pick for each engine decision. Overrides go through logged item decisions.
 STATUS_FOR_DECISION = {"approve": ["approved", "on_hold"], "partial_approve": ["partially_approved", "on_hold"],
                        "reject": ["rejected", "on_hold"], "needs_info": ["on_hold"]}
@@ -694,10 +709,15 @@ def submit_claim(request: Request, purpose: str = Form(...), destination: str = 
     if not parsed:
         raise HTTPException(400, "Add at least one item")
     cid = f"CLM-2026-W{len([c for c in store.claims if c.get('batch') == WEB_BATCH]) + 1:03d}"
-    store.claims.append({"id": cid, "employee_id": emp, "status": "submitted", "submitted_at": date.today().isoformat(),
-                         "purpose": purpose, "trip": {"origin": "Jakarta", "destination": destination,
-                                                      "start_date": start_date, "end_date": end_date},
-                         "items": parsed, "batch": WEB_BATCH})
+    claim = {"id": cid, "employee_id": emp, "status": "submitted", "submitted_at": date.today().isoformat(),
+             "purpose": purpose, "trip": {"origin": "Jakarta", "destination": destination,
+                                          "start_date": start_date, "end_date": end_date},
+             "items": parsed, "batch": WEB_BATCH}
+    try:
+        cid = claim_state.add_claim(claim)  # database first; the id may move on a collision
+    except Exception as exc:  # noqa: BLE001 - any storage failure is a 503, never a half-written claim
+        raise state_not_saved(exc) from exc
+    store.claims.append(claim)
     return RedirectResponse(f"/employee?msg=Submitted+{cid}", status_code=303)
 
 
@@ -711,6 +731,7 @@ async def forward_evidence(request: Request, subject: str = Form(...), claim_id:
     me = store.get_employee(emp)
     mid = f"MSG-W{len([m for m in store.inbox if m['id'].startswith('MSG-W')]) + 1:03d}"
     att = None
+    stored, data, media = "", b"", "application/octet-stream"
     if file is not None and file.filename:
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         ext = Path(file.filename).suffix.lower()
@@ -720,15 +741,27 @@ async def forward_evidence(request: Request, subject: str = Form(...), claim_id:
         if len(data) > MAX_UPLOAD_BYTES:
             raise HTTPException(413, "File is larger than 5 MB")
         safe = re.sub(r"[^A-Za-z0-9._-]", "_", Path(file.filename).name)[:80]
-        (UPLOAD_DIR / f"{mid}_{safe}").write_bytes(data)
-        att = {"name": safe, "type": att_type, "stored_as": f"{mid}_{safe}"}
+        # The stored name does not carry the message id: a message id may move on a key collision.
+        stored = f"{uuid.uuid4().hex[:8]}_{safe}"
+        (UPLOAD_DIR / stored).write_bytes(data)
+        media = CONTENT_TYPES.get(ext, "application/octet-stream")
+        att = {"name": safe, "type": att_type, "stored_as": stored}
         if att_type == "receipt":
             att.update(claim_id=claim_id, item_id=item_id)
         if att_type == "boarding_pass":
             att.update(flight=flight, date=att_date, passenger=me["name"])
-    store.inbox.append({"id": mid, "owner_id": emp, "from": me["email"], "date": date.today().isoformat(),
-                        "subject": subject, "body": body, "attachments": [att] if att else [],
-                        "mailbox": MAILBOX, "forwarded_by": me["email"]})
+    message = {"id": mid, "owner_id": emp, "from": me["email"], "date": date.today().isoformat(),
+               "subject": subject, "body": body, "attachments": [att] if att else [],
+               "mailbox": MAILBOX, "forwarded_by": me["email"]}
+    try:
+        with claim_state.transaction():  # the bytes and the message they belong to, together
+            if stored:
+                claim_state.save_file(stored, data, owner_id=emp, content_type=media,
+                                      sha256=hashlib.sha256(data).hexdigest())
+            claim_state.add_message(message)
+    except Exception as exc:  # noqa: BLE001 - a message the database did not keep is not in memory either
+        raise state_not_saved(exc) from exc
+    store.inbox.append(message)
     return RedirectResponse("/employee?msg=File+diteruskan", status_code=303)
 
 
@@ -826,7 +859,10 @@ def batch_approve(request: Request, batch: str = Form(...), claim_ids: list[str]
 def reset():
     if auth.is_production():
         return JSONResponse({"detail": "Reset demo tidak tersedia di produksi."}, status_code=403)
-    reset_all()
+    try:  # a new epoch for postgres, then the seed is replayed on top of an empty state
+        claim_state.reset_demo()
+    except Exception as exc:  # noqa: BLE001 - nothing was cleared, so say so instead of half-resetting
+        raise state_not_saved(exc) from exc
     return RedirectResponse(f"/admin?msg={quote(label('ui_msg_demo_reset'), safe='')}", status_code=303)
 
 
@@ -1129,9 +1165,14 @@ def add_evidence(cid: str, evidence_id: str = Form(...), q: str = Form("")):
     if p and p["state"] != "accepted":
         msg = label("ui_msg_evidence_not_attached").format(ref=evidence_id)
         return RedirectResponse(f"/admin/claims/{cid}?msg={quote(msg, safe='')}", status_code=303)
-    ev = review(cid)["evidence"]
-    if evidence_id not in ev:
-        ev.append(evidence_id)
+    updated = copy.deepcopy(review(cid))
+    if evidence_id not in updated["evidence"]:
+        updated["evidence"].append(evidence_id)
+    try:  # database first, then the dict the pages read
+        claim_state.save_review(cid, updated)
+    except Exception as exc:  # noqa: BLE001 - a review the database did not keep is not in memory either
+        raise state_not_saved(exc) from exc
+    REVIEW[cid] = updated
     return RedirectResponse(f"/admin/claims/{cid}?q={q}", status_code=303)
 
 
@@ -1145,21 +1186,35 @@ def review_evidence(cid: str, mid: str, request: Request, verdict: str = Form(..
         refused = self_approval_refusal(request, cid, f"evidence:{mid}:accept")
         if refused:
             return back_to_claim(cid, refused)
-    r = review(cid)
+    r = copy.deepcopy(review(cid))
     p = r["pending"].get(mid)
     if not p:
         raise HTTPException(404, f"{mid} is not awaiting review on {cid}")
     if verdict not in ("accept", "reject"):
         raise HTTPException(400, "verdict must be accept or reject")
-    p["state"] = "accepted" if verdict == "accept" else "rejected"
-    for m in store.inbox:
+    state = "accepted" if verdict == "accept" else "rejected"
+    p["state"] = state
+    messages = []  # the stored mailbox rows whose evidence_status moves with the verdict
+    for i, m in enumerate(store.inbox):
         if m["id"] == mid:
-            for a in m["attachments"]:
+            changed = copy.deepcopy(m)
+            for a in changed["attachments"]:
                 a["evidence_status"] = "accepted_by_reviewer" if verdict == "accept" else "rejected_by_reviewer"
+            messages.append((i, changed))
     if verdict == "accept" and mid not in r["evidence"]:
         r["evidence"].append(mid)
     r["evidence_log"].append({"at": datetime.now().strftime("%Y-%m-%d %H:%M"), "evidence_id": mid, "item_id": p["item_id"],
-                              "reason": p["reason"], "verdict": p["state"]})
+                              "reason": p["reason"], "verdict": state})
+    try:
+        with claim_state.transaction():  # the verdict and the rows it touches, together
+            for _, changed in messages:
+                claim_state.update_message(changed)
+            claim_state.save_review(cid, r)
+    except Exception as exc:  # noqa: BLE001 - see state_not_saved
+        raise state_not_saved(exc) from exc
+    REVIEW[cid] = r
+    for i, changed in messages:
+        store.inbox[i] = changed
     return RedirectResponse(f"/admin/claims/{cid}?msg={quote(label('ui_msg_evidence_state').format(ref=mid, state=label(p['state'])), safe='')}", status_code=303)
 
 
@@ -1173,19 +1228,39 @@ def decide(cid: str, request: Request, item_id: str = Form(...), choice: str = F
             return back_to_claim(cid, refused)
     if item_id in pending_items(cid):
         raise HTTPException(409, f"{item_id} has evidence awaiting review: accept or reject it first")
-    review(cid)["decisions"][item_id] = choice
-    try:
-        run_check(cid)
+    updated = copy.deepcopy(review(cid))
+    updated["decisions"][item_id] = choice
+    try:  # validate the decision before it is stored, on the same inputs run_check would use
+        check_claim(store, cid, list(updated["evidence"]), dict(updated["decisions"]))
     except ValueError as ex:
-        review(cid)["decisions"].pop(item_id, None)
         raise HTTPException(400, str(ex))
+    try:
+        claim_state.save_review(cid, updated)
+    except Exception as exc:  # noqa: BLE001 - see state_not_saved
+        raise state_not_saved(exc) from exc
+    REVIEW[cid] = updated
     return RedirectResponse(f"/admin/claims/{cid}#item-{item_id}", status_code=303)
 
 
 @app.post("/admin/claims/{cid}/message")
 def message(cid: str, subject: str = Form(...), body: str = Form(...)):
     claim = store.get_claim(cid)
-    res = store.send_message(claim["employee_id"], body, subject, cid)
+    sent, received = len(store.outbox), len(store.inbox)
+    store.send_message(claim["employee_id"], body, subject, cid)
+    outbox, replies = store.outbox[sent:], store.inbox[received:]
+    try:  # persist what the DataStore call added: the outbox row and any scripted reply
+        with claim_state.transaction():
+            for m in outbox:
+                claim_state.add_outbox(m)
+            for m in replies:
+                claim_state.add_message(m)
+    except Exception as exc:  # noqa: BLE001 - undo the memory change, then answer 503
+        del store.outbox[sent:]
+        del store.inbox[received:]
+        present = {m["id"] for m in store.inbox}
+        for scripted in store.replies:
+            scripted["_delivered"] = scripted.get("reply", {}).get("id") in present
+        raise state_not_saved(exc) from exc
     msg = label("ui_msg_sent_to").format(name=person(store, claim["employee_id"]))  # simulated outbox only
     return RedirectResponse(f"/admin/claims/{cid}?msg={quote(msg, safe='')}", status_code=303)
 
@@ -1206,6 +1281,11 @@ def ask_manager(cid: str, iid: str, reason: str = Form("")):
     if any(r["item_id"] == iid and r["status"] == "pending" for r in manager.requests_for(cid)):
         return back_to_claim(cid, label("ui_req_open_exists"))
     req = store.request_approval(boss, cid, iid, reason.strip()[:500])
+    try:  # the request row first, so a restart still finds what the audit log answered
+        claim_state.save_approval_request(req)
+    except Exception as exc:  # noqa: BLE001 - undo the memory change, then answer 503
+        store.approval_requests.remove(req)
+        raise state_not_saved(exc) from exc
     return back_to_claim(cid, f"{label('ui_req_sent')} ({req['id']})")
 
 
@@ -1227,7 +1307,13 @@ def set_status(cid: str, request: Request, status: str = Form(...), reviewer_con
                   f"{label(c.decision.value)}")
         msg = label("ui_msg_not_changed").format(reason=reason)
         return RedirectResponse(f"/admin/claims/{cid}?msg={quote(msg, safe='')}", status_code=303)
-    store.update_claim_status(cid, status, f"Keputusan peninjau; mesin aturan menyetujui {rupiah(c.total_approvable)}")
+    note = f"Keputusan peninjau; mesin aturan menyetujui {rupiah(c.total_approvable)}"
+    entry = {"claim_id": cid, "from": store.get_claim(cid)["status"], "to": status, "note": note}
+    try:  # the status change is stored before the claim moves in memory
+        claim_state.add_status_change(entry)
+    except Exception as exc:  # noqa: BLE001 - see state_not_saved
+        raise state_not_saved(exc) from exc
+    store.update_claim_status(cid, status, note)
     msg = label("ui_msg_status_set").format(status=label(status))
     return RedirectResponse(f"/admin/claims/{cid}?msg={quote(msg, safe='')}", status_code=303)
 

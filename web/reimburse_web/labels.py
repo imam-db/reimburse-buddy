@@ -384,6 +384,8 @@ LABELS = {
     "ui_msg_status_set": "Status diatur ke {status}",
     "ui_msg_demo_reset": "Data demo direset",
     "ui_demo_reset": "Reset data demo",
+    "ui_state_not_saved": "Perubahan belum tersimpan karena penyimpanan klaim tidak tersedia. Coba lagi sebentar lagi.",
+    "ui_state_reset_failed": "Data demo tidak direset karena penyimpanan klaim tidak tersedia. Coba lagi sebentar lagi.",
     # audit page (app.claim_audit)
     "ui_audit_title": "Jejak audit {cid}",
     "ui_audit_note": "Jejak audit mentah untuk {cid}; kode sistem ditampilkan apa adanya.",
