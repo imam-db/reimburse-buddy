@@ -614,8 +614,8 @@ def _persist_file(f: dict, owner: str) -> None:
 def _forward(emp: str, cid: str, item: dict, f: dict, trip: dict, dup: bool = False) -> str:
     """Forward one file to the reimburse@ mailbox, linked to its claim item. Returns the message ID."""
     messages = plan_forwards(emp, cid, trip, [(item, f)])
-    if dup:  # the caller already knows this hash was used by another item or claim
-        att = messages[0]["attachments"][0]
+    att = messages[0]["attachments"][0]
+    if dup and "duplicate_file" not in att.get("review_reasons", []):  # the caller knows the hash was used
         reasons = [*att.get("review_reasons", []), "duplicate_file"]
         att.update(evidence_status="needs_review", review_reason=reasons[0], review_reasons=reasons)
     try:

@@ -237,9 +237,11 @@ def test_a_scripted_reply_is_not_delivered_twice_after_a_restart(client, rows):
 
     # The same message again: the scripted reply was already delivered before the restart.
     as_(client, "EMP-102")
+    replies = [m["id"] for m in web.store.inbox if m.get("in_reply_to")]
     r = client.post("/admin/claims/CLM-2026-0110/message",
                     data={"subject": "Claim CLM-2026-0110: taxi receipt", "body": body})
-    assert "0 balasan" in r.text
+    assert r.status_code == 200
+    assert [m["id"] for m in web.store.inbox if m.get("in_reply_to")] == replies  # no second delivery
 
 
 def test_an_unsubmitted_draft_comes_back_but_a_submitted_one_does_not(client, rows, tmp_path):

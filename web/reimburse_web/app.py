@@ -849,8 +849,19 @@ def batch_approve(request: Request, batch: str = Form(...), claim_ids: list[str]
         return RedirectResponse(f"/admin?batch={batch}&msg={quote(msg, safe='')}", status_code=303)
     held = [c for c in claim_ids if pending_items(c)]
     claim_ids = [c for c in claim_ids if c not in held]
+    logged = len(store.status_log)
     res = approve_cleared_batch(store, batch, claim_ids, reviewer_confirmed == "true")
-    text = (label("ui_approved_n").format(n=res["count"]) if res["ok"]
+    changes = store.status_log[logged:]
+    try:  # persist the status changes the DataStore call made, all of them or none (ADR 0010 §3)
+        with claim_state.transaction():
+            for entry in changes:
+                claim_state.add_status_change(entry)
+    except Exception as exc:  # noqa: BLE001 - undo the memory change, newest first, then answer 503
+        for entry in reversed(changes):
+            store.get_claim(entry["claim_id"])["status"] = entry["from"]
+        del store.status_log[logged:]
+        raise state_not_saved(exc) from exc
+    text =(label("ui_approved_n").format(n=res["count"]) if res["ok"]
             else label("ui_batch_refused_note"))
     return RedirectResponse(f"/admin?batch={batch}&msg={quote(text, safe='')}", status_code=303)
 

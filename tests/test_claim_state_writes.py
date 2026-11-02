@@ -332,3 +332,20 @@ def test_reset_demo_refuses_when_the_store_is_down(client, rows, monkeypatch):
     r = client.post("/admin/reset", follow_redirects=False)
     assert r.status_code == 503
     assert snapshot() == before
+
+
+def test_bulk_approval_stores_every_status_change(client, rows):
+    cleared = web.triage_claims(web.store, web.BATCH)["auto_cleared"]
+    client.post("/admin/batch/approve", data={"batch": web.BATCH, "claim_ids": cleared, "reviewer_confirmed": "true"})
+    assert [c["claim_id"] for c in rows.status_changes] == list(cleared)
+    assert all(c["to"] == "approved" for c in rows.status_changes)
+
+
+def test_a_failing_store_keeps_every_bulk_approved_status(client, rows):
+    rows.fail_on = {"add_status_change"}
+    cleared = web.triage_claims(web.store, web.BATCH)["auto_cleared"]
+    before = snapshot()
+    r = client.post("/admin/batch/approve",
+                    data={"batch": web.BATCH, "claim_ids": cleared, "reviewer_confirmed": "true"})
+    assert r.status_code == 503
+    assert snapshot() == before
