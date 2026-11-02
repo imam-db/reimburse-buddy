@@ -10,8 +10,10 @@
 -- The seed (data/*.json: employees, policy, the demo claims, the seed mailbox, calendar, memos, scripted
 -- replies) stays in git and is never written here.
 --
--- One row per fact, never a blob of everything. The JSONB column holds the same dict shape the web code
--- already uses, so there is no mapping layer:
+-- One row per fact, never a blob of everything. The JSON column holds the same dict shape the web code
+-- already uses, so there is no mapping layer. It is JSON, not JSONB, on purpose: JSONB reorders object keys,
+-- and the pages render dicts (provenance tags, pending evidence, decisions) in the order they were written,
+-- so a replay from JSONB would change what a page shows after a restart. Nothing queries inside the payload.
 --   demo_epoch           the epoch the other tables are read at (Reset demo moves to a new one)
 --   web_claims           a claim an employee submitted, same shape as a claims.json entry
 --   web_messages         a mailbox message the web app added (uploads, delivered scripted replies)
@@ -37,7 +39,7 @@ CREATE TABLE IF NOT EXISTS web_claims (
     epoch       BIGINT      NOT NULL,
     claim_id    TEXT        NOT NULL,
     employee_id TEXT        NOT NULL,
-    claim       JSONB       NOT NULL,
+    claim       JSON        NOT NULL,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (epoch, claim_id)
 );
@@ -48,7 +50,7 @@ CREATE TABLE IF NOT EXISTS web_messages (
     message_id TEXT        NOT NULL,
     owner_id   TEXT        NOT NULL,
     claim_id   TEXT        NOT NULL DEFAULT '',
-    message    JSONB       NOT NULL,
+    message    JSON        NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (epoch, message_id)
@@ -59,7 +61,7 @@ CREATE INDEX IF NOT EXISTS web_messages_claim ON web_messages (epoch, claim_id);
 CREATE TABLE IF NOT EXISTS claim_reviews (
     epoch      BIGINT      NOT NULL,
     claim_id   TEXT        NOT NULL,
-    review     JSONB       NOT NULL,
+    review     JSON        NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (epoch, claim_id)
 );
@@ -68,7 +70,7 @@ CREATE TABLE IF NOT EXISTS employee_drafts (
     epoch        BIGINT      NOT NULL,
     draft_id     TEXT        NOT NULL,
     employee_id  TEXT        NOT NULL,
-    draft        JSONB       NOT NULL,
+    draft        JSON        NOT NULL,
     submitted_at TIMESTAMPTZ,
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (epoch, draft_id)
@@ -78,7 +80,7 @@ CREATE INDEX IF NOT EXISTS employee_drafts_employee ON employee_drafts (epoch, e
 CREATE TABLE IF NOT EXISTS outbox_messages (
     epoch      BIGINT      NOT NULL,
     message_id TEXT        NOT NULL,
-    message    JSONB       NOT NULL,
+    message    JSON        NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (epoch, message_id)
 );
@@ -87,7 +89,7 @@ CREATE TABLE IF NOT EXISTS approval_requests (
     epoch      BIGINT      NOT NULL,
     request_id TEXT        NOT NULL,
     claim_id   TEXT        NOT NULL DEFAULT '',
-    request    JSONB       NOT NULL,
+    request    JSON        NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (epoch, request_id)

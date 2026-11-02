@@ -296,6 +296,7 @@ def test_postgres_keeps_the_claim_across_a_restart(tmp_path, monkeypatch):
     plans.STATE["store"] = FilePlanStore(tmp_path / "plans")
     plans.STATE["log"] = A.JsonlAuditLog(tmp_path / "audit.jsonl")
     claim_state.reset()
+    claim_state.rows().bump_epoch()  # start empty, like Reset demo: earlier runs left rows on the branch
     try:
         client = TestClient(web.app)
         cid = _submit(client, _draft(tmp_path))

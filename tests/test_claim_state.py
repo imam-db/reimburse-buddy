@@ -4,6 +4,7 @@ No database is opened here. `plan_state.pool` is replaced by a fake, and the sto
 in-memory double, so these tests run in the default `file` backend exactly like the rest of the suite.
 """
 
+import json
 import pytest
 
 from reimburse_web import claim_state, plan_state
@@ -245,3 +246,31 @@ def test_restore_file_returns_none_when_the_file_is_nowhere(tmp_path):
 def test_restore_file_refuses_a_name_that_climbs_out_of_the_upload_dir(tmp_path):
     claim_state.set_rows(FileRows(b"secret"))
     assert claim_state.restore_file(tmp_path / "uploads", "../escape.png") is None
+
+
+def test_a_moved_id_is_also_the_id_inside_the_stored_json():
+    """On a key collision the row takes the next number; its JSON must say the same number, or a replay
+    brings back the old one (found against a real Neon branch)."""
+    from contextlib import contextmanager
+
+    taken = {"CLM-2026-W001", "CLM-2026-W002"}
+    stored: dict[str, dict] = {}
+
+    class Cursor:
+        def execute(self, sql, params):
+            *_, ident, payload = params
+            self.row = None if ident in taken else (ident,)
+            if self.row:
+                stored[ident] = json.loads(payload)
+
+        def fetchone(self):
+            return self.row
+
+    rows = claim_state.PostgresClaimRows(pool=None)
+    rows._epoch = 1
+    rows._cursor = contextmanager(lambda: (yield Cursor()))
+    claim = {"id": "CLM-2026-W001", "employee_id": "EMP-001", "items": []}
+
+    assert rows.add_claim(claim) == "CLM-2026-W003"
+    assert claim["id"] == "CLM-2026-W003"
+    assert stored["CLM-2026-W003"]["id"] == "CLM-2026-W003"

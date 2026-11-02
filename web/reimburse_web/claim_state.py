@@ -181,11 +181,14 @@ class PostgresClaimRows:
 
     # --- claims and messages -------------------------------------------------------------------
     def _insert_row(self, sql: str, params, ident: str, payload: dict) -> str:
-        """Insert under `ident`; when the key is taken, take the next number and try again."""
+        """Insert under `ident`; when the key is taken, take the next number and try again.
+
+        The stored JSON carries the id it is stored under, so a replay never brings back the old number."""
         current = str(ident)
         for _ in range(_ID_RETRIES):
+            stored = dict(payload, id=current)
             with self._cursor() as cur:
-                cur.execute(sql, (*params, current, json.dumps(payload, ensure_ascii=False)))
+                cur.execute(sql, (*params, current, json.dumps(stored, ensure_ascii=False)))
                 if cur.fetchone() is not None:
                     return current
             current = _bump(current)
@@ -193,7 +196,7 @@ class PostgresClaimRows:
 
     def add_claim(self, claim: dict) -> str:
         claim_id = self._insert_row(
-            "INSERT INTO web_claims (epoch, employee_id, claim_id, claim) VALUES (%s, %s, %s, %s::jsonb) "
+            "INSERT INTO web_claims (epoch, employee_id, claim_id, claim) VALUES (%s, %s, %s, %s::json) "
             "ON CONFLICT (epoch, claim_id) DO NOTHING RETURNING claim_id",
             (self.epoch(), claim.get("employee_id", "")), claim["id"], claim)
         claim["id"] = claim_id
@@ -204,7 +207,7 @@ class PostgresClaimRows:
         claim_id = next((a.get("linked_claim") or "" for a in attachments if a.get("linked_claim")), "")
         message_id = self._insert_row(
             "INSERT INTO web_messages (epoch, owner_id, claim_id, message_id, message) "
-            "VALUES (%s, %s, %s, %s, %s::jsonb) ON CONFLICT (epoch, message_id) DO NOTHING "
+            "VALUES (%s, %s, %s, %s, %s::json) ON CONFLICT (epoch, message_id) DO NOTHING "
             "RETURNING message_id",
             (self.epoch(), message.get("owner_id", ""), claim_id), message["id"], message)
         message["id"] = message_id
@@ -212,14 +215,14 @@ class PostgresClaimRows:
 
     def update_message(self, message: dict) -> None:
         with self._cursor() as cur:
-            cur.execute("UPDATE web_messages SET message = %s::jsonb, updated_at = now() "
+            cur.execute("UPDATE web_messages SET message = %s::json, updated_at = now() "
                         "WHERE epoch = %s AND message_id = %s",
                         (json.dumps(message, ensure_ascii=False), self.epoch(), message["id"]))
 
     # --- reviewer state, drafts, outbox, requests ----------------------------------------------
     def save_review(self, claim_id: str, review: dict) -> None:
         with self._cursor() as cur:
-            cur.execute("INSERT INTO claim_reviews (epoch, claim_id, review) VALUES (%s, %s, %s::jsonb) "
+            cur.execute("INSERT INTO claim_reviews (epoch, claim_id, review) VALUES (%s, %s, %s::json) "
                         "ON CONFLICT (epoch, claim_id) DO UPDATE "
                         "SET review = EXCLUDED.review, updated_at = now()",
                         (self.epoch(), claim_id, json.dumps(review, ensure_ascii=False)))
@@ -227,7 +230,7 @@ class PostgresClaimRows:
     def save_draft(self, draft: dict) -> None:
         with self._cursor() as cur:
             cur.execute("INSERT INTO employee_drafts (epoch, draft_id, employee_id, draft) "
-                        "VALUES (%s, %s, %s, %s::jsonb) ON CONFLICT (epoch, draft_id) DO UPDATE "
+                        "VALUES (%s, %s, %s, %s::json) ON CONFLICT (epoch, draft_id) DO UPDATE "
                         "SET draft = EXCLUDED.draft, updated_at = now()",
                         (self.epoch(), draft["id"], draft.get("emp", ""),
                          json.dumps(draft, ensure_ascii=False)))
@@ -241,7 +244,7 @@ class PostgresClaimRows:
 
     def add_outbox(self, message: dict) -> str:
         message_id = self._insert_row(
-            "INSERT INTO outbox_messages (epoch, message_id, message) VALUES (%s, %s, %s::jsonb) "
+            "INSERT INTO outbox_messages (epoch, message_id, message) VALUES (%s, %s, %s::json) "
             "ON CONFLICT (epoch, message_id) DO NOTHING RETURNING message_id",
             (self.epoch(),), message["id"], message)
         message["id"] = message_id
@@ -251,7 +254,7 @@ class PostgresClaimRows:
         """Create the request, or update it when a manager answers (ADR 0003 keeps that order)."""
         with self._cursor() as cur:
             cur.execute("INSERT INTO approval_requests (epoch, request_id, claim_id, request) "
-                        "VALUES (%s, %s, %s, %s::jsonb) ON CONFLICT (epoch, request_id) DO UPDATE "
+                        "VALUES (%s, %s, %s, %s::json) ON CONFLICT (epoch, request_id) DO UPDATE "
                         "SET request = EXCLUDED.request, updated_at = now()",
                         (self.epoch(), request["id"], request.get("claim_id", ""),
                          json.dumps(request, ensure_ascii=False)))
