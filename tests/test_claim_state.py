@@ -159,6 +159,46 @@ def test_startup_names_every_missing_table(monkeypatch):
     assert "demo_epoch" in str(exc.value) and "uploaded_files" in str(exc.value)
 
 
+def test_the_web_app_refuses_to_start_with_a_broken_claim_state(monkeypatch):
+    """The hook is wired into the app, not only callable: a real startup raises."""
+    from fastapi.testclient import TestClient
+
+    from conftest import install_test_users
+    from reimburse_web import app as web
+
+    from reimburse_agent import audit as A
+
+    monkeypatch.setenv("APP_ENV", "prod")
+    monkeypatch.setenv("REIMBURSE_AUDIT_DATABASE_URL", "postgresql://user@db.example:5432/reimburse")
+    monkeypatch.setenv("REIMBURSE_PLAN_BACKEND", "postgres")
+    install_test_users()
+    monkeypatch.setenv("REIMBURSE_DEMO_SESSION_KEY", "test-session-key-not-a-secret")
+    monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "2.00")
+    monkeypatch.setenv("LLM_PRICE_INPUT_MISS_PER_MTOK", "0.27")
+    monkeypatch.setenv("LLM_PRICE_INPUT_HIT_PER_MTOK", "0.07")
+    monkeypatch.setenv("LLM_PRICE_OUTPUT_PER_MTOK", "1.10")
+    # The plan-state tables are fine; only the claim-state ones are missing.
+    monkeypatch.setattr(plan_state, "pool", lambda: FakePool(fail=lambda sql: "web_claims" in sql))
+
+    class FakePostgresLog:
+        def __init__(self, dsn):
+            pass
+
+        def append(self, event):
+            return True
+
+        def list(self, run_id=None):
+            return []
+
+    monkeypatch.setattr(A, "PostgresAuditLog", FakePostgresLog)
+    monkeypatch.setattr(A, "_PROD_LOG", None)
+
+    with pytest.raises(StoreConfigError) as exc:
+        with TestClient(web.app):
+            pass
+    assert "web_claims" in str(exc.value) and "008_claim_state.sql" in str(exc.value)
+
+
 # --- the id rule --------------------------------------------------------------------------------
 @pytest.mark.parametrize("before, after", [
     ("CLM-2026-W001", "CLM-2026-W002"),
