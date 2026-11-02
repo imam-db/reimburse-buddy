@@ -171,7 +171,10 @@ def test_rejected_evidence_leaves_item_missing(client):
     chk = web.run_check(cid)
     assert "receipt_missing" in chk.items[1].gaps and chk.decision.value == "needs_info"
     assert web.review(cid)["evidence_log"][-1]["verdict"] == "rejected"
-    assert "Struk belum ada" in client.get(loc).text
+    # ADR 0009 #14: the employee learns the file was not accepted, never the reviewer's reason.
+    page = client.get(loc).text
+    assert "Berkas sebelumnya tidak diterima finance. Unggah ulang." in page
+    assert "unreadable_file" not in page
 
 
 def test_self_declared_doc_type_needs_review(client):
