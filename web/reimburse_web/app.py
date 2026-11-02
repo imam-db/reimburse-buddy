@@ -882,9 +882,9 @@ def claim_file(cid: str, mid: str) -> tuple[Path, str, str] | None:
             if not stored or (a.get("linked_claim") or a.get("claim_id")) != cid:
                 continue
             media = EVIDENCE_TYPES.get(Path(str(stored)).suffix.lower())
-            root = UPLOAD_DIR.resolve()
-            path = (root / str(stored)).resolve()
-            if media and root in path.parents and path.is_file():
+            # Inside UPLOAD_DIR only; a disk copy lost on restart comes back from the database (ADR 0010).
+            path = claim_state.restore_file(UPLOAD_DIR, str(stored)) if media else None
+            if path:
                 return path, media, str(a.get("name") or stored)
     return None
 

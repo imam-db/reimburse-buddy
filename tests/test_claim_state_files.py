@@ -113,3 +113,21 @@ def test_a_stored_name_that_climbs_out_of_the_upload_dir_is_a_404(client, rows, 
     outside.write_bytes(b"not yours")
     draft_with(stored="../outside.pdf", name="outside.pdf")
     assert client.get(url()).status_code == 404
+
+
+def test_finance_evidence_file_is_restored_when_the_disk_copy_is_gone(client, rows):
+    """ADR 0009's finance route (`/admin/claims/{cid}/files/{mid}`) restores the same way as the draft route."""
+    cid, mid, stored = "CLM-2026-W001", "MSG-W901", "MSG-W901_struk.pdf"
+    rows.save_file(stored, BYTES, "EMP-001", "application/pdf")
+    web.store.inbox.append({"id": mid, "owner_id": "EMP-001", "from": "x@y.example", "date": "2026-10-29",
+                            "subject": "s", "body": "", "mailbox": web.MAILBOX,
+                            "attachments": [{"name": "struk.pdf", "type": "receipt", "stored_as": stored,
+                                             "linked_claim": cid, "linked_item": "IT-1"}]})
+    assert not (web.UPLOAD_DIR / stored).exists()
+
+    r = client.get(f"/admin/claims/{cid}/files/{mid}")
+
+    assert r.status_code == 200 and r.content == BYTES
+    assert r.headers["content-type"] == "application/pdf"
+    assert (web.UPLOAD_DIR / stored).is_file()
+    assert client.get(f"/admin/claims/CLM-OTHER/files/{mid}").status_code == 404  # linked to another claim
