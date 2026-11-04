@@ -407,7 +407,7 @@ LABELS = {
     # investigation page (app.investigation_page)
     "ui_investigate_title": "Investigasi {cid}",
     "ui_agent_not_configured": "Agen belum dikonfigurasi",
-    "ui_agent_note": "Agen berjalan pada sesi server MCP-nya sendiri (data demo baru), bukan pada data halaman ini.",
+    "ui_agent_note": "Agent membaca data klaim saat penyelidikan dimulai.",
     "ui_agent_investigation": "Investigasi agen: {cid}",
     "ui_model": "Model",
     "ui_compact": "Mode ringkas",

@@ -185,6 +185,7 @@ def test_the_web_app_refuses_to_start_with_a_broken_plan_state(monkeypatch):
 # --- startup order -----------------------------------------------------------------------------
 def test_startup_runs_the_plan_state_check_before_the_sweep():
     modules = [hook.__module__ for hook in web.app.router.on_startup]
+    # The snapshot sweep (ADR 0011) is appended last, after the existing hooks.
     assert modules == ["reimburse_web.plans", "reimburse_web.auth", "reimburse_web.spend",
                        "reimburse_web.plan_state", "reimburse_web.claim_state",
-                       "reimburse_web.claim_state", "reimburse_web.plans"]
+                       "reimburse_web.claim_state", "reimburse_web.plans", "reimburse_web.app"]
