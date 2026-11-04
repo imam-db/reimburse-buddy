@@ -248,3 +248,21 @@ def test_document_request_for_a_flight_asks_for_the_ticket(client):
     flight = page.split("id='item-IT-1'", 1)[1].split("</article>", 1)[0]
     assert "Mohon kirim tiket pesawat (e-ticket) dan boarding pass untuk Penerbangan (IT-1)" in flight
     assert "Mohon kirim struk" not in flight
+
+
+def test_item_card_does_not_repeat_the_category_code_as_its_subtitle(client):
+    """A flight with no merchant has description "flight"; the card shows "Penerbangan" once, not "flight"."""
+    web.store.claims.append({"id": "CLM-2026-W001", "employee_id": "EMP-001", "status": "submitted",
+                             "submitted_at": "2026-10-29", "purpose": "Demo", "batch": web.WEB_BATCH,
+                             "trip": {"origin": "Jakarta", "destination": "Surabaya",
+                                      "start_date": "2026-10-02", "end_date": "2026-10-04"},
+                             "items": [{"id": "IT-1", "category": "flight", "date": "2026-10-02",
+                                        "description": "flight", "amount": "1120000", "flight_no": "QZ 7520",
+                                        "receipt": False, "boarding_pass": False},
+                                       {"id": "IT-2", "category": "taxi", "date": "2026-10-03",
+                                        "description": "TAKSI KOTA BIRU", "amount": "230000", "receipt": False}]})
+    html = client.get("/admin/claims/CLM-2026-W001").text
+    flight = html.split("id='item-IT-1'")[1].split("</article>")[0]
+    taxi = html.split("id='item-IT-2'")[1].split("</article>")[0]
+    assert "<div class='note'>flight</div>" not in flight
+    assert "<div class='note'>TAKSI KOTA BIRU</div>" in taxi

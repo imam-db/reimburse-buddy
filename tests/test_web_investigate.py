@@ -63,7 +63,7 @@ def test_claim_page_has_investigate_button(client):
 
 def test_no_key_message_and_nothing_runs(client):
     r = client.post(f"/admin/claims/{HERO}/investigate")
-    assert "id=no-key" in r.text and "No model key configured" in r.text
+    assert "id=no-key" in r.text and "Kunci model belum diatur" in r.text
     assert web.INVESTIGATOR.runs == {}
 
 
