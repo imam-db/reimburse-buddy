@@ -40,6 +40,7 @@ from reimburse_buddy.triage import approve_cleared_batch, triage_claims
 
 from . import auth, claim_state, plan_state, spend, ui, users
 from .agent_bridge import NO_KEY_MESSAGE, Investigator, RateLimited, key_configured
+from .agent_snapshot import SnapshotError
 from .intake import router as intake_router
 from . import manager
 from .manager import router as manager_router
@@ -1374,6 +1375,12 @@ def investigate_start(cid: str):
                     f"{back}<div class='box'><p class='tag warn' id=budget-unconfigured>{e(label('budget_unconfigured'))}</p></div>")
     try:
         run = INVESTIGATOR.start(cid)
+    except SnapshotError:
+        # The claim-state snapshot could not be written: no worker started, no budget reserved. Do not
+        # fall back to the seed data — that would investigate a different claim state (ADR 0011 §3).
+        return page(label("ui_investigate_title").format(cid=cid),
+                    f"{back}<div class='box'><p class='tag bad' id=snapshot-failed>"
+                    f"{e(label('ui_snapshot_failed'))}</p></div>")
     except RateLimited as exc:
         return page(label("ui_investigate_title").format(cid=cid),
                     f"{back}<div class='box'><p class='tag warn' id=rate-limited>{e(exc)}</p></div>")

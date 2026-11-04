@@ -17,11 +17,10 @@ from reimburse_buddy.data_store import DataStore
 from reimburse_web import app as web
 from reimburse_web.agent_snapshot import (
     PREFIX,
+    SnapshotError,
     remove_snapshot,
     snapshot_data_dir,
     sweep_old_snapshots,
-    _is_snapshot,
-    _pending_or_rejected_message_ids,
 )
 
 pytestmark = pytest.mark.agent
@@ -237,7 +236,7 @@ def test_snapshot_failure_raises_and_cleans_up(fresh, monkeypatch):
         raise TypeError("simulated failure")
 
     monkeypatch.setattr(json, "dumps", failing_dumps)
-    with pytest.raises(RuntimeError):
+    with pytest.raises(SnapshotError):
         snapshot_data_dir("CLM-2026-0110")
     monkeypatch.setattr(json, "dumps", original_dumps)
 

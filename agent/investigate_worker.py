@@ -4,6 +4,10 @@ The web admin (web/reimburse_web/agent_bridge.py) starts this as a subprocess in
 own uv environment, so the agent's dependencies never enter the root lockfile.
 
     uv --directory agent run python investigate_worker.py --claim CLM-2026-0110 [--fake-script f.json]
+                                                                   [--data-dir <snapshot dir>]
+
+`--data-dir` points the MCP server at a claim-state snapshot (ADR 0011) through
+REIMBURSE_BUDDY_DATA. Without it the server reads data/ exactly as before.
 
 stdout events (one JSON object per line):
     {"type": "start", "model": ..., "compact": true}
@@ -239,7 +243,7 @@ async def _run(a) -> int:
     pending: dict[str, dict] = {}
     reviewer = ""  # the signed-in EMP-ID that last answered; attributed to every decision of this run
     n = 0
-    async with mcp_tools() as (_s, tools):
+    async with mcp_tools(extra_env={"REIMBURSE_BUDDY_DATA": a.data_dir} if a.data_dir else None) as (_s, tools):
         graph = build_graph(model, tools, checkpointer=InMemorySaver(), compact=True, run_claim=a.claim)
         conf = {"configurable": {"thread_id": str(uuid.uuid4())}, "recursion_limit": a.max_steps}
         payload: object = {"messages": [("user", a.prompt.format(claim=a.claim))], "declined": {}}
@@ -335,6 +339,8 @@ def main() -> None:
     p.add_argument("--reviewer-turns", type=int, default=int(os.environ.get("REIMBURSE_AGENT_REVIEWER_TURNS", "3")),
                    help="how many times the run may stop for a reviewer answer (question event)")
     p.add_argument("--fake-script")
+    p.add_argument("--data-dir", default=None,
+                   help="claim-state snapshot for the MCP server (REIMBURSE_BUDDY_DATA); unset = data/")
     a = p.parse_args()
     try:
         audit.check_audit_config()  # production refuses JSONL / in-memory audit logs at startup

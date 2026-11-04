@@ -56,9 +56,10 @@ def redact(text: str) -> str:
 
 class Run:
     def __init__(self, claim_id: str, cmd: list[str], run_id: str | None = None,
-                 on_tokens: Callable[[dict], None] | None = None):
+                 on_tokens: Callable[[dict], None] | None = None, data_dir: str | None = None):
         self.id = run_id or uuid.uuid4().hex[:10]
         self.claim_id = claim_id
+        self.data_dir = data_dir  # the run's snapshot directory, removed when the run ends
         self._started_at = time.time()
         self.events: list[dict] = []
         self.lock = threading.Lock()
@@ -85,6 +86,21 @@ class Run:
         except Exception:  # noqa: BLE001 - a ledger problem must not kill the run's output
             logging.getLogger(__name__).exception("spend: settle failed for run %s", self.id)
 
+    def _cleanup_snapshot(self) -> None:
+        """Remove this run's snapshot directory once the worker has exited (idempotent).
+
+        The MCP server is the only reader, and it is gone by then. A failed removal is
+        harmless: the startup sweep clears leftovers, and the data is synthetic."""
+        path, self.data_dir = self.data_dir, None
+        if not path:
+            return
+        try:
+            from .agent_snapshot import remove_snapshot
+
+            remove_snapshot(path)
+        except Exception:  # noqa: BLE001 - cleanup must never surface as a run error
+            logging.getLogger(__name__).exception("could not remove snapshot %s", path)
+
     def _read(self):
         for line in self.proc.stdout:
             line = line.strip()
@@ -102,6 +118,7 @@ class Run:
                 self.events.append(ev)
         self.proc.wait()
         self._log.close()
+        self._cleanup_snapshot()
         with self.lock:
             if not any(e["type"] in ("final", "error") for e in self.events):
                 self.events.append({"type": "error", "code": "exited",
@@ -204,6 +221,7 @@ class Run:
             self.proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
             self.kill()
+        self._cleanup_snapshot()
         with self.lock:
             if not any(e["type"] in ("final", "error") for e in self.events):
                 self.events.append({"type": "error", "code": "cancelled", "message": "Cancelled by the reviewer."})
@@ -217,6 +235,7 @@ class Run:
                     self.proc.kill()
             except (ProcessLookupError, PermissionError, AttributeError):
                 self.proc.kill()
+        self._cleanup_snapshot()
 
     def stderr_tail(self, n: int = 20) -> str:
         try:
@@ -241,10 +260,20 @@ class Investigator:
         self.started: deque[float] = deque()
         self.runs: dict[str, Run] = {}
 
-    def command(self, claim_id: str) -> list[str]:
+    def command(self, claim_id: str, data_dir: str | None = None) -> list[str]:
         cmd = ["uv", "--directory", str(AGENT_DIR), "run", "--frozen", "--no-dev", "python", "investigate_worker.py",
                "--claim", claim_id]
+        if data_dir:
+            cmd += ["--data-dir", str(data_dir)]
         return cmd + (["--fake-script", self.fake_script] if self.fake_script else [])
+
+    def _command_for(self, claim_id: str, data_dir: str) -> list[str]:
+        """`command()` with the snapshot flag; tolerates a test double that takes only the claim id."""
+        import inspect
+
+        if len(inspect.signature(self.command).parameters) >= 2:
+            return self.command(claim_id, data_dir)
+        return list(self.command(claim_id)) + ["--data-dir", str(data_dir)]
 
     def start(self, claim_id: str) -> Run:
         now = time.time()
@@ -254,21 +283,46 @@ class Investigator:
             raise RateLimited("Another investigation is still running. Finish or decline it first.")
         if len(self.started) >= self.max_per_min:
             raise RateLimited(f"Rate limit: at most {self.max_per_min} investigations per minute.")
+        # Snapshot the web's claim state before spending anything (ADR 0011 §2/§3). If it cannot be
+        # written the run is refused outright: starting on the seed data would silently investigate a
+        # different claim state. No budget is reserved and no worker is spawned.
+        from .agent_snapshot import snapshot_data_dir
+
+        data_dir = snapshot_data_dir(claim_id)
         # Charge the daily LLM budget before spawning: the worst case of this run is reserved, and the
         # run is refused outright when it would cross the cap (spend.BudgetRefused). The day is taken
         # once, here: a run that crosses midnight WIB settles on the day it was reserved, so the
         # reservation is always replaced and never leaks into the next day's cap.
         run_id = uuid.uuid4().hex[:10]
         day = spend.today()
-        spend.reserve(run_id, day=day)
+        try:
+            spend.reserve(run_id, day=day)
+        except BaseException:
+            # No run will own the snapshot: remove it before the refusal leaves the handler.
+            from .agent_snapshot import remove_snapshot
+
+            remove_snapshot(data_dir)
+            raise
         self.started.append(now)
-        run = Run(claim_id, self.command(claim_id), run_id=run_id,
-                  on_tokens=lambda t: spend.settle(run_id, t, day=day))
+        try:
+            run = Run(claim_id, self._command_for(claim_id, data_dir), run_id=run_id,
+                      on_tokens=lambda t: spend.settle(run_id, t, day=day), data_dir=str(data_dir))
+        except BaseException:
+            # The worker never started: give the reservation back, drop the snapshot, do not count it.
+            self.started.pop()
+            from .agent_snapshot import remove_snapshot
+
+            remove_snapshot(data_dir)
+            try:
+                spend.settle(run_id, {}, day=day)
+            except Exception:  # noqa: BLE001 - the original failure is what the caller must see
+                pass
+            raise
         self.runs[run.id] = run
         return run
 
     def stop_all(self) -> None:
         for r in self.runs.values():
-            r.kill()
+            r.kill()  # also removes the run's snapshot directory
         self.runs.clear()
         self.started.clear()

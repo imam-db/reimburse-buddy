@@ -121,6 +121,9 @@ LABELS = {
                                 "baca-saja yang berjalan tanpa bertanya; setiap penulisan atau pesan, "
                                 "termasuk permintaan bukti ke pemilik klaim, menunggu persetujuan Anda di "
                                 "sini. Persetujuan yang tidak dijawab otomatis ditolak."),
+    # claim-state snapshot for an investigation (ADR 0011)
+    "ui_snapshot_failed": ("Data klaim untuk penyelidikan tidak dapat disiapkan, jadi agent tidak "
+                           "dijalankan. Coba lagi sebentar lagi."),
     # daily LLM budget (web/reimburse_web/spend.py)
     "budget_exhausted": "Batas biaya harian demo tercapai. Coba lagi besok.",
     "budget_remaining": "Sisa anggaran LLM hari ini",
