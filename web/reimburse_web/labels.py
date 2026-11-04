@@ -121,6 +121,9 @@ LABELS = {
                                 "baca-saja yang berjalan tanpa bertanya; setiap penulisan atau pesan, "
                                 "termasuk permintaan bukti ke pemilik klaim, menunggu persetujuan Anda di "
                                 "sini. Persetujuan yang tidak dijawab otomatis ditolak."),
+    # claim-state snapshot for an investigation (ADR 0011)
+    "ui_snapshot_failed": ("Data klaim untuk penyelidikan tidak dapat disiapkan, jadi agent tidak "
+                           "dijalankan. Coba lagi sebentar lagi."),
     # daily LLM budget (web/reimburse_web/spend.py)
     "budget_exhausted": "Batas biaya harian demo tercapai. Coba lagi besok.",
     "budget_remaining": "Sisa anggaran LLM hari ini",
@@ -404,7 +407,7 @@ LABELS = {
     # investigation page (app.investigation_page)
     "ui_investigate_title": "Investigasi {cid}",
     "ui_agent_not_configured": "Agen belum dikonfigurasi",
-    "ui_agent_note": "Agen berjalan pada sesi server MCP-nya sendiri (data demo baru), bukan pada data halaman ini.",
+    "ui_agent_note": "Agent membaca data klaim saat penyelidikan dimulai.",
     "ui_agent_investigation": "Investigasi agen: {cid}",
     "ui_model": "Model",
     "ui_compact": "Mode ringkas",

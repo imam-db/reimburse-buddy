@@ -565,6 +565,16 @@ MIT
 the claim agent ("Selidiki dengan agent"), which runs `agent/investigate_worker.py` as a subprocess and
 calls the tools over MCP; only that button needs a model key.
 
+Each investigation reads a **snapshot** of the claim state, not the seed in `data/` (ADR 0011). When the
+run starts, `web/reimburse_web/agent_snapshot.py` writes a temporary directory holding the claims, the
+mailbox and the policy as the web app holds them at that moment, and the worker points its MCP server at
+it (`--data-dir`, which becomes `REIMBURSE_BUDDY_DATA`). So a claim an employee submitted on the web can
+be investigated, the agent sees the status finance set, and it sees the files that were forwarded. Uploads
+whose evidence the reviewer has not accepted are filtered out of the snapshot's mailbox: `pending` and
+`rejected` messages never reach the agent, so it cannot pass an unverified file to `check_claim`. The
+snapshot is fixed for the run (a verdict given mid-run shows up in the next run) and the directory is
+removed when the run ends.
+
 - Employee portal (`/employee`), drop-first: enter the trip, drop all receipts and boarding passes at once
   (`/employee/new`), then check one draft card per item. Each card field shows where it came from: extracted
   (`ocr`, `pdf_text` or `vision`, with a confidence; low confidence is highlighted) or `self_declared` (typed or
@@ -655,9 +665,11 @@ Synthetic sample uploads live in `web/sample_uploads/` (`make_samples.py` regene
 `uv run python web/sample_uploads/measure_accuracy.py` reports both (see the table above). Both sets are synthetic and small.
 
 Known limits before any public deploy: one web instance only (claim state is replayed once at startup, not
-read from the database per request, so two instances would each see their own view); the agent
-investigation still cannot see claims the web app submitted (the worker's MCP server reads `data/*.json` in
-its own process), so "Selidiki dengan agent" is for the seed claims; the Q&A history (`qa.STATE`) and the
+read from the database per request, so two instances would each see their own view); an investigation reads
+a snapshot taken when it started, so a verdict or status change made mid-run is only visible to the next
+run; the agent's approved writes (`send_message`, `request_missing_evidence`, `request_approval`,
+`update_claim_status`) run inside the run's own MCP server process, so the employee portal and the claim
+page never show them; the Q&A history (`qa.STATE`) and the
 running investigations are still per process; one shared demo password rather than accounts, so the app
 cannot tell two reviewers apart beyond the ID chosen at login and there is no way to revoke one person's
 access; local uploads (basic 5 MB / type limits only, with the bytes also in `uploaded_files`); and a

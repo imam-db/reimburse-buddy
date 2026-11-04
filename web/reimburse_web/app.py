@@ -40,6 +40,7 @@ from reimburse_buddy.triage import approve_cleared_batch, triage_claims
 
 from . import auth, claim_state, plan_state, spend, ui, users
 from .agent_bridge import NO_KEY_MESSAGE, Investigator, RateLimited, key_configured
+from .agent_snapshot import SnapshotError, sweep_old_snapshots
 from .intake import router as intake_router
 from . import manager
 from .manager import router as manager_router
@@ -66,11 +67,20 @@ CURRENT_PATH: ContextVar[str] = ContextVar("rb_current_path", default="")
 # work, then one without a user database / session key, then one that cannot cap or charge a model call,
 # then one whose plan store or checkpoint tables are unusable (REIMBURSE_PLAN_BACKEND=postgres), then one
 # whose claim-state tables are unusable (ADR 0010), then replay the stored claim rows on top of the seed,
-# and finally run the one-per-process expiry sweep (agent workers opening the log never sweep).
+# then run the one-per-process expiry sweep (agent workers opening the log never sweep), and finally clear
+# the claim-state snapshots a crashed investigation left behind (ADR 0011 §3).
+def startup_snapshot_sweep() -> None:
+    """Delete snapshot directories older than a day; a leftover one holds synthetic data only."""
+    try:
+        sweep_old_snapshots()
+    except Exception:  # noqa: BLE001 - housekeeping must never stop the app from starting
+        pass
+
+
 app = FastAPI(title="reimburse-buddy web simulation",
               on_startup=[startup_config_check, auth.startup_check, spend.startup_check,
                           plan_state.startup_check, claim_state.startup_check,
-                          claim_state.startup_hydrate, startup_sweep])
+                          claim_state.startup_hydrate, startup_sweep, startup_snapshot_sweep])
 app.include_router(plans_router)
 app.include_router(intake_router)
 app.include_router(manager_router)
@@ -1374,6 +1384,12 @@ def investigate_start(cid: str):
                     f"{back}<div class='box'><p class='tag warn' id=budget-unconfigured>{e(label('budget_unconfigured'))}</p></div>")
     try:
         run = INVESTIGATOR.start(cid)
+    except SnapshotError:
+        # The claim-state snapshot could not be written: no worker started, no budget reserved. Do not
+        # fall back to the seed data — that would investigate a different claim state (ADR 0011 §3).
+        return page(label("ui_investigate_title").format(cid=cid),
+                    f"{back}<div class='box'><p class='tag bad' id=snapshot-failed>"
+                    f"{e(label('ui_snapshot_failed'))}</p></div>")
     except RateLimited as exc:
         return page(label("ui_investigate_title").format(cid=cid),
                     f"{back}<div class='box'><p class='tag warn' id=rate-limited>{e(exc)}</p></div>")
