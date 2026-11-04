@@ -34,9 +34,9 @@ class SnapshotError(RuntimeError):
 
 def _seed_data_dir() -> Path:
     """The directory the web's ``DataStore`` reads the seed from (``store.data_dir``)."""
-    from reimburse_buddy.data_store import DataStore
+    from . import app as web
 
-    return Path(DataStore().data_dir)  # honours REIMBURSE_BUDDY_DATA, else the repo's data/
+    return Path(web.store.data_dir)  # the same seed the web loaded, including a test or eval data dir
 
 
 def _hidden_message_ids(review: dict) -> set[str]:
@@ -45,11 +45,21 @@ def _hidden_message_ids(review: dict) -> set[str]:
     This is the safety rule, enforced in the data rather than in the prompt.
     """
     hidden: set[str] = set()
-    for per_claim in review.values():
+    for per_claim in review.values():  # the reviewer's working state is the primary source
         for message_id, entry in (per_claim.get("pending") or {}).items():
             if isinstance(entry, dict) and entry.get("state") in ("pending", "rejected"):
                 hidden.add(message_id)
     return hidden
+
+
+# Attachment states that mean "not verified": a second check on the message itself, so a review entry
+# that went missing (a crash between writes, a replay gap) cannot make an unverified file visible.
+UNVERIFIED_STATES = ("needs_review", "rejected_by_reviewer")
+
+
+def _unverified(message: dict) -> bool:
+    return any(isinstance(a, dict) and a.get("evidence_status") in UNVERIFIED_STATES
+               for a in message.get("attachments") or [])
 
 
 def snapshot_data_dir(cid: str) -> Path:
@@ -91,7 +101,7 @@ def snapshot_data_dir(cid: str) -> Path:
         claims = list(web.store.claims)
         (snap_dir / "claims.json").write_text(json.dumps(claims, ensure_ascii=False), encoding="utf-8")
 
-        inbox = [m for m in web.store.inbox if m.get("id") not in hidden]
+        inbox = [m for m in web.store.inbox if m.get("id") not in hidden and not _unverified(m)]
         (snap_dir / "inbox.json").write_text(json.dumps(inbox, ensure_ascii=False), encoding="utf-8")
     except Exception as exc:  # noqa: BLE001 - every failure means "no run", never a half snapshot
         if snap_dir is not None:

@@ -23,9 +23,6 @@ from reimburse_web.agent_snapshot import (
     sweep_old_snapshots,
 )
 
-pytestmark = pytest.mark.agent
-
-
 @pytest.fixture
 def fresh(monkeypatch):
     """Reset web state and return nothing; clean up after."""
@@ -299,3 +296,17 @@ def test_snapshot_does_not_include_outbox_or_status_log(fresh):
         assert not (snap / "approval_requests.json").exists()
     finally:
         remove_snapshot(snap)
+
+
+def test_an_unverified_attachment_is_hidden_even_without_a_review_entry(fresh):
+    """Defence in depth: the message's own evidence_status hides it when REVIEW has no entry for it."""
+    web.store.inbox.append({"id": "MSG-W950", "owner_id": "EMP-001", "from": "x@y.example", "date": "2026-10-29",
+                            "subject": "s", "body": "", "attachments": [
+                                {"name": "struk.png", "type": "receipt", "evidence_status": "needs_review",
+                                 "linked_claim": "CLM-2026-0110", "linked_item": "IT-1"}]})
+    path = snapshot_data_dir("CLM-2026-0110")
+    try:
+        ids = {m["id"] for m in json.loads((path / "inbox.json").read_text(encoding="utf-8"))}
+        assert "MSG-W950" not in ids
+    finally:
+        remove_snapshot(path)
