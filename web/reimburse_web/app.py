@@ -1050,7 +1050,10 @@ def claim_detail(cid: str, request: Request, q: str = "", msg: str = ""):
         item_cards.append(
             f"<article class='item-card' id='item-{e(it.item_id)}' tabindex='-1'>"
             f"<div class='item-head'><div><span class='item-title'>{e(label(it.category))}</span>"
-            f"<div class='note'>{e(src['description'])}</div></div>"
+            # A description that only repeats the category code (no merchant typed) adds nothing.
+            + (f"<div class='note'>{e(src['description'])}</div>"
+               if str(src.get("description") or "").strip().lower() != str(src.get("category") or "").strip().lower() else "")
+            + "</div>"
             f"<div class='amount'>{e(rupiah(it.claimed))}</div></div>"
             f"<p class='note'>{e(label('ui_approvable'))}: {e(rupiah(it.approvable))} &middot; {status_cell}</p>"
             f"{provenance_badges(src)}{finds}"

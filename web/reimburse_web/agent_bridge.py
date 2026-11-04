@@ -31,8 +31,8 @@ import tempfile
 from . import spend
 
 AGENT_DIR = Path(os.environ.get("REIMBURSE_AGENT_DIR", Path(__file__).resolve().parents[2] / "agent"))
-NO_KEY_MESSAGE = ("No model key configured. Set DEEPSEEK_API_KEY (or REIMBURSE_AGENT_API_KEY) in the "
-                  "environment of the web server, then restart it. Nothing was run.")
+NO_KEY_MESSAGE = ("Kunci model belum diatur. Isi DEEPSEEK_API_KEY (atau REIMBURSE_AGENT_API_KEY) di environment "
+                  "server web, lalu jalankan ulang server. Belum ada yang dijalankan.")
 
 
 def key_configured() -> bool:
