@@ -366,6 +366,27 @@ database (`plan_requests`, `plan_versions`, `plan_decisions`, `mock_office_rows`
 tables, or Neon's point-in-time restore). The audit log remains the record of what was approved and
 executed; the plan tables are what lets a half-finished request be finished.
 
+### Claim state after a restart
+
+Everything a person does to a claim — submit it, forward a receipt, accept evidence, decide an item, save a
+draft, message the employee, ask a manager, move the status — used to live only in the web process, so a
+restart erased it while the audit log in Neon still pointed at it. Now the JSON seed in `data/` stays
+read-only in git and every web write goes to the database as well:
+
+- `REIMBURSE_PLAN_BACKEND=postgres` (the production default) also covers the claim state, on the same DSN
+  and the same pool as the plan state: `agent/migrations/008_claim_state.sql`.
+- Every write is stored first and changes memory second. If the database refuses, the route answers 503 and
+  memory is untouched, so a write that was not kept never looks kept. Submitting a claim is one transaction:
+  the claim, its forwarded messages, the review state, the draft and the uploaded bytes together.
+- On startup the seed is loaded as before and the stored rows are replayed on top of it; the pages, triage
+  and the rule engine still read memory, so nothing else changed. Reset demo moves `demo_epoch` forward
+  instead of deleting rows, so the app role never needs DELETE.
+- Uploaded bytes are kept in `uploaded_files` as well as in `UPLOAD_DIR` (extraction, OCR and duplicate
+  detection read from disk), and a file route restores a file the host's disk dropped.
+
+With `REIMBURSE_PLAN_BACKEND=file` (the default outside production) claim state stays in memory, exactly as
+before this change.
+
 ### Environment variables
 
 Secrets come from the environment (or a git-ignored `.env.local`) and are never committed.
@@ -389,7 +410,7 @@ Secrets come from the environment (or a git-ignored `.env.local`) and are never 
 | `REIMBURSE_APPROVAL_DEADLINE_MIN` | 30 | Minutes before an unanswered staged action of a dead run is expired |
 | `EMPLOYEE_QA` | off | Employee Q&A box and `POST /employee/qa` (see [docs/employee-qa.md](docs/employee-qa.md)) |
 | `REIMBURSE_PLAN_STORE` | `agent/.plans` | Where plans, requests and per-run mock office state are stored (file backend) |
-| `REIMBURSE_PLAN_BACKEND` | `postgres` in production, `file` otherwise | Where plan state and the graph checkpointer live: `file` (JSON + `MemorySaver`) or `postgres` (migration 006 + the checkpoint tables) |
+| `REIMBURSE_PLAN_BACKEND` | `postgres` in production, `file` otherwise | Where plan state, the graph checkpointer and the claim state live: `file` (JSON + `MemorySaver`, claim state in memory) or `postgres` (migrations 006 and 008 + the checkpoint tables) |
 | `REIMBURSE_STATE_DATABASE_URL` | `REIMBURSE_AUDIT_DATABASE_URL` | Postgres DSN for plan state and checkpoints (secret; app role). One database can serve audit, spend and plan state |
 | `REIMBURSE_OFFICE_CONTACTS` / `REIMBURSE_OFFICE_RULES` | bundled synthetic files | Contact directory and operating rules for request intake |
 | `REIMBURSE_EXTRACTOR` | `ocr` | Upload extraction: `ocr`, `dual`, `rapidocr` or `vision` (see [File extraction](#file-extraction)) |
@@ -440,11 +461,21 @@ export LLM_PRICE_OUTPUT_PER_MTOK=...
   (the production default) a missing DSN, an unreachable database or a missing table aborts startup with
   `store.StoreConfigError` naming what to run. There is no fallback to the file store, which would lose
   exactly the state this backend keeps.
-- Apply migrations `001`-`006` before the first request: `005_llm_spend.sql` adds the spend ledger the
+- The claim state is checked right after the plan state, before the replay and the expiry sweep: with
+  `REIMBURSE_PLAN_BACKEND=postgres` a missing table of `008_claim_state.sql` aborts startup, naming the
+  migration. There is no silent fallback to memory either.
+- Apply migrations `001`-`008` before the first request: `005_llm_spend.sql` adds the spend ledger the
   daily cap reads and writes, `006_plan_state.sql` the plan state (`plan_requests`, `plan_versions`,
-  `plan_decisions`, `mock_office_rows`; `reimburse_app` gets SELECT, INSERT and UPDATE, never DELETE).
+  `plan_decisions`, `mock_office_rows`; `reimburse_app` gets SELECT, INSERT and UPDATE, never DELETE), and
+  `008_claim_state.sql` the claim state (`web_claims`, `web_messages`, `claim_reviews`, `employee_drafts`,
+  `outbox_messages`, `approval_requests`, `claim_status_changes`, `uploaded_files`, plus the `demo_epoch`
+  row that Reset demo moves forward; the same grants, never DELETE or TRUNCATE).
   Apply them in numeric order: `002`-`004` each rewrite the `audit_events.event_type` constraint, so a
   later one applied first would silently narrow it.
+
+  ```bash
+  psql "$OWNER_DATABASE_URL" -f agent/migrations/008_claim_state.sql
+  ```
 - Then create the plan-graph checkpoint tables once per database, as the **owner** role (langgraph owns
   their shape, so this is not a migration). It prints PASS/FAIL per step, masks the DSN, and grants
   `reimburse_app` SELECT, INSERT, UPDATE and DELETE on the `checkpoint*` tables only — the audit log and
@@ -623,10 +654,13 @@ Synthetic sample uploads live in `web/sample_uploads/` (`make_samples.py` regene
 (TOTAL (3 item), cash larger than the total, 2-digit year, TOTAL DISKON last) not used to tune the parser.
 `uv run python web/sample_uploads/measure_accuracy.py` reports both (see the table above). Both sets are synthetic and small.
 
-Known limits before any public deploy: shared in-memory state (claims, drafts, reviewer decisions and agent
-runs live in one process, so a restart loses them and a second instance sees a different demo); one shared
-demo password rather than accounts, so the app cannot tell two reviewers apart beyond the ID chosen at login
-and there is no way to revoke one person's access; local uploads (basic 5 MB / type limits only); and a
+Known limits before any public deploy: one web instance only (claim state is replayed once at startup, not
+read from the database per request, so two instances would each see their own view); the agent
+investigation still cannot see claims the web app submitted (the worker's MCP server reads `data/*.json` in
+its own process), so "Selidiki dengan agent" is for the seed claims; the Q&A history (`qa.STATE`) and the
+running investigations are still per process; one shared demo password rather than accounts, so the app
+cannot tell two reviewers apart beyond the ID chosen at login and there is no way to revoke one person's
+access; local uploads (basic 5 MB / type limits only, with the bytes also in `uploaded_files`); and a
 self-declared field is only flagged, not verified. The daily LLM cap covers the investigation worker only:
 the optional Q&A model and the Jev judge are not metered (both are off by default and the demo runs
 neither). Dual mode detects OCR misreads, not edited

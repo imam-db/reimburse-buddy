@@ -16,6 +16,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from . import auth
+from . import claim_state
 from . import ui
 from .labels import label, person
 
@@ -123,6 +124,11 @@ def answer(request: Request, rid: str, decision: str = Form(""), note: str = For
             raise HTTPException(503, label("ui_req_not_saved"))
         if not stored:  # the log already holds an answer for this request
             return _back(label("ui_req_already_answered"))
-        req.update(status=decision, answered_by=me, note=note,
-                   answered_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        answered = dict(req, status=decision, answered_by=me, note=note,
+                        answered_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        try:  # audit log first, then the request row, then memory (ADR 0003, ADR 0010 §3)
+            claim_state.save_approval_request(answered)
+        except Exception as exc:  # noqa: BLE001 - the answer is logged; say the request row did not follow
+            raise HTTPException(503, label("ui_state_not_saved")) from exc
+        req.update(answered)
     return _back(f"{rid}: {status_text(req)}")

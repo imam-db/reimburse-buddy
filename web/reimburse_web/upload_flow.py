@@ -7,6 +7,7 @@ forwarded attachment so the reviewer sees it. Approved amounts still come only f
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
@@ -28,6 +29,7 @@ from reimburse_buddy.rules import check_claim
 
 from . import app as core
 from . import auth
+from . import claim_state
 from . import plans  # noqa: F401  # puts agent/ on sys.path
 from . import ui
 from .labels import label
@@ -253,9 +255,17 @@ async def create_draft(request: Request, purpose: str = Form(...), destination: 
                 continue
             by_flight[fn] = c
         merged.append(c)
-    core.DRAFTS[did] = {"id": did, "emp": emp, "header": {"purpose": purpose, "destination": destination,
-                                                          "start_date": start_date, "end_date": end_date},
-                        "cards": merged or [_card_from_files([])], "errors": []}
+    draft = {"id": did, "emp": emp, "header": {"purpose": purpose, "destination": destination,
+                                               "start_date": start_date, "end_date": end_date},
+             "cards": merged or [_card_from_files([])], "errors": []}
+    try:  # database first: the draft and the bytes it already points at
+        with claim_state.transaction():
+            claim_state.save_draft(draft)
+            for entry in entries:
+                _persist_file(entry, emp)
+    except Exception as exc:  # noqa: BLE001 - a draft the database did not keep is not in memory either
+        raise core.state_not_saved(exc) from exc
+    core.DRAFTS[did] = draft
     return RedirectResponse(f"/employee/drafts/{did}", status_code=303)
 
 
@@ -528,10 +538,9 @@ def evidence_review_reasons(f: dict, item: dict, trip: dict, passenger: str, dup
     return reasons
 
 
-def _forward(emp: str, cid: str, item: dict, f: dict, trip: dict, dup: bool = False) -> str:
-    """Forward one file to the reimburse@ mailbox, linked to its claim item. Returns the message ID."""
+def _forward_row(emp: str, cid: str, item: dict, f: dict, trip: dict, dup: bool, seq: int) -> dict:
+    """The mailbox message one forwarded file becomes. Nothing is written to memory here."""
     me = core.store.get_employee(emp)
-    mid = f"MSG-W{len([m for m in core.store.inbox if m['id'].startswith('MSG-W')]) + 1:03d}"
     prov = dict(item.get("provenance", {}), doc_type=f["doc_type_source"])
     ex = {k: v.get("value") for k, v in f["extract"]["fields"].items()}
     if f["doc_type"] == "boarding_pass":
@@ -549,29 +558,95 @@ def _forward(emp: str, cid: str, item: dict, f: dict, trip: dict, dup: bool = Fa
                provenance=prov, self_declared=any(v == "self_declared" for v in prov.values()),
                evidence_status="needs_review" if reasons else "extracted",
                review_reason=reasons[0] if reasons else "", review_reasons=reasons)
-    core.store.inbox.append({"id": mid, "owner_id": emp, "from": me["email"], "date": date.today().isoformat(),
-                             "subject": f"Claim {cid} {item['id']}: {f['doc_type'].replace('_', ' ')}", "body": "",
-                             "attachments": [att], "mailbox": core.MAILBOX, "forwarded_by": me["email"]})
-    rv = core.review(cid)
-    if reasons:  # kept out of check_claim until a reviewer accepts it
-        rv["pending"][mid] = {"item_id": item["id"], "reason": ", ".join(reasons), "reasons": reasons, "state": "pending"}
-    else:
-        rv["evidence"].append(mid)
-    rv.setdefault("origin", {})[mid] = "employee_upload"
-    return mid
+    return {"id": f"MSG-W{seq:03d}", "owner_id": emp, "from": me["email"], "date": date.today().isoformat(),
+            "subject": f"Claim {cid} {item['id']}: {f['doc_type'].replace('_', ' ')}", "body": "",
+            "attachments": [att], "mailbox": core.MAILBOX, "forwarded_by": me["email"]}
 
 
-def forward_files(emp: str, cid: str, trip: dict, pairs: list[tuple[dict, dict]]) -> None:
-    """Forward (item, file) pairs. A file hash used by another item, here or in any earlier claim, is a duplicate."""
+def plan_forwards(emp: str, cid: str, trip: dict, pairs: list[tuple[dict, dict]]) -> list[dict]:
+    """Build the messages for (item, file) pairs. A hash used by another item, here or in any earlier
+    claim, is a duplicate. The caller stores them and only then touches memory."""
     seen = used_hashes()
     per_hash: dict[str, set] = {}
     for it, f in pairs:
         per_hash.setdefault(f.get("sha256", ""), set()).add(it["id"])
-    for it, f in pairs:
+    base = len([m for m in core.store.inbox if m["id"].startswith("MSG-W")])
+    rows = []
+    for n, (it, f) in enumerate(pairs, 1):
         h = f.get("sha256", "")
         prior = seen.get(h)
         dup = bool(h) and (len(per_hash[h]) > 1 or (prior is not None and prior != (cid, it["id"])))
-        _forward(emp, cid, it, f, trip, dup)
+        rows.append(_forward_row(emp, cid, it, f, trip, dup, base + n))
+    return rows
+
+
+def review_after_forward(cid: str, messages: list[dict]) -> dict:
+    """The REVIEW[cid] dict after these messages, built without changing the one the pages read.
+
+    It never inserts an empty entry: a submit that fails must leave memory exactly as it was.
+    """
+    r = copy.deepcopy(core.REVIEW.get(cid)
+                      or {"evidence": [], "decisions": {}, "pending": {}, "evidence_log": []})
+    for m in messages:
+        att = m["attachments"][0]
+        reasons = att.get("review_reasons") or []
+        if reasons:  # kept out of check_claim until a reviewer accepts it
+            r["pending"][m["id"]] = {"item_id": att["linked_item"], "reason": ", ".join(reasons),
+                                     "reasons": reasons, "state": "pending"}
+        else:
+            r["evidence"].append(m["id"])
+        r.setdefault("origin", {})[m["id"]] = "employee_upload"
+    return r
+
+
+def _persist_file(f: dict, owner: str) -> None:
+    """Keep the bytes in the database too; the disk copy stays because extraction reads from it."""
+    path = core.UPLOAD_DIR / f["stored"]
+    try:
+        data = path.read_bytes()
+    except OSError:  # already gone from disk: nothing to copy, the claim still goes through
+        return
+    claim_state.save_file(f["stored"], data, owner_id=owner,
+                          content_type=FILE_TYPES.get(path.suffix.lower(), "application/octet-stream"),
+                          sha256=f.get("sha256", ""))
+
+
+def _forward(emp: str, cid: str, item: dict, f: dict, trip: dict, dup: bool = False) -> str:
+    """Forward one file to the reimburse@ mailbox, linked to its claim item. Returns the message ID."""
+    messages = plan_forwards(emp, cid, trip, [(item, f)])
+    att = messages[0]["attachments"][0]
+    if dup and "duplicate_file" not in att.get("review_reasons", []):  # the caller knows the hash was used
+        reasons = [*att.get("review_reasons", []), "duplicate_file"]
+        att.update(evidence_status="needs_review", review_reason=reasons[0], review_reasons=reasons)
+    try:
+        with claim_state.transaction():
+            for m in messages:
+                m["id"] = claim_state.add_message(m)
+            review_rows = review_after_forward(cid, messages)
+            claim_state.save_review(cid, review_rows)
+            _persist_file(f, emp)
+    except Exception as exc:  # noqa: BLE001 - a message the database did not keep is not in memory either
+        raise core.state_not_saved(exc) from exc
+    core.store.inbox.extend(messages)
+    core.REVIEW[cid] = review_rows
+    return messages[0]["id"]
+
+
+def forward_files(emp: str, cid: str, trip: dict, pairs: list[tuple[dict, dict]]) -> None:
+    """Forward (item, file) pairs: database first, then memory (ADR 0010 §3)."""
+    messages = plan_forwards(emp, cid, trip, pairs)
+    try:
+        with claim_state.transaction():
+            for m in messages:
+                m["id"] = claim_state.add_message(m)
+            review_rows = review_after_forward(cid, messages)
+            claim_state.save_review(cid, review_rows)
+            for _, f in pairs:
+                _persist_file(f, emp)
+    except Exception as exc:  # noqa: BLE001 - a message the database did not keep is not in memory either
+        raise core.state_not_saved(exc) from exc
+    core.store.inbox.extend(messages)
+    core.REVIEW[cid] = review_rows
 
 
 def _submit(d: dict) -> str:
@@ -589,19 +664,39 @@ def _submit(d: dict) -> str:
         if f["category"] == "hotel":
             it["nights"] = int(f["nights"])
         items.append((it, c["files"]))
-    core.store.claims.append({"id": cid, "employee_id": emp, "status": "submitted", "submitted_at": date.today().isoformat(),
-                              "purpose": h["purpose"], "trip": {"origin": "Jakarta", "destination": h["destination"],
-                                                                "start_date": h["start_date"], "end_date": h["end_date"]},
-                              "items": [i for i, _ in items], "batch": core.WEB_BATCH})
+    claim = {"id": cid, "employee_id": emp, "status": "submitted", "submitted_at": date.today().isoformat(),
+             "purpose": h["purpose"], "trip": {"origin": "Jakarta", "destination": h["destination"],
+                                               "start_date": h["start_date"], "end_date": h["end_date"]},
+             "items": [i for i, _ in items], "batch": core.WEB_BATCH}
     trip = {"start_date": h["start_date"], "end_date": h["end_date"]}
-    forward_files(emp, cid, trip, [(it, f) for it, files in items for f in files])
+    pairs = [(it, f) for it, files in items for f in files]
+    try:
+        # One transaction for the whole submit (ADR 0010 §3): the claim, its forwarded messages, the
+        # review state, the draft's submitted_at and the bytes, or none of them.
+        with claim_state.transaction():
+            cid = claim_state.add_claim(claim)  # the id may move on a collision; nothing else names it yet
+            messages = plan_forwards(emp, cid, trip, pairs)
+            for m in messages:
+                m["id"] = claim_state.add_message(m)
+            review_rows = review_after_forward(cid, messages)
+            claim_state.save_review(cid, review_rows)
+            claim_state.mark_draft_submitted(d["id"])
+            for _, f in pairs:
+                _persist_file(f, emp)
+    except Exception as exc:  # noqa: BLE001 - a half-written claim must not exist in memory either
+        raise core.state_not_saved(exc) from exc
+    core.store.claims.append(claim)
+    core.store.inbox.extend(messages)
+    core.REVIEW[cid] = review_rows
     core.DRAFTS.pop(d["id"], None)
     return cid
 
 
 @router.post("/employee/drafts/{did}")
 async def update_draft(did: str, request: Request):
-    d = get_draft(did, core.require_employee(request))
+    live = get_draft(did, core.require_employee(request))
+    # Edits happen on a copy: the draft the page reads only changes once the database kept the new one.
+    d = copy.deepcopy(live)
     form = await request.form()
     _apply_edits(d, form)
     action = str(form.get("action", "save"))
@@ -637,27 +732,33 @@ async def update_draft(did: str, request: Request):
         anchor = f"card-{card['id']}"
     elif verb == "submit":
         if _validate(d):
-            cid = _submit(d)
+            cid = _submit(d)  # stores the claim, the messages, the review and the draft's submitted_at
             return RedirectResponse(f"/employee/claims/{cid}?msg=Submitted", status_code=303)
     if verb == "save":
         _validate(d)
         first = next((c["id"] for c in cards if c["errors"]), "")
         anchor = f"card-{first}" if first else ""
+    try:  # an edited draft is stored too, so a failed submit does not throw the edits away
+        claim_state.save_draft(d)
+    except Exception as exc:  # noqa: BLE001 - a draft the database did not keep is not in memory either
+        raise core.state_not_saved(exc) from exc
+    live.clear()  # in place: anything holding this draft keeps seeing the same dict
+    live.update(d)
     target = f"/employee/drafts/{did}" + (f"#{anchor}" if anchor else "")
     return RedirectResponse(target, status_code=303)
 
 
 @router.get("/employee/drafts/{did}/files/{fid}")
 def draft_file(did: str, fid: str, request: Request):
-    """Serve one uploaded draft file to its owner. The path comes only from the stored name."""
+    """Serve one uploaded draft file to its owner. The path comes only from the stored name, and a file
+    the host's disk lost is restored from the database first (ADR 0010 §5)."""
     emp = core.require_employee(request)
     d = get_draft(did, emp)
     f = next((x for c in d["cards"] for x in c["files"] if x["id"] == fid), None)
     if not f:
         raise HTTPException(404, f"Unknown file {fid}")
-    root = core.UPLOAD_DIR.resolve()
-    path = (root / f["stored"]).resolve()
-    if root not in path.parents or not path.is_file():
+    path = claim_state.restore_file(core.UPLOAD_DIR, f["stored"])
+    if path is None:
         raise HTTPException(404, f"Unknown file {fid}")
     media = FILE_TYPES.get(path.suffix.lower())
     if not media:

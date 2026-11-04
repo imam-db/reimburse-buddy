@@ -51,7 +51,7 @@ memory. Reads keep using memory, so the pages, `check_claim`, triage and masking
 ### 2. Migration `agent/migrations/008_claim_state.sql`
 
 Same rules as 006: idempotent, run by the owner role, the app role `reimburse_app` gets
-`SELECT, INSERT, UPDATE` and **never `DELETE` or `TRUNCATE`**. One row per fact; JSONB holds the same dict
+`SELECT, INSERT, UPDATE` and **never `DELETE` or `TRUNCATE`**. One row per fact; JSON (not JSONB, which reorders keys) holds the same dict
 shape the web code already uses, so no mapping layer is needed.
 
 | Table | Key | Holds |
