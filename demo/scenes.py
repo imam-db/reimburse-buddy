@@ -68,6 +68,7 @@ class DryRunner:
         """Caption bukti lalu jeda baca."""
         self.caption(text)
         self.hold(seconds)
+        self.caption("")
 
     def hold(self, seconds: float | None = None) -> None:
         self._add("hold", f"{PROOF_HOLD if seconds is None else seconds}s")
@@ -100,6 +101,7 @@ class DryRunner:
         self._add("expect_selector", f"{selector} (<= {timeout:g}s)")
 
     def login_as(self, emp: str) -> None:
+        self.caption("")
         self._add("login_as", f"{emp} ({PROFILES.get(emp, emp)})")
 
     def open_same_tab(self, selector: str) -> None:

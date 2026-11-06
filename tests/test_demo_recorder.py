@@ -137,3 +137,27 @@ def test_ch7_requester_is_dewi_not_hendra():
     assert sel and "EMP-100" in sel[0]
     logins = [s.detail for s in steps if s.kind == "login_as"]
     assert logins[0].startswith("EMP-102") and logins[-1].startswith("EMP-101")
+
+
+def test_proof_clears_caption_after_hold_in_dry_run():
+    r = scenes.DryRunner()
+    r.proof("Bukti X", 2)
+    assert [(s.kind, s.detail) for s in r.steps] == [("caption", "Bukti X"), ("hold", "2s"), ("caption", "")]
+
+
+def test_login_as_clears_caption_first():
+    r = scenes.DryRunner()
+    r.login_as("EMP-101")
+    assert (r.steps[0].kind, r.steps[0].detail) == ("caption", "")
+
+
+def test_srt_ends_cue_at_empty_caption():
+    srt = build_srt([(1.0, "Rencana"), (4.0, ""), (9.0, "Lain")], end=12.0)
+    assert "00:00:01,000 --> 00:00:04,000\nRencana" in srt
+    assert "00:00:09,000 --> 00:00:12,000\nLain" in srt
+
+
+def test_caption_js_zoom_and_sticky_bars():
+    js = record.CAPTION_JS
+    assert "__PAGE_ZOOM__" in js and "sticky" in js and "fixed" in js and "scroll" in js
+    assert record.PAGE_ZOOM > 1

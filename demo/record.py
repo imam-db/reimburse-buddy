@@ -32,11 +32,16 @@ ALLOWED_HOSTS = ("127.0.0.1", "localhost")
 PROD_VALUES = ("prod", "production")
 VIEWPORT = {"width": 1920, "height": 1080}
 HEALTH_TIMEOUT = 120
+PAGE_ZOOM = 1.4  # CSS zoom halaman (video tetap 1920x1080, isi tampil lebih besar)
 STEP_TIMEOUT = 20  # detik, bila adegan tidak menyebut batas sendiri
 
 CAPTION_JS = r"""
 (() => {
   const KEY = '__demo_caption';
+  const ZOOM = __PAGE_ZOOM__;
+  function applyZoom() { if (document.documentElement) document.documentElement.style.zoom = String(ZOOM); }
+  applyZoom();
+  document.addEventListener('DOMContentLoaded', applyZoom);
   function ensure() {
     let el = document.getElementById('__demo_caption');
     if (!el) {
@@ -46,7 +51,7 @@ CAPTION_JS = r"""
       el.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);max-width:72vw;' +
         'padding:14px 28px;border-radius:14px;background:rgba(10,14,24,.84);color:#fff;' +
         'font:600 28px/1.35 system-ui,Segoe UI,sans-serif;text-align:center;z-index:2147483647;' +
-        'pointer-events:none;box-shadow:0 6px 28px rgba(0,0,0,.35);display:none';
+        'pointer-events:none;box-shadow:0 6px 28px rgba(0,0,0,.35);display:none;zoom:' + (1 / ZOOM);
       document.documentElement.appendChild(el);
     }
     return el;
@@ -56,9 +61,30 @@ CAPTION_JS = r"""
     const t = sessionStorage.getItem(KEY) || '';
     const el = ensure();
     el.textContent = t;
-    el.style.bottom = document.getElementById('draft-bar') ? '96px' : '28px';  // jangan tutup bar total
     el.style.display = t ? 'block' : 'none';
+    place(el);
   }
+  // Angkat caption di atas bar fixed/sticky yang menempel di dasar viewport (draft-bar, bar "Simpan keputusan", dll.)
+  function place(el) {
+    let lift = 0;
+    const vh = window.innerHeight;
+    for (const n of document.querySelectorAll('body *')) {
+      if (n === el || el.contains(n)) continue;
+      const pos = getComputedStyle(n).position;
+      if (pos !== 'fixed' && pos !== 'sticky') continue;
+      const r = n.getBoundingClientRect();
+      if (r.width < 40 || r.height < 8 || r.height > vh * 0.5) continue;
+      if (r.bottom < vh - 4 || r.bottom > vh + 4 || r.top >= vh) continue;
+      const cs = getComputedStyle(n);
+      if (cs.visibility === 'hidden' || cs.display === 'none' || cs.opacity === '0') continue;
+      lift = Math.max(lift, vh - r.top);
+    }
+    el.style.bottom = (lift ? lift + 16 : 28) + 'px';
+  }
+  let raf = 0;
+  function schedule() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; const el = document.getElementById('__demo_caption'); if (el && el.style.display !== 'none') place(el); }); }
+  window.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('resize', schedule);
   window.__setCaption = (t) => { sessionStorage.setItem(KEY, t); render(); };
   document.addEventListener('DOMContentLoaded', render);
   new MutationObserver((_, ob) => { if (document.body) { render(); ob.disconnect(); } })
@@ -248,6 +274,7 @@ class LiveRunner:
     def proof(self, text: str, seconds: float | None = None) -> None:
         self.caption(text)
         self.hold(seconds)
+        self.caption("")  # caption tidak boleh menempel di layar lain
 
     def goto(self, path: str) -> None:
         self.page.goto(self.base + path, wait_until="domcontentloaded")
@@ -324,6 +351,7 @@ class LiveRunner:
         signed = self.page.locator("#signed-in")
         if signed.count() and name in (signed.first.inner_text() or ""):
             return
+        self.caption("")  # ganti profil: caption lama tidak berlaku di pemilih profil
         if self.page.locator("#demo-profiles").count() == 0:
             if self.page.locator("#logout").count():
                 self.page.locator("#logout").first.click()
@@ -418,7 +446,7 @@ def run_scene(pw, scene: scenes.Scene, *, base: str, out: Path, headed: bool, sl
     browser = pw.chromium.launch(headless=not headed, slow_mo=slow_mo)
     ctx = browser.new_context(viewport=VIEWPORT, record_video_dir=str(out / "_tmp"),
                               record_video_size=VIEWPORT, base_url=base, locale="id-ID")
-    ctx.add_init_script(CAPTION_JS)
+    ctx.add_init_script(CAPTION_JS.replace("__PAGE_ZOOM__", str(PAGE_ZOOM)))
     ctx.set_default_timeout(15000)
     page = ctx.new_page()
     runner = LiveRunner(page, base, state=state, server=server)
