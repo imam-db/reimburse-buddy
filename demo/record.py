@@ -43,9 +43,9 @@ CAPTION_JS = r"""
       el = document.createElement('div');
       el.id = '__demo_caption';
       el.setAttribute('aria-hidden', 'true');
-      el.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);max-width:78vw;' +
+      el.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);max-width:72vw;' +
         'padding:14px 28px;border-radius:14px;background:rgba(10,14,24,.84);color:#fff;' +
-        'font:600 30px/1.35 system-ui,Segoe UI,sans-serif;text-align:center;z-index:2147483647;' +
+        'font:600 28px/1.35 system-ui,Segoe UI,sans-serif;text-align:center;z-index:2147483647;' +
         'pointer-events:none;box-shadow:0 6px 28px rgba(0,0,0,.35);display:none';
       document.documentElement.appendChild(el);
     }
@@ -56,6 +56,7 @@ CAPTION_JS = r"""
     const t = sessionStorage.getItem(KEY) || '';
     const el = ensure();
     el.textContent = t;
+    el.style.bottom = document.getElementById('draft-bar') ? '96px' : '28px';  // jangan tutup bar total
     el.style.display = t ? 'block' : 'none';
   }
   window.__setCaption = (t) => { sessionStorage.setItem(KEY, t); render(); };
@@ -199,6 +200,7 @@ class LiveRunner:
         self.events: list[tuple[float, str]] = []
         self.agent_seconds: float | None = None
         self._step = ""
+        self._pending: str | None = None
 
     # -- util ------------------------------------------------------------------------------------------
     def _loc(self, selector: str):
@@ -218,13 +220,25 @@ class LiveRunner:
     # -- API -------------------------------------------------------------------------------------------
     def step(self, name: str) -> None:
         self._step = name
-        print(f"    - {name}", flush=True)
+        if not self.quiet:
+            print(f"    - {name}", flush=True)
 
     def caption(self, text: str) -> None:
         if self.quiet:
             return
         self.events.append((time.monotonic() - self.t0, text))
-        self.page.evaluate("t => window.__setCaption && window.__setCaption(t)", text)
+        self._pending = text
+        self._apply_caption()
+
+    def _apply_caption(self) -> None:
+        """Pasang caption yang tertunda; di halaman kosong (belum ada navigasi) ditunda sampai goto berikutnya."""
+        if self._pending is None:
+            return
+        try:
+            self.page.evaluate("t => window.__setCaption && window.__setCaption(t)", self._pending)
+            self._pending = None
+        except Exception:  # noqa: BLE001 - about:blank: sessionStorage belum bisa dipakai
+            pass
 
     def hold(self, seconds: float | None = None) -> None:
         if self.quiet:
@@ -237,6 +251,7 @@ class LiveRunner:
 
     def goto(self, path: str) -> None:
         self.page.goto(self.base + path, wait_until="domcontentloaded")
+        self._apply_caption()
 
     def click(self, selector: str) -> None:
         try:
@@ -284,9 +299,18 @@ class LiveRunner:
         self._wait_fn(js, _norm(text), timeout, f"teks '{text}'")
 
     def expect_value(self, selector: str, text: str, timeout: float = STEP_TIMEOUT) -> None:
-        js = ("([s, t]) => [...document.querySelectorAll(s)].some(e => (e.value || '').toLowerCase()"
-              ".includes(t.toLowerCase()))")
-        self._wait_fn(js, [selector, text], timeout, f"nilai '{text}' di {selector}")
+        """Nilai input (bukan teks halaman). Selector boleh memakai sintaks Playwright (:has-text)."""
+        end = time.monotonic() + timeout
+        js = "(els, t) => els.some(e => (e.value || '').toLowerCase().includes(t.toLowerCase()))"
+        while True:
+            try:
+                if self.page.locator(selector).evaluate_all(js, text):
+                    return
+            except Exception:  # noqa: BLE001 - halaman sedang berpindah
+                pass
+            if time.monotonic() > end:
+                raise self._fail(f"tidak muncul dalam {timeout:g}s: nilai '{text}' di {selector}")
+            time.sleep(0.4)
 
     def expect_selector(self, selector: str, timeout: float = STEP_TIMEOUT) -> None:
         from playwright.sync_api import TimeoutError as PWTimeout
@@ -452,6 +476,11 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
     args = parse_args(argv)
     names = list(scenes.SCENES) if args.scene == "all" else [args.scene]
     for n in names:
