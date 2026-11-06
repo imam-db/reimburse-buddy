@@ -206,6 +206,16 @@ def test_the_login_page_becomes_the_picker_with_the_switch_on(client, monkeypatc
     assert r.text.count('class="demo-card"') == 5
 
 
+def test_the_role_legend_is_plain_sentences_without_url_paths(client, monkeypatch):
+    monkeypatch.setenv("REIMBURSE_DEMO_PROFILES", DEMO_ON)
+    html = client.get("/login").text
+    legend = html.split('id="demo-legend"', 1)[1].split("</section>", 1)[0]
+    assert "Karyawan: klaim saya, ajukan klaim baru, dan tanya-jawab klaim." in legend
+    assert "Manager: menjawab permintaan persetujuan dari tim sendiri." in legend
+    assert "Finance: triage, meninjau bukti, memutuskan klaim, dan menyetujui rencana." in legend
+    assert not re.search(r"/(employee|manager|admin)\b", legend)
+
+
 def test_each_card_shows_the_name_department_and_role_chip(client, monkeypatch):
     monkeypatch.setenv("REIMBURSE_DEMO_PROFILES", DEMO_ON)
     html = client.get("/login").text
@@ -449,7 +459,7 @@ def test_the_picker_grid_is_fluid_and_one_column_on_a_phone(client, monkeypatch)
     css = client.get("/static/app.css").text
     grid = css[css.index(".demo-grid {"):css.index(".demo-card {")]
     assert "display: grid" in grid
-    assert "repeat(auto-fit, minmax(15rem, 1fr))" in grid  # fluid tracks, no `width: 720px`
+    assert "repeat(auto-fill, minmax(220px, 1fr))" in grid  # fluid tracks, no fixed `width`
     assert not re.search(r"width:/s*/d{3,}px", grid)
     assert not re.search(r"min-width:/s*/d{3,}px", grid)
     phone = css[css.rindex("@media (max-width: 480px)"):]  # the picker's own narrow-screen block

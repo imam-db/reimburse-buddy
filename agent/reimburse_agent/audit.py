@@ -21,7 +21,6 @@ import functools
 import json
 import os
 import re
-import subprocess
 import threading
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -431,9 +430,45 @@ def _file_hash(path: Path) -> str | None:
 
 @functools.lru_cache(maxsize=1)
 def _git_sha() -> str | None:
+    """HEAD commit read straight from the git metadata files. No subprocess: a child process started from the
+    web server can block forever on its output pipes (the worker hung here)."""
     try:
-        return subprocess.run(["git", "rev-parse", "HEAD"], cwd=Path(__file__).parent, capture_output=True,
-                              text=True, timeout=5).stdout.strip() or None
+        sha_re = re.compile(r"^[0-9a-f]{40}$")
+        here = Path(__file__).resolve()
+        dot_git = next((d / ".git" for d in here.parents if (d / ".git").exists()), None)
+        if dot_git is None:
+            return None
+        gitdir = dot_git
+        if dot_git.is_file():
+            line = dot_git.read_text(encoding="utf-8").strip()
+            if not line.startswith("gitdir:"):
+                return None
+            gitdir = (dot_git.parent / line[len("gitdir:"):].strip()).resolve()
+        common = gitdir
+        cfile = gitdir / "commondir"
+        if cfile.is_file():
+            common = (gitdir / cfile.read_text(encoding="utf-8").strip()).resolve()
+        head = (gitdir / "HEAD").read_text(encoding="utf-8").strip()
+        if sha_re.match(head):
+            return head
+        if not head.startswith("ref:"):
+            return None
+        ref = head[4:].strip()
+        for base in (gitdir, common):
+            f = base / ref
+            if f.is_file():
+                val = f.read_text(encoding="utf-8").strip()
+                if sha_re.match(val):
+                    return val
+        packed = common / "packed-refs"
+        if packed.is_file():
+            for ln in packed.read_text(encoding="utf-8").splitlines():
+                if not ln or ln[0] in "#^":
+                    continue
+                parts = ln.split()
+                if len(parts) == 2 and parts[1] == ref and sha_re.match(parts[0]):
+                    return parts[0]
+        return None
     except Exception:
         return None
 

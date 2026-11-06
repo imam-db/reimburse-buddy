@@ -57,6 +57,15 @@ GAP_NOTE = {  # gap code -> what the employee can do about it
     "late_checkout_unjustified": ("Late check-out perlu dasar rapat dinas (POL-9).",
                                   "Late check-out needs a business-meeting justification (POL-9)."),
 }
+FLIGHT_TICKET_MISSING = ("Tiket pesawat (e-ticket) belum ada. Kirim e-ticket-nya (POL-6).",
+                         "Flight ticket (e-ticket) missing. Send the e-ticket (POL-6).")
+FILE_WAITING = ("Berkas sudah diunggah dan menunggu verifikasi finance.",
+                "The file is uploaded and waiting for finance verification.")
+DOCUMENT_GAPS = frozenset({"receipt_missing", "boarding_pass_missing"})
+CATEGORY_NAME = {  # category code -> (Indonesian, English) name, as the employee pages show it
+    "hotel": ("Hotel", "Hotel"), "flight": ("Penerbangan", "Flight"), "meal": ("Makan", "Meal"),
+    "taxi": ("Taksi", "Taxi"), "per_diem": ("Uang harian", "Per diem"),
+}
 
 
 @dataclass(frozen=True)
@@ -158,17 +167,31 @@ def employee_safe_check(check: dict, render: Render | None = None) -> dict:
     """The rule engine's result as an employee may see it: no approvable/pending totals, no reviewer
     decisions, and every item with a sensitive finding reduced to UNDER_REVIEW."""
     items, any_sensitive = [], False
+    # `pending_items` is added by the web layer: items whose uploaded file still awaits finance's acceptance.
+    # Only the item IDs are used; nothing about the review itself.
+    waiting_ids = set(check.get("pending_items") or [])
     for it in check.get("items", []):
-        base = {"item_id": it["item_id"], "category": it["category"], "claimed": it.get("claimed")}
+        names = CATEGORY_NAME.get(it["category"], (it["category"], it["category"]))
+        base = {"item_id": it["item_id"], "category": it["category"], "category_id": names[0],
+                "category_en": names[1], "claimed": it.get("claimed")}
         if is_sensitive_item(it):
             any_sensitive = True
             items.append({**base, **UNDER_REVIEW})
             continue
         notes_id, notes_en = [], []
+        waiting = it["item_id"] in waiting_ids
         for g in it.get("gaps") or []:
-            if g in GAP_NOTE:
-                notes_id.append(GAP_NOTE[g][0])
-                notes_en.append(GAP_NOTE[g][1])
+            if g in DOCUMENT_GAPS and waiting:
+                note = FILE_WAITING
+            elif g == "receipt_missing" and it["category"] == "flight":
+                note = FLIGHT_TICKET_MISSING
+            elif g in GAP_NOTE:
+                note = GAP_NOTE[g]
+            else:
+                continue
+            if note[0] not in notes_id:
+                notes_id.append(note[0])
+                notes_en.append(note[1])
         if it.get("status") == "rejected":
             for f in it.get("findings") or []:
                 if f.get("status") == "rejected" and f.get("key") not in SENSITIVE_KEYS:

@@ -42,7 +42,9 @@ class _Data:
 
     def check(self, cid):
         from reimburse_buddy.models import to_jsonable
-        return to_jsonable(_web().run_check(cid))  # carries the review state, like the claim pages
+        out = to_jsonable(_web().run_check(cid))  # carries the review state, like the claim pages
+        out["pending_items"] = sorted(_web().pending_items(cid))  # same source as the employee claim page
+        return out
 
 
 def service() -> qa_engine.QAService:
