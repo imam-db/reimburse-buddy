@@ -17,7 +17,8 @@ server pada 4 Nov 2026, dengan `main` di `db0ab9d`. Teks layar di bawah dikutip 
 | **Jangan upload PDF** | PDF butuh Poppler. Di gladi resik, e-ticket PDF tidak terbaca. | Pakai 4 file gambar di bawah. Harga tiket diketik manual. |
 | **Model key ada** | Tanpa key, "Selidiki dengan agent" hanya menampilkan pesan *Kunci model belum diatur*. | Pastikan `DEEPSEEK_API_KEY` ada di env server. Jalankan 1 penyelidikan klaim seed sebelum tampil. |
 | **Backend Postgres** | Momen restart hanya berhasil kalau state disimpan di Neon (ADR 0010). | `REIMBURSE_PLAN_BACKEND=postgres` dan DSN di env. Migrasi 008 sudah ada di production. |
-| **Login dua peran** | Pindah akun di depan juri memakan waktu. | Jendela 1 (normal): masuk sebagai **Rina Wulandari** (EMP-001, karyawan). Jendela 2 (incognito): masuk sebagai **Rani Kusuma** (EMP-102, finance). |
+| **Tanya-jawab aktif** | Tanpa flag, kotak "Tanya-jawab klaim" tidak muncul. | `EMPLOYEE_QA=1` di env server. Kotak ini tidak memakai LLM, jadi tidak ada biaya. |
+| **Login dua peran** | Pindah akun di depan juri memakan waktu. | Dengan `REIMBURSE_DEMO_PROFILES=1` (ADR 0012, hanya di luar production), masuk lewat kartu profil tanpa kata sandi. Jendela 1 (normal): kartu **Rina Wulandari** (karyawan). Jendela 2 (incognito): kartu **Rani Kusuma** (finance). |
 | **Data bersih** | Klaim dari latihan akan muncul sebagai W002, W003, dan seterusnya. | Finance → beranda → "Alat demo" → **Reset demo**. Dengan Postgres, ini membuka epoch baru tanpa menghapus baris. |
 | **File siap di desktop** | Drag-drop harus cepat. | Dari `web/sample_uploads/`: `hotel_majapahit_kencana.png`, `taxi_kota_biru_0310.jpg`, `boarding_pass_qz7520.png`, `unreadable_photo.jpg` |
 
@@ -55,7 +56,17 @@ Ucapkan pesan utama. Lalu: "Saya tunjukkan dengan satu klaim, dari karyawan samp
    - Penerbangan: *! Perlu tindakan: Tiket pesawat belum ada*
    - Makan: *unreadable_photo.jpg (menunggu verifikasi)*
 
-### 0:55–1:20 · Triage finance (jendela 2, Rani)
+### 0:55–1:10 · Karyawan bertanya (jendela 1, Rina)
+
+5a. Di kotak **Tanya-jawab klaim** di bawah, klik tombol cepat **"Berapa plafon hotel?"**.
+5b. **Bukti 1b: chat yang tidak mengarang.** Jawabannya:
+    *"Menurut Pasal 4 (POL-4, Plafon hotel per malam): … kota tier 1 (Jakarta, Surabaya, Denpasar) Rp1.200.000;
+    kota tier 2 Rp800.000. Kelebihan di atas plafon hanya diganti jika ada memo persetujuan yang sudah
+    ditandatangani."*, dengan sumber **Pasal 4**.
+    Katakan: "Chat ini menjawab dari buku aturan dan selalu menyebut pasalnya. Tidak ada LLM di sini, jadi tidak
+    ada angka karangan. Ini juga menjelaskan kenapa hotel Rina menunggu keputusan finance."
+
+### 1:10–1:30 · Triage finance (jendela 2, Rani)
 
 6. Beranda finance menampilkan *"1 klaim baru dari karyawan menunggu triage"* → **Lihat klaim baru**.
 7. **Bukti 2: injection tertangkap.** Kartu `CLM-2026-W001` membawa chip **"Ada instruksi mencurigakan"**.
@@ -63,7 +74,7 @@ Ucapkan pesan utama. Lalu: "Saya tunjukkan dengan satu klaim, dari karyawan samp
    Klaim ini tidak akan pernah ikut persetujuan massal."
 8. Tunjuk **Uang tertahan Rp1.605.000**. Lalu: "Batch seed: 10 klaim, 7 lolos otomatis, 3 pengecualian."
 
-### 1:20–2:00 · Halaman klaim finance
+### 1:30–2:05 · Halaman klaim finance
 
 9. **Bukti 3: angka dari mesin aturan.** Baris atas: *Disetujui Rp2.630.000 dari Rp4.235.000 · tertunda
    Rp1.605.000*, dengan catatan *"Semua angka dihitung oleh mesin aturan, bukan oleh AI."*
@@ -75,7 +86,7 @@ Ucapkan pesan utama. Lalu: "Saya tunjukkan dengan satu klaim, dari karyawan samp
 13. Penerbangan: buka **Minta dokumen ke karyawan**. Pesannya sudah terisi:
     *"Mohon kirim tiket pesawat (e-ticket) untuk Penerbangan (IT-3) tanggal 2 Okt 2026."* → **Kirim**.
 
-### 2:00–2:35 · Agent
+### 2:05–2:35 · Agent
 
 14. **Selidiki dengan agent.** Langkah-langkahnya terlihat langsung: mencari di mailbox, memeriksa kalender,
     menghitung dengan mesin aturan.
@@ -83,12 +94,12 @@ Ucapkan pesan utama. Lalu: "Saya tunjukkan dengan satu klaim, dari karyawan samp
     halaman tampil *Dasar persetujuan* (status, nominal, bukti). Katakan: "Persetujuan terikat pada angka ini.
     Kalau angkanya berubah, persetujuan lama tidak berlaku." → setujui atau tolak.
 
-### 2:35–2:50 · Audit
+### 2:35–2:48 · Audit
 
 16. **Lihat jejak audit.** Penerimaan atau penolakan bukti, keputusan item, dan pesan keluar tercatat beserta
     waktunya.
 
-### 2:50–3:00 · Restart dan penutup
+### 2:48–3:00 · Restart dan penutup
 
 17. **Bukti 6: bukan mock.** Hentikan server lalu jalankan lagi (sudah disiapkan di terminal) → refresh halaman
     klaim. Semuanya masih ada: klaim, keputusan hotel, bukti yang ditolak, dan pesan.
