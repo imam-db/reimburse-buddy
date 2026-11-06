@@ -20,6 +20,7 @@ Status: `Proposed` (written, not yet agreed) → `Accepted` (agreed, work may st
 | [0009](0009-end-to-end-demo-fixes.md) | End-to-end demo: one claim state everywhere, evidence finance can see | Accepted |
 | [0010](0010-claim-state-in-neon.md) | Claim state survives a restart: web writes go to Neon | Accepted |
 | [0011](0011-agent-sees-web-claims.md) | The agent investigation sees the claim as the web app sees it | Accepted |
+| [0012](0012-demo-profiles.md) | "Pilih profil demo": one-click sign-in in the demo environment only | Accepted |
 
 ## Template
 
