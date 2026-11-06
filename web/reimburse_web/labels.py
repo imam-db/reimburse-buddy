@@ -422,6 +422,7 @@ LABELS = {
     "ui_agent_not_configured": "Agen belum dikonfigurasi",
     "ui_agent_note": "Agent membaca data klaim saat penyelidikan dimulai.",
     "ui_agent_investigation": "Investigasi agen: {cid}",
+    "ui_status_word": "Status:",
     "ui_model": "Model",
     "ui_compact": "Mode ringkas",
     "ui_on": "aktif",
