@@ -40,8 +40,8 @@ Ikuti langkah 1–5b di `docs/demo-script.md`. Tanda di layar:
 - Tombol cepat **"Berapa plafon hotel?"** menjawab dengan **Pasal 4**, Rp1.200.000 untuk tier 1.
 - Tambahan untuk tur: tombol **"Apa yang kurang di klaim ini?"** menjawab per item dengan sumber POL-4 dan POL-6.
 
-Catatan: jawaban "Apa yang kurang?" masih menulis kode kategori (`(flight)`, `(meal)`) dan menyebut makan *"bukti
-belum ada"*, sementara halaman klaim menulis *menunggu verifikasi*. Lihat daftar perbaikan di akhir.
+Setelah `fix/demo-rehearsal`, jawabannya: *"IT-1 (Hotel): Melebihi plafon hotel…; IT-3 (Penerbangan): Tiket pesawat
+(e-ticket) belum ada…; IT-4 (Makan): Berkas sudah diunggah dan menunggu verifikasi finance."*
 
 ## Bab 3 · Manager menjawab permintaan (≈ 1 menit) ✓
 
@@ -71,18 +71,22 @@ belum ada"*, sementara halaman klaim menulis *menunggu verifikasi*. Lihat daftar
     `CLM-2026-0120` (klaim milik Hendra). Tombol persetujuan disembunyikan, dan server menolak permintaan yang
     dipaksakan.
 
-## Bab 6 · Agent menyelidiki (≈ 1,5 menit, menunggu dipotong) ⚠
+## Bab 6 · Agent menyelidiki (≈ 1,5 menit, menunggu dipotong) ✓
 
 1. Di klaim web, klik **Selidiki dengan agent**. Halaman menampilkan *"Agent membaca data klaim saat penyelidikan
-   dimulai."* dan langkah-langkah yang berjalan.
-2. Agent mencari bukti, menghitung dengan mesin aturan, lalu berhenti di **gerbang persetujuan** dengan *Dasar
-   persetujuan* sebelum aksi tulis apa pun.
+   dimulai."* lalu langkah-langkah yang berjalan. Langkah pertama muncul sekitar detik ke-40.
+2. Sekitar detik ke-130, agent berhenti di **gerbang persetujuan** dengan status *"menunggu persetujuan"*. Usulannya
+   `request_missing_evidence` untuk IT-3: meminta e-ticket ke Rina.
+   - *Dasar persetujuan*: disetujui **Rp2.630.000**, bukti MSG-W001, MSG-W002, MSG-5201.
+   - Foto buram yang masih menunggu verifikasi tidak ikut dipakai (ADR 0011).
+   - Teks di layar: *"Panggilan ini hanya dijalankan jika Anda menekan Setujui… Persetujuan yang tidak dijawab
+     otomatis ditolak."*
+3. Narasi: "Agent hanya membaca dan mengusulkan. Setiap pesan ke karyawan menunggu persetujuan manusia, dan
+   persetujuan itu terikat pada angka yang tertera."
 
-**Catatan gladi (penting):** dijalankan dari web, run **macet di "Menunggu langkah pertama"**. Penyebabnya bukan
-model: worker tertahan di `audit._git_sha()`, yang menjalankan `git rev-parse` dan tidak pernah selesai (dilihat
-dengan `py-spy`). Batas 5 detiknya tidak efektif karena Python menunggu pipe yang tidak pernah ditutup. Worker yang
-dijalankan langsung, juga lewat `agent_bridge.Run` di luar server, selesai dalam 40–60 detik. **Bab ini belum bisa
-direkam sampai bug ini diperbaiki.**
+Catatan: saat gladi pertama, run dari web macet di `audit._git_sha()`. Bug itu diperbaiki di branch
+`fix/demo-rehearsal` (git HEAD dibaca dari file `.git`, tanpa subprocess), lalu digladi ulang dengan hasil di atas.
+Persetujuan agent yang dijalankan belum sampai ke portal karyawan (lihat ADR 0011, bagian *Not included*).
 
 ## Bab 7 · Permintaan menjadi rencana (≈ 1,5 menit) ✓ (persetujuan ○)
 
@@ -110,7 +114,7 @@ saat permintaan dibuat, jadi cek ulang hasilnya pada hari rekaman.
 
 | # | Temuan | Dampak | Usulan pelaksana |
 |---|---|---|---|
-| 1 | Worker agent macet di `audit._git_sha()` saat dijalankan dari web | **Bab 6 tidak bisa direkam** | Baca commit dari folder `.git` tanpa subprocess (Sonnet, perubahan kecil plus tes) |
-| 2 | Teks mentah *"Ui status word"* di halaman penyelidikan | Terlihat di video | Tambah label yang hilang (Sonnet) |
-| 3 | Tanya-jawab "Apa yang kurang?" menulis kode kategori dan "bukti belum ada" untuk bukti yang menunggu verifikasi | Membingungkan juri | Label kategori dan status menunggu verifikasi (Sonnet) |
-| 4 | Legenda halaman profil menulis path (`/employee`) dan lebar halaman sekitar 570 px | Kosmetik | Kalimat biasa dan halaman lebih lebar (Sonnet) |
+| 1 | ~~Worker agent macet di `audit._git_sha()` saat dijalankan dari web~~ | Diperbaiki di `fix/demo-rehearsal`, digladi ulang ✓ | Sonnet |
+| 2 | ~~Teks mentah *"Ui status word"* di halaman penyelidikan~~ | Diperbaiki: "Status:" ✓ | Sonnet |
+| 3 | ~~Tanya-jawab menulis kode kategori dan "bukti belum ada" untuk bukti yang menunggu verifikasi~~ | Diperbaiki: "IT-4 (Makan): Berkas sudah diunggah dan menunggu verifikasi finance" ✓ | Sonnet |
+| 4 | ~~Legenda halaman profil menulis path dan halaman sempit~~ | Diperbaiki: kalimat biasa, lebar sampai 1040 px ✓ | Sonnet |
