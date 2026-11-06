@@ -265,28 +265,71 @@ class PostgresAuditLog:
     def __init__(self, dsn: str):
         import psycopg  # optional dependency, imported only when used
 
-        self._conn = psycopg.connect(dsn, autocommit=True, prepare_threshold=None)
+        self._psycopg = psycopg
+        self._dsn = dsn
+        self._lock = threading.RLock()
+        self._conn = self._connect()
+
+    def _connect(self):
+        return self._psycopg.connect(self._dsn, autocommit=True, prepare_threshold=None)
+
+    def _run(self, fn):
+        """Run `fn(conn)` under the lock. Neon closes idle connections, so a closed connection or an
+        OperationalError/InterfaceError triggers ONE reconnect and ONE retry. If the reconnect or the retry
+        fails, the exception propagates (callers are fail-closed)."""
+        retryable = tuple(getattr(self._psycopg, n) for n in ("OperationalError", "InterfaceError")
+                          if hasattr(self._psycopg, n)) or (ConnectionError,)
+        with self._lock:
+            try:
+                if getattr(self._conn, "closed", False):
+                    raise ConnectionError("the connection is closed")
+                return fn(self._conn)
+            except retryable + (ConnectionError,):
+                try:
+                    self._conn.close()
+                except Exception:
+                    pass
+                self._conn = self._connect()
+                return fn(self._conn)
 
     def append(self, event: dict) -> bool:
         r = validate(event)
-        with self._conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO audit_events (id, event_key, run_id, action_id, ts, actor, event_type, args_hash,"
-                " payload, sources) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb)"
-                " ON CONFLICT (event_key) DO NOTHING",
-                (r["id"], r["event_key"], r["run_id"], r["action_id"], r["ts"], r["actor"], r["event_type"],
-                 r["args_hash"], json.dumps(r["payload"]), json.dumps(r["sources"])))
-            return cur.rowcount == 1
+        attempts = []
+
+        def op(conn):
+            attempts.append(1)
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO audit_events (id, event_key, run_id, action_id, ts, actor, event_type, args_hash,"
+                    " payload, sources) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb)"
+                    " ON CONFLICT (event_key) DO NOTHING",
+                    (r["id"], r["event_key"], r["run_id"], r["action_id"], r["ts"], r["actor"], r["event_type"],
+                     r["args_hash"], json.dumps(r["payload"]), json.dumps(r["sources"])))
+                if cur.rowcount == 1:
+                    return True
+                if len(attempts) > 1:
+                    # The first INSERT may have landed before the connection dropped. If the stored row is
+                    # this very event (same id), report True; a different id is a genuine duplicate.
+                    cur.execute("SELECT id::text FROM audit_events WHERE event_key = %s", (r["event_key"],))
+                    row = cur.fetchone()
+                    return bool(row) and str(row[0]) == str(r["id"])
+                return False
+
+        return self._run(op)
 
     def list(self, run_id: str | None = None) -> list[dict]:
         q = ("SELECT id::text, event_key, run_id, action_id, ts, actor, event_type, args_hash, payload, sources"
              " FROM audit_events {} ORDER BY seq")
-        with self._conn.cursor() as cur:
-            if run_id is None:
-                cur.execute(q.format(""))
-            else:
-                cur.execute(q.format("WHERE run_id = %s"), (run_id,))
-            rows = cur.fetchall()
+
+        def op(conn):
+            with conn.cursor() as cur:
+                if run_id is None:
+                    cur.execute(q.format(""))
+                else:
+                    cur.execute(q.format("WHERE run_id = %s"), (run_id,))
+                return cur.fetchall()
+
+        rows = self._run(op)
         out = []
         for row in rows:
             d = dict(zip(FIELDS, row))

@@ -173,3 +173,59 @@ def test_reset_clears_requests(client):
     ask(client)
     web.reset_all()
     assert web.store.approval_requests == []
+
+
+def test_request_ids_do_not_repeat_after_reset_demo(client):
+    from reimburse_web import claim_state
+
+    ask(client)
+    rid1 = web.store.approval_requests[0]["id"]
+    as_(client, "EMP-100")
+    assert client.post(f"/manager/requests/{rid1}", data={"decision": "approved"},
+                       follow_redirects=False).status_code == 303
+    claim_state.reset_demo()
+    ask(client)
+    (req,) = web.store.approval_requests
+    assert req["id"] != rid1 and req["status"] == "pending"
+    as_(client, "EMP-100")
+    r = client.post(f"/manager/requests/{req['id']}", data={"decision": "approved"}, follow_redirects=False)
+    assert "sudah dijawab" not in r.headers["location"].replace("%20", " ")
+    assert web.store.approval_requests[0]["status"] == "approved"
+    assert len(events(req["id"])) == 1
+
+
+def test_postgres_max_request_number_reads_every_epoch():
+    from reimburse_web import claim_state
+
+    seen = []
+
+    class Cur:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def execute(self, sql, params=None):
+            seen.append((sql, params))
+
+        def fetchone(self):
+            return (7,)
+
+    class Conn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def cursor(self):
+            return Cur()
+
+    class Pool:
+        def connection(self):
+            return Conn()
+
+    assert claim_state.PostgresClaimRows(Pool()).max_request_number() == 7
+    sql, params = seen[0]
+    assert sql.startswith("SELECT") and "WHERE" not in sql and not params

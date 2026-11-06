@@ -261,8 +261,10 @@ class Investigator:
         self.runs: dict[str, Run] = {}
 
     def command(self, claim_id: str, data_dir: str | None = None) -> list[str]:
-        cmd = ["uv", "--directory", str(AGENT_DIR), "run", "--frozen", "--no-dev", "python", "investigate_worker.py",
-               "--claim", claim_id]
+        cmd = ["uv", "--directory", str(AGENT_DIR), "run", "--frozen", "--no-dev"]
+        if (os.environ.get("REIMBURSE_AUDIT_DATABASE_URL") or "").strip():
+            cmd += ["--extra", "postgres"]  # the worker writes the audit log to Postgres: it needs psycopg
+        cmd += ["python", "investigate_worker.py", "--claim", claim_id]
         if data_dir:
             cmd += ["--data-dir", str(data_dir)]
         return cmd + (["--fake-script", self.fake_script] if self.fake_script else [])
