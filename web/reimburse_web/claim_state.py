@@ -70,6 +70,7 @@ class ClaimRows(Protocol):
     def transaction(self): ...
     def bump_epoch(self) -> int: ...
     def hydrate(self, store, review: dict, drafts: dict) -> None: ...
+    def max_request_number(self) -> int: ...
 
 
 class MemoryClaimRows:
@@ -118,6 +119,9 @@ class MemoryClaimRows:
 
     def hydrate(self, store, review: dict, drafts: dict) -> None:
         return None
+
+    def max_request_number(self) -> int:
+        return 0
 
 
 class PostgresClaimRows:
@@ -316,6 +320,14 @@ class PostgresClaimRows:
     def hydrate(self, store, review: dict, drafts: dict) -> None:
         replay(store, review, drafts, self.load())
 
+    def max_request_number(self) -> int:
+        """Highest APR number of ANY epoch (a SELECT only): request ids must never repeat in the audit log."""
+        with self._cursor() as cur:
+            cur.execute("SELECT COALESCE(MAX(NULLIF(regexp_replace(request_id, '[^0-9]', '', 'g'), '')::int), 0) "
+                        "FROM approval_requests")
+            row = cur.fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+
 
 # --- the process store ---------------------------------------------------------------------
 _ROWS: ClaimRows | None = None
@@ -399,6 +411,7 @@ def transaction():
 
 def hydrate(store, review: dict, drafts: dict) -> None:
     rows().hydrate(store, review, drafts)
+    store.raise_approval_floor(rows().max_request_number())
 
 
 def replay(store, review: dict, drafts: dict, data: dict) -> None:
@@ -506,5 +519,7 @@ def reset_demo() -> None:
     rows().bump_epoch()
     from . import app as web  # late import: app.py imports this module
 
+    floor = web.store.highest_approval()  # ids of earlier epochs stay taken: the audit log is never cleared
     web.reset_all()
+    web.store.raise_approval_floor(floor)
     hydrate(web.store, web.REVIEW, web.DRAFTS)

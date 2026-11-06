@@ -64,11 +64,28 @@ class DataStore:
     def status_log(self) -> list[dict]:
         return []
 
+    # Highest APR number ever handed out in an earlier epoch. `reset()` clears it (a clean store); Reset demo in
+    # the web app carries it over so a request id never repeats in one audit log (run_id approval_request:<id>).
+    approval_floor: int = 0
+
+    @staticmethod
+    def _apr_number(request_id: str) -> int:
+        m = re.search(r"(\d+)$", str(request_id))
+        return int(m.group(1)) if m else 0
+
+    def highest_approval(self) -> int:
+        """The highest APR number in use now or seen before (floor)."""
+        return max([self.approval_floor] + [self._apr_number(r["id"]) for r in self.approval_requests])
+
+    def raise_approval_floor(self, number: int) -> None:
+        self.approval_floor = max(self.approval_floor, int(number))
+
     def reset(self) -> None:
         """Drop all in-memory state (delivered replies, outbox, approvals, status changes) and reload data."""
         for name in ("employees", "policy", "claims", "inbox", "calendar", "memos", "replies",
                      "outbox", "approval_requests", "status_log"):
             self.__dict__.pop(name, None)
+        self.approval_floor = 0
 
     # --- lookups -------------------------------------------------------
     def get_claim(self, claim_id: str) -> dict:
@@ -188,7 +205,7 @@ class DataStore:
         expected = self.get_employee(claim["employee_id"])["manager_id"]
         if manager_id != expected:
             raise ValueError(f"{manager_id} is not the manager of {claim['employee_id']} (expected {expected})")
-        req = {"id": f"APR-{len(self.approval_requests) + 1:03d}", "manager_id": manager_id,
+        req = {"id": f"APR-{self.highest_approval() + 1:03d}", "manager_id": manager_id,
                "claim_id": claim_id, "item_id": item_id, "reason": reason, "status": "pending"}
         self.approval_requests.append(req)
         return req
