@@ -378,16 +378,18 @@ def scene_ch1(r) -> None:
 
 
 def scene_ch2(r) -> None:
-    r.caption("Bab 2 · Karyawan mengirim klaim dan bertanya")
     r.login_as("EMP-001")
+    r.caption("Bab 2 · Karyawan mengirim klaim dan bertanya")
+    r.hold()
     employee_submit_claim(r)
     employee_qa(r, extra=True)
 
 
 def scene_ch3(r) -> None:
     r.step("Rani minta persetujuan atasan")
-    r.caption("Bab 3 · Manager menjawab permintaan")
     r.login_as("EMP-102")
+    r.caption("Bab 3 · Manager menjawab permintaan")
+    r.hold()
     r.goto(f"/admin/claims/{CLAIM}")
     r.expect_selector("#item-IT-1")
     r.caption("Rani, di item hotel: Minta persetujuan atasan")
@@ -414,8 +416,9 @@ def scene_ch3(r) -> None:
 
 def scene_ch4(r) -> None:
     r.step("beranda triage")
-    r.caption("Bab 4 · Triage finance")
     r.login_as("EMP-102")
+    r.caption("Bab 4 · Triage finance")
+    r.hold()
     r.expect_text("1 klaim baru dari karyawan menunggu triage")
     r.caption("Beranda: 1 klaim baru menunggu triage; batch 2026-W43: 10 klaim, 7 bersih, 3 pengecualian")
     r.expect_text("10 klaim, 7 bersih, 3 pengecualian")
@@ -438,8 +441,9 @@ def scene_ch4(r) -> None:
 
 def scene_ch5(r) -> None:
     r.step("5a halaman klaim finance")
-    r.caption("Bab 5 · Halaman klaim finance")
     r.login_as("EMP-102")
+    r.caption("Bab 5 · Halaman klaim finance")
+    r.hold()
     r.goto(f"/admin/claims/{CLAIM}")
     r.expect_selector("#claim-items")
     finance_decide_claim(r)
@@ -463,8 +467,9 @@ def scene_ch5(r) -> None:
 
 def scene_ch6(r) -> None:
     r.step("selidiki dengan agent")
-    r.caption("Bab 6 · Agent menyelidiki")
     r.login_as("EMP-102")
+    r.caption("Bab 6 · Agent menyelidiki")
+    r.hold()
     r.goto(f"/admin/claims/{CLAIM}")
     r.expect_selector("#claim-items")
     r.caption("Agent sedang menyelidiki… (dipercepat saat editing)")
@@ -483,14 +488,17 @@ def scene_ch6(r) -> None:
 
 
 def scene_ch7(r) -> None:
+    r.login_as("EMP-102")  # judul bab tampil setelah login, bukan di halaman pilih profil
     r.caption("Bab 7 · Permintaan menjadi rencana")
+    r.hold()
     intake_plan_flow(r)
 
 
 def scene_ch8(r) -> None:
     r.step("jejak audit")
-    r.caption("Bab 8 · Jejak dan ketahanan")
     r.login_as("EMP-102")
+    r.caption("Bab 8 · Jejak dan ketahanan")
+    r.hold()
     r.goto(f"/admin/claims/{CLAIM}")
     r.click("a:has-text('Lihat jejak audit')")
     r.caption("Lihat jejak audit: log bukti (terima/tolak), keputusan item, dan pesan keluar")
