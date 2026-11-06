@@ -26,7 +26,16 @@ Tanpa `--manage-server`, server harus sudah jalan di `--base` (default `http://1
 restart (`main` langkah 17 dan `ch8`) lalu menulis "Restart the server now, then press Enter".
 
 Opsi lain: `--scene main|ch1..ch8|all` (boleh daftar dipisah koma), `--out recordings`, `--headed` (lihat browser),
-`--slow-mo 250` (ms per aksi), `--dry-run` (cetak langkah dan caption tanpa browser dan server).
+`--slow-mo 250` (ms per aksi), `--dry-run` (cetak langkah dan caption tanpa browser dan server),
+`--no-click-marks` (matikan penanda klik, lihat di bawah).
+
+### Penanda klik
+
+Video Playwright tidak punya kursor, jadi perekam menggambar penanda sebelum setiap klik, centang, dan pilihan
+(termasuk klik "Tolak" di gerbang agent): kotak sorot di sekitar elemen, titik, dan cincin. Penanda tampil sekitar
+0,7 detik sebelum klik, mengikuti elemen saat halaman bergulir, dan elemen digulir ke tengah bila tertutup caption.
+Untuk klik yang memindahkan halaman, penanda hilang bersama halaman lama. Penanda hanya ada di konteks yang direkam,
+tidak di konteks penyiapan. Kodenya di `demo/clickmark.py`; `--dry-run` tidak berubah.
 
 Sebelum setiap adegan perekam masuk sebagai finance dan menekan Reset demo. Adegan yang butuh klaim lebih dulu
 (`ch3` sampai `ch6`, `ch8`) menyiapkannya di konteks terpisah yang tidak direkam.

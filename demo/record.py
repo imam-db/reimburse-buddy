@@ -25,7 +25,7 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from demo import scenes  # noqa: E402
+from demo import clickmark, scenes  # noqa: E402
 from demo.srt import build_srt  # noqa: E402,F401  (diekspor untuk tes)
 
 ALLOWED_HOSTS = ("127.0.0.1", "localhost")
@@ -218,8 +218,9 @@ class LiveRunner:
     """API yang sama dengan scenes.DryRunner, dijalankan lewat Playwright `page`."""
 
     def __init__(self, page, base: str, *, quiet: bool = False, state: dict | None = None,
-                 server: ManagedServer | None = None, t0: float | None = None):
+                 server: ManagedServer | None = None, t0: float | None = None, click_marks: bool = True):
         self.page, self.base, self.quiet = page, base, quiet
+        self.marks = clickmark.enabled(quiet=quiet, click_marks=click_marks)
         self.state = state if state is not None else {}
         self.server = server
         self.t0 = t0 if t0 is not None else time.monotonic()
@@ -276,13 +277,24 @@ class LiveRunner:
         self.hold(seconds)
         self.caption("")  # caption tidak boleh menempel di layar lain
 
+    def _mark(self, loc) -> bool:
+        """Penanda klik sebelum aksi pada elemen (tidak ada saat quiet atau --no-click-marks)."""
+        return self.marks and clickmark.show(loc)
+
+    def _settle(self, loc, marked: bool) -> None:
+        if marked:
+            clickmark.settle(loc)
+
     def goto(self, path: str) -> None:
         self.page.goto(self.base + path, wait_until="domcontentloaded")
         self._apply_caption()
 
     def click(self, selector: str) -> None:
         try:
-            self._loc(selector).click(timeout=15000, no_wait_after=True)
+            loc = self._loc(selector)
+            marked = self._mark(loc)
+            loc.click(timeout=15000, no_wait_after=True)
+            self._settle(loc, marked)
         except Exception as exc:  # noqa: BLE001
             raise self._fail(f"klik gagal: {selector} ({type(exc).__name__})") from exc
 
@@ -300,16 +312,21 @@ class LiveRunner:
     def select(self, selector: str, value: str = "", label: str = "") -> None:
         try:
             loc = self._loc(selector)
+            marked = self._mark(loc)
             loc.select_option(label=label) if label else loc.select_option(value=value)
+            self._settle(loc, marked)
         except Exception as exc:  # noqa: BLE001
             raise self._fail(f"pilih gagal: {selector} ({type(exc).__name__})") from exc
 
     def check(self, selector: str) -> None:
+        loc = self._loc(selector)
+        marked = self._mark(loc)
         try:
-            self._loc(selector).check(timeout=15000)
+            loc.check(timeout=15000)
+            self._settle(loc, marked)
         except Exception:  # noqa: BLE001
             try:
-                self._loc(selector).check(force=True, timeout=5000)
+                loc.check(force=True, timeout=5000)
             except Exception as exc:  # noqa: BLE001
                 raise self._fail(f"centang gagal: {selector} ({type(exc).__name__})") from exc
 
@@ -358,7 +375,10 @@ class LiveRunner:
             else:
                 self.goto("/login")
             self.expect_selector("#demo-profiles")
-        self._loc(f"#demo-{emp}").click(timeout=15000)
+        loc = self._loc(f"#demo-{emp}")
+        marked = self._mark(loc)
+        loc.click(timeout=15000)
+        self._settle(loc, marked)
         self.expect_selector("#signed-in")
         self.expect_text(f"Masuk sebagai {name}")
 
@@ -432,7 +452,7 @@ def _clean_start(pw, base: str, scene: scenes.Scene, server) -> dict:
 
 
 def run_scene(pw, scene: scenes.Scene, *, base: str, out: Path, headed: bool, slow_mo: int,
-              server: ManagedServer | None) -> dict:
+              server: ManagedServer | None, click_marks: bool = True) -> dict:
     ts = datetime.now().strftime("%Y%m%d-%H%M")
     result = {"scene": scene.name, "status": "OK", "seconds": 0.0, "video": "", "note": ""}
     started = time.monotonic()
@@ -449,7 +469,7 @@ def run_scene(pw, scene: scenes.Scene, *, base: str, out: Path, headed: bool, sl
     ctx.add_init_script(CAPTION_JS.replace("__PAGE_ZOOM__", str(PAGE_ZOOM)))
     ctx.set_default_timeout(15000)
     page = ctx.new_page()
-    runner = LiveRunner(page, base, state=state, server=server)
+    runner = LiveRunner(page, base, state=state, server=server, click_marks=click_marks)
     failure = None
     try:
         scene.run(runner)
@@ -503,6 +523,8 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument("--out", default="recordings")
     p.add_argument("--headed", action="store_true")
     p.add_argument("--slow-mo", type=int, default=250)
+    p.add_argument("--no-click-marks", action="store_true",
+                   help="matikan penanda klik (kotak sorot, titik, cincin) di video")
     p.add_argument("--dry-run", action="store_true", help="cetak langkah tanpa browser dan server")
     return p.parse_args(argv)
 
@@ -554,7 +576,8 @@ def main(argv: list[str] | None = None) -> int:
             for n in names:
                 try:
                     results.append(run_scene(pw, scenes.SCENES[n], base=base, out=out, headed=args.headed,
-                                             slow_mo=args.slow_mo, server=server))
+                                             slow_mo=args.slow_mo, server=server,
+                                             click_marks=not args.no_click_marks))
                 except Exception as exc:  # noqa: BLE001
                     results.append({"scene": n, "status": "FAILED", "seconds": 0.0, "video": "", "note": str(exc)})
                 if server is not None and not healthy(base):  # adegan gagal saat server mati: nyalakan lagi
