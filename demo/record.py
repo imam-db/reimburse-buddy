@@ -468,7 +468,7 @@ def print_dry(names: list[str]) -> None:
 
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Rekam video demo reimburse-buddy dengan Playwright.")
-    p.add_argument("--scene", required=True, help="main, ch1..ch8, atau all")
+    p.add_argument("--scene", required=True, help="main, ch1..ch8, all, atau daftar dipisah koma (ch2,ch3)")
     p.add_argument("--base", default="http://127.0.0.1:8090")
     p.add_argument("--manage-server", action="store_true", help="jalankan dan hentikan uvicorn sendiri")
     p.add_argument("--env-file", help="file env untuk server (dengan --manage-server)")
@@ -486,7 +486,7 @@ def main(argv: list[str] | None = None) -> int:
         except (AttributeError, ValueError):
             pass
     args = parse_args(argv)
-    names = list(scenes.SCENES) if args.scene == "all" else [args.scene]
+    names = list(scenes.SCENES) if args.scene == "all" else [s.strip() for s in args.scene.split(",") if s.strip()]
     for n in names:
         if n not in scenes.SCENES:
             print(f"Adegan tidak dikenal: {n}. Pilih: {', '.join(scenes.SCENES)}, all", file=sys.stderr)
