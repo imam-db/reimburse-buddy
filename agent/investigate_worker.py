@@ -182,6 +182,27 @@ def _find(exc: BaseException, kind) -> bool:
     return isinstance(exc, BaseExceptionGroup) and any(_find(e, kind) for e in exc.exceptions)
 
 
+def innermost(exc: BaseException) -> BaseException:
+    """The first leaf of nested ExceptionGroups (the MCP client's TaskGroup hides the real error)."""
+    while isinstance(exc, BaseExceptionGroup) and exc.exceptions:
+        exc = exc.exceptions[0]
+    return exc
+
+
+_URL = re.compile(r"\b[a-z][a-z0-9+.-]*://\S+", re.I)
+_SECRET_KV = re.compile(r"(?i)\b(password|passwd|pwd|api[_-]?key|token|secret)\s*[=:]\s*\S+")
+
+
+def error_message(exc: BaseException) -> str:
+    """'Type: message' of the innermost cause, with URLs (DSNs), key=value secrets and secret env values removed."""
+    cause = innermost(exc)
+    text = f"{type(cause).__name__}: {cause}"
+    for k, v in os.environ.items():
+        if v and len(v) >= 8 and (k.endswith(("_API_KEY", "_TOKEN", "_URL", "_DSN", "_PASSWORD")) or "SECRET" in k):
+            text = text.replace(v, "***")
+    return _SECRET_KV.sub(lambda m: m.group(1) + "=***", _URL.sub("***", text))[:500]
+
+
 async def run(a) -> int:
     try:
         return await _run(a)
@@ -350,7 +371,7 @@ def main() -> None:
     try:
         code = asyncio.run(run(a))
     except Exception as exc:  # report, never a traceback with env in it
-        emit({"type": "error", "code": "exception", "message": f"{type(exc).__name__}: {exc}"})
+        emit({"type": "error", "code": "exception", "message": error_message(exc)})
         code = 1
     sys.exit(code)
 
