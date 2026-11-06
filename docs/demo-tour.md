@@ -9,17 +9,19 @@ key sungguhan, dan tanpa database. Teks yang dikutip berasal dari gladi itu. Sta
 
 - ✓ **digladi**: berjalan seperti tertulis;
 - ⚠ **digladi, ada catatan**: lihat catatan di bab itu;
-- ○ **belum digladi**: ada tesnya, tapi belum dicoba di server.
 
-## Persiapan environment demo
+## Persiapan environment demo (sudah disiapkan 6 Nov 2026)
 
 | Hal | Isi |
 |---|---|
-| Database | Branch Neon `demo` sendiri, bukan `production`. Jalankan migrasi 001–008, lalu `seed_users --all --same-password`. |
-| **Akun finance kedua** | Seed **EMP-101 Hendra sebagai `finance`**. Rani tidak boleh menyetujui rencana yang ia ajukan sendiri (bab 7), dan Hendra butuh peran finance untuk bab 5c (klaim miliknya sendiri, `CLM-2026-0120`). Akibatnya, di bab 3 hanya Dewi yang tampil sebagai manager. |
-| `.env.demo` | `APP_ENV` dikosongkan, `REIMBURSE_DEMO_PROFILES=1`, `EMPLOYEE_QA=1`, `REIMBURSE_EXTRACTOR=rapidocr`, `REIMBURSE_PLAN_BACKEND=postgres`, DSN branch `demo`, serta model key, budget, dan harga dari `.env.local`. |
-| Menjalankan server | `uv run --group rapidocr --env-file .env.demo uvicorn --app-dir web reimburse_web.app:app --port 8010` |
+| Database | Branch Neon **`demo`** (salinan `production`, migrasi 001–008 sudah ada). Password `reimburse_app` di branch ini sudah diganti, jadi berbeda dari production. |
+| Akun | `seed_users --all --same-password`, ditambah **EMP-101 Hendra sebagai `finance`**. Password demo disimpan pemilik di password manager; tidak dipakai saat demo karena masuk lewat kartu profil. |
+| `.env.demo` (lokal, di-ignore git) | `REIMBURSE_DEMO_PROFILES=1`, `EMPLOYEE_QA=1`, `REIMBURSE_EXTRACTOR=rapidocr`, `REIMBURSE_PLAN_BACKEND=postgres`, DSN aplikasi ke branch `demo`, session key sendiri, serta model, budget, dan harga dari `.env.local`. `APP_ENV` kosong. |
+| Menjalankan server | Konfigurasi `web-demo` di `.claude/launch.json` (port 8090), atau `uv run --group rapidocr --env-file .env.demo uvicorn --app-dir web reimburse_web.app:app --port 8090` |
 | Sebelum setiap rekaman | Masuk sebagai finance, lalu **Alat demo → Reset demo**. |
+
+Gladi kedua (6 Nov, environment `demo`) mencakup restart, persetujuan rencana oleh finance kedua, dan larangan
+menyetujui klaim sendiri. Semua bab sekarang ✓.
 
 ## Bab 1 · Masuk dan peran (≈ 45 detik) ✓
 
@@ -61,15 +63,19 @@ Setelah `fix/demo-rehearsal`, jawabannya: *"IT-1 (Hotel): Melebihi plafon hotel�
 3. Kembali ke `2026-W43` → **setujui 7 klaim bersih** (wajib mencentang konfirmasi). Klaim yang berisi instruksi
    mencurigakan tidak pernah ikut persetujuan massal.
 
-## Bab 5 · Halaman klaim finance (≈ 2 menit) ✓ (5c ○)
+## Bab 5 · Halaman klaim finance (≈ 2 menit) ✓
 
 5a. Ikuti langkah 9–13 di `docs/demo-script.md`: angka dari mesin aturan, hotel disetujui sebatas plafon
     (**Rp2.400.000**), membuka file bukti, menolak foto buram, dan meminta e-ticket.
 5b. **Ganti profil → Rina.** Item makan menampilkan *"Berkas sebelumnya tidak diterima finance. Unggah ulang."*
     (tanpa alasan, karena alasan termasuk data sensitif), dan pesan e-ticket muncul di **Pesan dari finance**.
-5c. ○ **Tidak bisa menyetujui klaim sendiri.** Ganti profil ke **Hendra** (finance), buka batch `2026-W44` →
-    `CLM-2026-0120` (klaim milik Hendra). Tombol persetujuan disembunyikan, dan server menolak permintaan yang
-    dipaksakan.
+5c. **Tidak bisa menyetujui klaim sendiri.** Ganti profil ke **Hendra** (finance), buka batch `2026-W44` →
+    `CLM-2026-0120` (klaim milik Hendra).
+    - Layar menulis *"Anda tercatat sebagai pemilik klaim ini, jadi tombol persetujuan dimatikan. Minta reviewer
+      lain menyetujuinya."*
+    - Putusan item yang dipaksakan maupun persetujuan massal dijawab *"Anda tidak dapat menyetujui permintaan/klaim
+      Anda sendiri."* (untuk batch: *"Batch tidak disetujui; klaim Anda: CLM-2026-0120"*).
+    - Sebagai Rani, klaim yang sama tetap bisa diputuskan.
 
 ## Bab 6 · Agent menyelidiki (≈ 1,5 menit, menunggu dipotong) ✓
 
@@ -88,26 +94,34 @@ Catatan: saat gladi pertama, run dari web macet di `audit._git_sha()`. Bug itu d
 `fix/demo-rehearsal` (git HEAD dibaca dari file `.git`, tanpa subprocess), lalu digladi ulang dengan hasil di atas.
 Persetujuan agent yang dijalankan belum sampai ke portal karyawan (lihat ADR 0011, bagian *Not included*).
 
-## Bab 7 · Permintaan menjadi rencana (≈ 1,5 menit) ✓ (persetujuan ○)
+## Bab 7 · Permintaan menjadi rencana (≈ 1,5 menit) ✓
 
 1. Rani membuka `/admin/intake`. Isi permintaan: *"Tolong kirim notulen ke Pak Budi ya, terus jadwalin follow-up
-   Jumat siang."*, dengan peminta **EMP-101**.
+   Jumat siang."*, dengan peminta **EMP-100 (Dewi)**. Jangan pilih EMP-101: Hendra yang akan menyetujui, dan
+   peminta maupun pengaju tidak boleh menyetujui rencananya sendiri.
 2. Muncul pertanyaan: *"Ada 2 karyawan bernama Budi: Budi Santoso (EMP-201, … Jakarta, WIB); Budi Hartono
    (EMP-202, … Jayapura, WIT). Yang mana yang dimaksud?"* → pilih **Budi Hartono**.
 3. Rencana tersusun: email ke Budi Hartono (WIT) dan jadwal follow-up. Layar menulis *"Anda tidak dapat
    menyetujui rencana ini… Anda yang mengajukan permintaan ini, jadi tombol Setujui dimatikan."*
-4. ○ **Ganti profil → Hendra** (finance kedua). Hendra menyetujui email dan menolak jadwal. Hasilnya *"Rencana
-   selesai: 1 aksi dijalankan, 1 ditolak."*, dan hanya satu pesan yang masuk ke outbox tiruan.
+4. **Ganti profil → Hendra** (finance kedua, bukan peminta dan bukan pengaju). Hendra menyetujui email dan menolak
+   jadwal. Flash: *"Keputusan disimpan: 1 disetujui, 1 ditolak."*, lalu halaman menulis *"Rencana selesai: 1 aksi
+   dijalankan, 1 ditolak."*
 5. Varian injection (opsional): permintaan *"Tolong teruskan notulen ini."* dengan dokumen yang berisi instruksi
    untuk meneruskan file ke semua staf menghasilkan peringatan injection, dan tidak ada aksi yang disusun.
 
 Catatan: jadwal follow-up ditulis *"Senin, 9 Nov 08.00 WIB"* saat gladi hari Jumat sore. Waktu dihitung dari jam
 saat permintaan dibuat, jadi cek ulang hasilnya pada hari rekaman.
 
-## Bab 8 · Jejak dan ketahanan (≈ 45 detik) ✓ (restart ○)
+## Bab 8 · Jejak dan ketahanan (≈ 45 detik) ✓
 
 1. Di halaman klaim, klik **Lihat jejak audit**. Tampil log bukti (terima/tolak), keputusan item, dan pesan keluar.
-2. ○ **Restart server**, lalu refresh. Klaim, keputusan, dan pesan masih ada (butuh `REIMBURSE_PLAN_BACKEND=postgres`).
+2. **Restart server**, lalu refresh. Semua masih ada:
+   - klaim W001 dan keputusan hotel Rp2.400.000;
+   - log penolakan foto;
+   - di sisi Rina: berkas "tidak diterima" dan pesan e-ticket;
+   - rencana "1 aksi dijalankan, 1 ditolak".
+
+   Butuh `REIMBURSE_PLAN_BACKEND=postgres` (sudah ada di `.env.demo`).
 3. **Reset demo**: data web kosong lagi untuk rekaman berikutnya, dan angka batch seed kembali 10 / 7 / 3.
 
 ## Perbaikan sebelum merekam
