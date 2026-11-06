@@ -23,6 +23,9 @@ web = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9", "langgraph>
        "langgraph-checkpoint-postgres>=3.2,<3.3", "psycopg-pool>=3.2", "psycopg[binary]>=3.2"]
 ocr = ["pillow>=10", "pytesseract>=0.3.10", "pdf2image>=1.17"]
 rapidocr = ["rapidocr>=3.4", "onnxruntime>=1.18"]
+demo = [
+    "playwright>=1.47",
+]
 
 [build-system]
 requires = ["hatchling"]
