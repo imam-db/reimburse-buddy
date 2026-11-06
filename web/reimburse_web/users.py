@@ -83,6 +83,8 @@ class User:
 class UserStore(Protocol):
     def find_by_email(self, email: str) -> User | None: ...
 
+    def find_by_employee_id(self, employee_id: str) -> User | None: ...
+
     def touch_login(self, user_id: int) -> None: ...
 
 
@@ -91,6 +93,7 @@ class MemoryUserStore:
 
     def __init__(self) -> None:
         self._users: dict[str, User] = {}
+        self._by_employee: dict[str, User] = {}
         self.logins: list[int] = []
         self._next_id = 1
 
@@ -102,10 +105,14 @@ class MemoryUserStore:
         user = User(self._next_id, employee_id, normalize_email(email), stored, role, is_active)
         self._next_id += 1
         self._users[user.email] = user
+        self._by_employee[user.employee_id] = user
         return user
 
     def find_by_email(self, email: str) -> User | None:
         return self._users.get(normalize_email(email))
+
+    def find_by_employee_id(self, employee_id: str) -> User | None:
+        return self._by_employee.get((employee_id or "").strip())
 
     def touch_login(self, user_id: int) -> None:
         self.logins.append(user_id)
@@ -144,6 +151,11 @@ class PostgresUserStore:
     def find_by_email(self, email: str) -> User | None:
         row = self._run("SELECT id, employee_id, email, password_hash, role, is_active FROM app_users"
                         " WHERE email = %s", (normalize_email(email),), True)
+        return User(int(row[0]), row[1], row[2], row[3], row[4], bool(row[5])) if row else None
+
+    def find_by_employee_id(self, employee_id: str) -> User | None:
+        row = self._run("SELECT id, employee_id, email, password_hash, role, is_active FROM app_users"
+                        " WHERE employee_id = %s", ((employee_id or "").strip(),), True)
         return User(int(row[0]), row[1], row[2], row[3], row[4], bool(row[5])) if row else None
 
     def touch_login(self, user_id: int) -> None:

@@ -108,6 +108,18 @@ LABELS = {
     "auth_bad_credentials": "Email atau kata sandi salah.",
     "auth_unavailable": "Layanan masuk sedang bermasalah. Coba lagi sebentar lagi.",
     "auth_rate_limited": "Terlalu banyak percobaan. Coba lagi dalam satu menit.",
+    # demo profile picker (docs/adr/0012-demo-profiles.md, app.py)
+    "demo_picker_title": "Pilih profil",
+    "demo_picker_note": "Mode demo: masuk tanpa kata sandi. Data sintetis.",
+    "demo_picker_empty": "Belum ada akun demo di database ini. Jalankan seed_users lebih dulu.",
+    "demo_email_summary": "Masuk dengan email",
+    "demo_legend_title": "Apa yang bisa dibuka tiap peran",
+    "demo_legend_employee": "Karyawan membuka /employee: klaim saya dan formulir klaim baru.",
+    "demo_legend_reviewer": "Manager membuka /manager: permintaan persetujuan dari timnya.",
+    "demo_legend_finance": "Finance membuka /admin: triage, detail klaim, dan keputusan.",
+    "demo_role_note_employee": "Kirim klaim dan unggah struk",
+    "demo_role_note_reviewer": "Jawab permintaan persetujuan tim",
+    "demo_role_note_finance": "Triage, tinjau bukti, dan putuskan klaim",
     # self-approval guard (web/reimburse_web/app.py, plans.py)
     "self_approval_blocked": "Anda tidak dapat menyetujui permintaan/klaim Anda sendiri.",
     "self_approval_note": ("Anda tercatat sebagai pemilik klaim ini, jadi tombol persetujuan dimatikan. "
@@ -142,6 +154,7 @@ LABELS = {
     "ui_nav_submit_claim": "Ajukan klaim",
     "ui_nav_signed_in": "Masuk sebagai",
     "ui_nav_sign_out": "Keluar",
+    "ui_nav_switch_profile": "Ganti profil",
     "ui_nav_menu": "Menu",
     # error pages (app exception handlers)
     "ui_error_title": "Terjadi kesalahan",
@@ -540,6 +553,12 @@ def label(code) -> str:
         return f"Pakai struk {text[4:]}"
     words = text.replace("_", " ")
     return words[:1].upper() + words[1:]
+
+
+def demo_role_note(role) -> str:
+    """One sentence on what a role does in the demo, for its profile card; the role name as a fallback."""
+    text = LABELS.get(f"demo_role_note_{role}")
+    return text if text else label(role)
 
 
 def person(store_or_employees, emp_id) -> str:

@@ -13,6 +13,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import logging
 import os
 import re
 import time
@@ -44,7 +45,7 @@ from .agent_snapshot import SnapshotError, sweep_old_snapshots
 from .intake import router as intake_router
 from . import manager
 from .manager import router as manager_router
-from .labels import label, person
+from .labels import demo_role_note, label, person
 from .plans import router as plans_router, startup_config_check, startup_sweep
 from .qa import portal_box, router as qa_router
 
@@ -109,10 +110,14 @@ async def require_demo_login(request: Request, call_next):
     A browser navigation (GET/HEAD) is redirected to the form; anything else gets 401, so a script
     cannot post its way in. Each role may only open its own area (employee, manager, finance); a wrong-role
     navigation is sent to the role's landing page, anything else gets 403. With no user store or DSN outside production the gate
-    is off and every request passes through untouched."""
+    is off and every request passes through untouched. `/login/demo` is reachable only while the demo profile
+    picker is on (ADR 0012); with the switch off it is protected like any other route, so the picker can never
+    be posted to."""
     path_token = CURRENT_PATH.set(request.url.path)
     try:
-        if not auth.enabled() or request.url.path in auth.PUBLIC_PATHS or request.url.path.startswith("/static/"):
+        if (not auth.enabled() or request.url.path in auth.PUBLIC_PATHS
+                or request.url.path.startswith("/static/")
+                or (request.url.path == auth.DEMO_LOGIN_PATH and auth.demo_profiles_enabled())):
             return await call_next(request)
         session = auth.session_of(request)
         if session is None:
@@ -272,11 +277,13 @@ def nav_html() -> str:
             home = "/employee"
             links = (_nav_link("/employee", label("ui_nav_my_claims"), path)
                      + _nav_link("/employee/new", label("ui_nav_submit_claim"), path))
+        # With the demo picker on, the same POST /logout lands on /login, so the button says what it does.
+        sign_out = label("ui_nav_switch_profile") if auth.demo_profiles_enabled() else label("ui_nav_sign_out")
         account = (f'<div class="nav-account">'
                    f'<span class="note" id="signed-in">{e(label("ui_nav_signed_in"))} '
                    f'<b>{e(auth.reviewer_name(emp))}</b> ({e(users.ROLE_LABELS.get(role, role))})</span>'
                    f'<form method="post" action="/logout">'
-                   f'<button type="submit" id="logout">{e(label("ui_nav_sign_out"))}</button></form></div>')
+                   f'<button type="submit" id="logout">{e(sign_out)}</button></form></div>')
     return (f'<nav><a class="brand" href="{e(home)}">reimburse-buddy</a>'
             f'<input type="checkbox" id="nav-toggle" class="nav-toggle">'
             f'<label for="nav-toggle" class="nav-toggle-label">'
@@ -444,13 +451,86 @@ def status_tag(s: str) -> str:
 @app.get("/login", response_class=HTMLResponse)
 def login_page(next: str = "", error: str = "", email: str = ""):
     """The only public form: a centered card with email and password. With the gate off (no user store
-    or DSN outside production) it says so instead."""
+    or DSN outside production) it says so instead.
+
+    With the demo profile picker on (ADR 0012) it is the picker instead, and the email form moves inside a
+    closed `<details>`; without the switch the page is exactly the card it was."""
     target = auth.safe_next(next)
     if not auth.enabled():
         return page(label("sign_in"), f"""<div class="box" id="login-off">
 <p id="auth-off">{e(label("auth_off"))}</p>
 <p><a class="btn" href="{e(target)}">{e(label("continue"))}</a></p></div>""")
+    if auth.demo_profiles_enabled():
+        return demo_picker_page(target, error, email)
     return login_card(target, error, email, 401 if error else 200)
+
+
+def initials(name: str) -> str:
+    """'Rina Wulandari' -> 'RW' for the avatar circle; the picker shows initials, never a photo."""
+    parts = [p for p in re.split(r"\s+", (name or "").strip()) if p]
+    if not parts:
+        return "?"
+    if len(parts) == 1:
+        return parts[0][:2].upper()
+    return (parts[0][0] + parts[-1][0]).upper()
+
+
+def employee_card_details(employee_id: str) -> tuple[str, str]:
+    """Name and department from employees.json; the ID alone when the directory has no such row."""
+    try:
+        row = store.get_employee(employee_id)
+    except KeyError:
+        return employee_id, ""
+    return (row.get("name") or employee_id), (row.get("department") or "")
+
+
+def demo_picker_page(target: str, error: str = "", email: str = "") -> HTMLResponse:
+    """The demo-only profile picker (ADR 0012 §4): one card per active demo account, plus a legend of what
+    each role may open and the email form inside a closed `<details>`.
+
+    Every card is a small form, so the page works without JavaScript. The role chip and the role sentence come
+    from the account's own `app_users` row."""
+    cards = []
+    for user in auth.demo_profile_users():
+        name, department = employee_card_details(user.employee_id)
+        cards.append(f"""<li class="demo-card"><form method="post" action="{e(auth.DEMO_LOGIN_PATH)}">
+<input type="hidden" name="next" value="{e(target)}">
+<input type="hidden" name="employee_id" value="{e(user.employee_id)}">
+<button type="submit" class="demo-card-button" id="demo-{e(user.employee_id)}">
+<span class="demo-avatar" aria-hidden="true">{e(initials(name))}</span>
+<span class="demo-name">{e(name)}</span>
+<span class="demo-dept">{e(department)}</span>
+<span class="demo-role">{e(users.ROLE_LABELS.get(user.role, user.role))}</span>
+<span class="demo-role-note">{e(demo_role_note(user.role))}</span>
+</button></form></li>""")
+    grid = (f'<ul class="demo-grid" id="demo-profiles">{"".join(cards)}</ul>' if cards
+            else f'<p class="note" id="demo-profiles-empty">{e(label("demo_picker_empty"))}</p>')
+    legend = "".join(f"<li>{e(label(key))}</li>" for key in
+                     ("demo_legend_employee", "demo_legend_reviewer", "demo_legend_finance"))
+    err = f'<p class="login-error" id="login-error" role="alert" tabindex="-1">{e(error)}</p>' if error else ""
+    # A failed email sign-in reopens the form it came from; the picker stays the way in.
+    open_attr = " open" if (error or email) else ""
+    return HTMLResponse(f"""<!doctype html><html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>{e(label("demo_picker_title"))} · Reimburse Buddy</title>
+<meta name="theme-color" content="#1a5fb4"><link rel="icon" href="{ICON}">
+<link rel="stylesheet" href="{STATIC_URL}"></head><body class="login-shell demo-shell">
+<main class="demo-picker" id="login">
+<h1>{e(label("demo_picker_title"))}</h1>
+<p class="sub" id="demo-mode-note">{e(label("demo_picker_note"))}</p>
+{grid}
+<section class="demo-legend" id="demo-legend"><h2>{e(label("demo_legend_title"))}</h2><ul>{legend}</ul></section>
+{err}
+<details class="demo-email" id="demo-email"{open_attr}><summary>{e(label("demo_email_summary"))}</summary>
+<form method="post" action="/login">
+<input type="hidden" name="next" value="{e(target)}">
+<label for="email">{e(label("email"))}</label>
+<input type="email" id="email" name="email" value="{e(email)}" autocomplete="username" required>
+<label for="password">{e(label("password"))}</label>
+<input type="password" id="password" name="password" autocomplete="current-password" required>
+<button type="submit" class="submit" id="login-submit">{e(label("sign_in"))}</button>
+</form></details>
+</main></body></html>""")
+
 
 
 def login_card(target: str, error: str, email: str, status_code: int) -> HTMLResponse:
@@ -506,6 +586,33 @@ def login_submit(request: Request, email: str = Form(""), password: str = Form("
     auth.clear_failures(ip)
     if target == "/" or not auth.may_open(user.role, target):  # "/" is the form's default: no preference
         target = auth.home_for(user.role)
+    r = RedirectResponse(target, status_code=303)
+    r.set_cookie(auth.COOKIE, auth.new_cookie_value(user.employee_id, user.role), max_age=auth.TTL_SECONDS,
+                 path="/", httponly=True, samesite="lax", secure=auth.is_production())
+    return r
+
+
+@app.post("/login/demo")
+def demo_login(employee_id: str = Form(""), next: str = Form("/")):
+    """Sign in as one of the demo profiles without a password (ADR 0012 §3).
+
+    The same 404 answers a switch that is off, an `employee_id` outside `DEMO_PROFILES` and an account that is
+    missing or inactive, so the route never says which accounts exist. The cookie, its flags and the redirect
+    match `login_submit`; the role comes from the `app_users` row and never from the form."""
+    target = auth.safe_next(next)
+    wanted = (employee_id or "").strip()
+    user = None
+    for candidate in auth.demo_profile_users():
+        if candidate.employee_id == wanted:
+            user = candidate
+            break
+    if user is None:
+        raise HTTPException(404, label("ui_err_404"))
+    if target == "/" or not auth.may_open(user.role, target):  # "/" is the form's default: no preference
+        target = auth.home_for(user.role)
+    # One line per sign-in, and no IP: the audit log keeps its fixed event types, and a password sign-in is
+    # not audited either.
+    logging.getLogger(__name__).info("demo profile sign-in: %s (%s)", user.employee_id, user.role)
     r = RedirectResponse(target, status_code=303)
     r.set_cookie(auth.COOKIE, auth.new_cookie_value(user.employee_id, user.role), max_age=auth.TTL_SECONDS,
                  path="/", httponly=True, samesite="lax", secure=auth.is_production())

@@ -11,6 +11,10 @@ before. In production a missing session key, a missing DSN or an unreachable use
 instead of serving an unprotected app.
 
 Passwords and emails are never logged and never written to the audit log.
+
+The demo profile picker (docs/adr/0012-demo-profiles.md) is a demo-only way in without a password:
+`REIMBURSE_DEMO_PROFILES=1` turns `/login` into a picker of five `app_users` rows, only outside production
+and only with the gate on. Production refuses to start when the switch is set at all.
 """
 
 from __future__ import annotations
@@ -72,6 +76,40 @@ def enabled() -> bool:
     return is_production() or _STORE is not None or bool(users.user_dsn())
 
 
+# --- demo profile picker (ADR 0012) ---------------------------------------------------------------------
+# DEMO ONLY: one-click, passwordless sign-in as one of these accounts, and only outside production.
+DEMO_PROFILES = ("EMP-001", "EMP-003", "EMP-100", "EMP-101", "EMP-102")
+DEMO_PROFILES_ENV = "REIMBURSE_DEMO_PROFILES"
+DEMO_LOGIN_PATH = "/login/demo"
+
+
+def demo_profiles_enabled() -> bool:
+    """The one answer to "is the profile picker on?": the switch is `1`, not production, and the gate is on.
+
+    Pages and routes call this and never read the variable themselves. With the gate off there is no sign-in
+    at all, as before."""
+    return ((os.environ.get(DEMO_PROFILES_ENV) or "").strip() == "1"
+            and not is_production() and enabled())
+
+
+def demo_profile_users() -> list[users.User]:
+    """The accounts a card may stand for: `DEMO_PROFILES` order, and only rows that exist and are active.
+
+    The role is the one on the `app_users` row, never one written here or taken from a request. An empty list
+    when the picker is off (or the user database cannot be read), so a page can never show a card it may not
+    sign in as."""
+    if not demo_profiles_enabled():
+        return []
+    try:
+        store = user_store()
+        if store is None:
+            return []
+        found = [store.find_by_employee_id(emp) for emp in DEMO_PROFILES]
+    except Exception:  # noqa: BLE001 - a user database outage is an empty picker, never a 500 page
+        return []
+    return [u for u in found if u is not None and u.is_active and u.role in users.ROLES]
+
+
 def session_key() -> bytes:
     return (os.environ.get("REIMBURSE_DEMO_SESSION_KEY") or _PROCESS_KEY).encode("utf-8")
 
@@ -84,6 +122,10 @@ def startup_check() -> None:
     installed store (tests) is trusted as is; otherwise the user DSN must exist and connect."""
     if not is_production():
         return
+    if (os.environ.get(DEMO_PROFILES_ENV) or "").strip():
+        raise AuthConfigError(
+            f"APP_ENV=prod must not set {DEMO_PROFILES_ENV}: the demo profile picker signs anyone in without "
+            "a password, so it is refused rather than silently ignored.")
     if _STORE is None:
         if not users.user_dsn():
             raise AuthConfigError(

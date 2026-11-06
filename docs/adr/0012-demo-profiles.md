@@ -61,7 +61,9 @@ accounts from `app_users`, and a click signs in as that account. Production refu
 
 - Each card is a small form: `POST /login/demo` with `employee_id` and `next`. It works without JavaScript.
 - The route:
-  - answers 404 unless `auth.demo_profiles_enabled()`;
+  - is let through the login middleware only while `auth.demo_profiles_enabled()`. With the switch off it is
+    protected like every other route (401 for a POST without a session, 303 for a GET), which the existing
+    "every route needs the cookie" test requires. Inside the route, a switch that is off still answers 404;
   - accepts only an `employee_id` that is in `DEMO_PROFILES` **and** has an active `app_users` row, and answers
     404 otherwise (the same answer, so the route does not reveal which accounts exist);
   - sets the cookie exactly as `login_submit` does (`auth.new_cookie_value(user.employee_id, user.role)`, the
@@ -113,7 +115,8 @@ accounts from `app_users`, and a click signs in as that account. Production refu
   - clicking Rina lands on `/employee`, Dewi on `/manager`, and Rani on `/admin`;
   - "Ganti profil" returns to the picker.
 - A profile without an active `app_users` row is not shown, and `POST /login/demo` for it answers 404. So does
-  an `employee_id` outside `DEMO_PROFILES`, and every request when the switch is off.
+  an `employee_id` outside `DEMO_PROFILES`. With the switch off, the route signs nobody in: the middleware
+  answers 401 (or 404 when the login gate itself is off).
 - `APP_ENV=prod` with `REIMBURSE_DEMO_PROFILES=1` refuses to start, with a message that names the variable.
 - Each demo sign-in writes one server log line with the employee ID and role, and no IP.
 - Without the switch, the existing login tests pass unchanged.
