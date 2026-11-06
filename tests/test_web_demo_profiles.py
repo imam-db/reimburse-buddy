@@ -6,6 +6,7 @@ the rows that exist and are active in `app_users` (here a MemoryUserStore: no da
 """
 
 import logging
+import re
 
 import pytest
 from conftest import TEST_ACCOUNTS, TEST_PASSWORD, install_test_users
@@ -417,3 +418,41 @@ def test_the_demo_session_obeys_the_same_role_rules(client, monkeypatch):
     post_demo(client, "EMP-102")
     assert auth.reviewer_of(client) == "EMP-102"
     assert not auth.may_open(auth.parse(client.cookies[auth.COOKIE]).role, "/employee")
+
+
+# --- the header ---------------------------------------------------------------------------
+def test_a_signed_in_user_sees_ganti_profil_with_the_switch_on(client, monkeypatch):
+    monkeypatch.setenv("REIMBURSE_DEMO_PROFILES", DEMO_ON)
+    post_demo(client, "EMP-102")
+    nav = client.get("/admin").text.split("</nav>")[0]
+    assert 'id="logout"' in nav and "Ganti profil" in nav
+    assert "Keluar" not in nav
+    # The same POST /logout, and it lands on the picker.
+    r = client.post("/logout", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/login"
+    assert "Pilih profil" in client.get("/login").text
+
+
+def test_the_header_still_says_keluar_without_the_switch(client, monkeypatch):
+    monkeypatch.delenv("REIMBURSE_DEMO_PROFILES", raising=False)
+    client.post("/login", data={"email": TEST_ACCOUNTS["EMP-102"][0], "password": TEST_PASSWORD,
+                                "next": "/admin"}, follow_redirects=False)
+    nav = client.get("/admin").text.split("</nav>")[0]
+    assert 'id="logout"' in nav and "Keluar" in nav
+    assert "Ganti profil" not in nav
+
+
+# --- stylesheet ---------------------------------------------------------------------------
+def test_the_picker_grid_is_fluid_and_one_column_on_a_phone(client, monkeypatch):
+    """A 375 px screen must not scroll sideways: no fixed large width on the grid, one column there."""
+    monkeypatch.setenv("REIMBURSE_DEMO_PROFILES", DEMO_ON)
+    css = client.get("/static/app.css").text
+    grid = css[css.index(".demo-grid {"):css.index(".demo-card {")]
+    assert "display: grid" in grid
+    assert "repeat(auto-fit, minmax(15rem, 1fr))" in grid  # fluid tracks, no `width: 720px`
+    assert not re.search(r"width:/s*/d{3,}px", grid)
+    assert not re.search(r"min-width:/s*/d{3,}px", grid)
+    phone = css[css.rindex("@media (max-width: 480px)"):]  # the picker's own narrow-screen block
+    assert ".demo-grid" in phone and "grid-template-columns: 1fr" in phone
+    assert "min-height: 44px" in css[css.index(".demo-card-button {"):css.index(".demo-avatar {")]
+    assert "summary:focus-visible" in css  # the keyboard outline covers the details toggle too

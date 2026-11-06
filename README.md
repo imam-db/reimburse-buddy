@@ -273,6 +273,27 @@ uv --directory web run python -m reimburse_web.seed_users --dsn "$OWNER_DATABASE
 uv --directory web run python -m reimburse_web.seed_users --all --dry-run
 ```
 
+### Demo environment (passwordless profile picker)
+
+For a recorded demo, `REIMBURSE_DEMO_PROFILES=1` turns `/login` into a picker of five profiles — two
+employees, two managers and finance — and one click signs in as that account without a password
+([ADR 0012](docs/adr/0012-demo-profiles.md)). The cards are real rows of `app_users`: the role on the card,
+the landing page and everything the account may open come from that row, never from the request. A card
+appears only for an active row, and `POST /login/demo` answers `404` for any other `employee_id`. The email
+and password form stays, under "Masuk dengan email", and a signed-in user gets "Ganti profil" (the same
+`POST /logout`) instead of "Keluar".
+
+Run it only on a demo database that holds synthetic data:
+
+- a Neon branch of its own (never `production`), with the audit log, the plan state and `app_users` in it;
+- seed the accounts once per demo database:
+  `uv --directory web run python -m reimburse_web.seed_users --dsn "$OWNER_DATABASE_URL" --all --same-password`;
+- never in production: `APP_ENV=prod` with the variable set stops startup with `auth.AuthConfigError`;
+- do not expose that server publicly beyond the demo. Anyone who reaches it can act as any of the five
+  accounts.
+
+Without the variable, `/login` and the header are exactly what they were.
+
 ### Who may approve
 
 The finance user signed in is the actor on every decision. Nobody may approve their own work. The scenes
@@ -396,6 +417,7 @@ Secrets come from the environment (or a git-ignored `.env.local`) and are never 
 | `APP_ENV` | unset | `prod` / `production` requires a Postgres audit log, a user database, a session key and the LLM budget with its prices; refuses JSONL or memory |
 | `REIMBURSE_AUTH_DATABASE_URL` | audit DSN | Postgres DSN for `app_users` (secret; app role). Falls back to `REIMBURSE_AUDIT_DATABASE_URL`. Unset outside production means the login gate is off; unset in production aborts startup |
 | `REIMBURSE_DEMO_SESSION_KEY` | random per process | HMAC key for the login session cookie (`rb_auth`); required in production, set it in any shared deploy (secret) |
+| `REIMBURSE_DEMO_PROFILES` | unset | Demo only: `1` turns `/login` into a passwordless profile picker for five `app_users` accounts ([ADR 0012](docs/adr/0012-demo-profiles.md)). Ignored unless the login gate is on, and production refuses to start with it set at all |
 | `REIMBURSE_AUDIT_DATABASE_URL` | unset | Postgres DSN for the audit log (secret; app role, Neon direct endpoint) |
 | `REIMBURSE_AUDIT_LOG` | unset | JSONL audit log path outside production; unset means in memory |
 | `DEEPSEEK_API_KEY` or `REIMBURSE_AGENT_API_KEY` | unset | Model key for the claim agent (secret) |

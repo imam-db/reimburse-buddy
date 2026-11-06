@@ -1177,6 +1177,172 @@ details > summary + * {
   margin: 0 0 var(--sp-2);
 }
 
+/* --- demo profile picker (ADR 0012) ------------------------------------------ */
+
+/* Same shell as the login card, but wider and aligned to the top: the picker is a page, not a card. */
+.demo-shell {
+  align-items: flex-start;
+  padding: var(--sp-5) var(--sp-4);
+}
+
+.demo-picker {
+  width: 100%;
+  max-width: 720px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: var(--sp-5);
+  box-shadow: var(--shadow-md);
+}
+
+.demo-picker h1 {
+  font-size: 1.5rem;
+  margin: 0 0 4px;
+}
+
+.demo-picker .sub {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0 0 var(--sp-4);
+}
+
+/* One column at 375 px, two or three on a laptop: the track is fluid, never a fixed width. */
+.demo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--sp-3);
+  list-style: none;
+  margin: 0 0 var(--sp-4);
+  padding: 0;
+}
+
+.demo-card {
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.demo-card:hover,
+.demo-card:focus-within {
+  border-color: var(--brand);
+  box-shadow: var(--shadow-sm);
+}
+
+.demo-card form {
+  display: flex;
+  flex: 1;
+}
+
+.demo-card-button {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-height: 44px;
+  padding: var(--sp-3);
+  background: none;
+  border: 0;
+  border-radius: var(--r-md);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.demo-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: var(--sp-2);
+  border-radius: 50%;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.demo-name {
+  font-weight: 600;
+}
+
+.demo-dept,
+.demo-role-note {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.demo-role {
+  display: inline-block;
+  margin: var(--sp-1) 0;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.demo-legend {
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-3);
+  background: var(--surface-2);
+  border-radius: var(--r-md);
+}
+
+.demo-legend h2 {
+  font-size: 0.9rem;
+  margin: 0 0 var(--sp-2);
+}
+
+.demo-legend ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.demo-email {
+  border-top: 1px solid var(--line);
+  padding-top: var(--sp-3);
+}
+
+.demo-email summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.demo-email label {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: var(--sp-3) 0 6px;
+}
+
+.demo-email .submit {
+  width: 100%;
+  margin-top: var(--sp-4);
+}
+
+@media (max-width: 480px) {
+  .demo-picker {
+    padding: var(--sp-4);
+  }
+
+  .demo-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* --- plan confirmation ------------------------------------------------------- */
 
 .notice {

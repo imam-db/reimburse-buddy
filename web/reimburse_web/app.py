@@ -277,11 +277,13 @@ def nav_html() -> str:
             home = "/employee"
             links = (_nav_link("/employee", label("ui_nav_my_claims"), path)
                      + _nav_link("/employee/new", label("ui_nav_submit_claim"), path))
+        # With the demo picker on, the same POST /logout lands on /login, so the button says what it does.
+        sign_out = label("ui_nav_switch_profile") if auth.demo_profiles_enabled() else label("ui_nav_sign_out")
         account = (f'<div class="nav-account">'
                    f'<span class="note" id="signed-in">{e(label("ui_nav_signed_in"))} '
                    f'<b>{e(auth.reviewer_name(emp))}</b> ({e(users.ROLE_LABELS.get(role, role))})</span>'
                    f'<form method="post" action="/logout">'
-                   f'<button type="submit" id="logout">{e(label("ui_nav_sign_out"))}</button></form></div>')
+                   f'<button type="submit" id="logout">{e(sign_out)}</button></form></div>')
     return (f'<nav><a class="brand" href="{e(home)}">reimburse-buddy</a>'
             f'<input type="checkbox" id="nav-toggle" class="nav-toggle">'
             f'<label for="nav-toggle" class="nav-toggle-label">'

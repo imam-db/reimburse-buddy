@@ -154,6 +154,7 @@ LABELS = {
     "ui_nav_submit_claim": "Ajukan klaim",
     "ui_nav_signed_in": "Masuk sebagai",
     "ui_nav_sign_out": "Keluar",
+    "ui_nav_switch_profile": "Ganti profil",
     "ui_nav_menu": "Menu",
     # error pages (app exception handlers)
     "ui_error_title": "Terjadi kesalahan",
