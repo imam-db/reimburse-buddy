@@ -149,11 +149,11 @@ def check_sensitive(s):
         r = ask(s, A, q, ctx=A_DUP)
         assert not re.search(r"dup|duplik|same category|kategori, tanggal|IT-5|receipt_no|nomor bukti", r["answer"], re.I), r
         if s.model.__class__.__name__ == "OfflineQAModel":
-            assert f"IT-6 (taxi): {note}" in r["answer"], r["answer"]
+            assert f"IT-6 ({'Taxi' if r['lang'] == 'en' else 'Taksi'}): {note}" in r["answer"], r["answer"]
     tb = T.QAToolbox(Session(A, "z"), s.data, s.rulebook, render)
     chk = json.loads(tb.call("my_claim_check", {"claim_id": A_DUP}))
     it6 = next(i for i in chk["items"] if i["item_id"] == "IT-6")
-    assert it6 == {"item_id": "IT-6", "category": "taxi", "claimed": it6["claimed"], **T.UNDER_REVIEW}
+    assert it6 == {"item_id": "IT-6", "category": "taxi", "category_id": "Taksi", "category_en": "Taxi", "claimed": it6["claimed"], **T.UNDER_REVIEW}
     assert not re.search(r"dup|approvable|pending|human_decision", json.dumps(chk), re.I)
 
 

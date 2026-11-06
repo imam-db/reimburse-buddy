@@ -58,6 +58,20 @@ def test_identity_only_from_signed_cookie(client):
     assert "CLM-2026-0104" in r.text and "CLM-2026-0101" not in r.text
 
 
+def test_answer_shows_indonesian_categories_and_waiting_files(client, monkeypatch):
+    """Same pending source as the employee claim page: a waiting item is not asked for a receipt again."""
+    cid = "CLM-2026-0110"  # EMP-001; IT-5 (taxi) lacks its receipt
+    login(client, "EMP-001")
+    chk = web.run_check(cid)
+    gap_item = next(r for r in chk.items if "receipt_missing" in [str(g) for g in r.gaps])
+    monkeypatch.setattr(web, "pending_items", lambda c: {gap_item.item_id: ["m1"]})
+    r = client.post("/employee/qa", data={"question": "Apa yang kurang di klaim ini?", "claim_id": cid})
+    box = r.text.split("id='qa'", 1)[1]
+    line = next(ln for ln in box.splitlines() if f"- {gap_item.item_id} (" in ln)
+    assert "menunggu verifikasi finance" in line and "Kirim kwitansi" not in line
+    assert not any(f"({c})" in box for c in ("hotel", "flight", "meal", "taxi", "per_diem"))
+
+
 def test_injection_refused_and_logged(client):
     login(client, "EMP-003")
     before = [c["status"] for c in web.store.claims]

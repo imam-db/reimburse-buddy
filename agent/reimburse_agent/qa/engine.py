@@ -245,7 +245,8 @@ class OfflineQAModel:
         for lg, st, note, none in (("id", "status_id", "note_id", "Pemeriksaan otomatis tidak menemukan kekurangan."),
                                    ("en", "status_en", "note_en", "The automated check found nothing missing.")):
             head = f"{'Klaim' if lg == 'id' else 'Claim'} {chk['claim_id']}: {chk[st]}."
-            lines = [f"- {i['item_id']} ({i['category']}): {i[note]}" for i in open_items]
+            cat = "category_id" if lg == "id" else "category_en"
+            lines = [f"- {i['item_id']} ({i.get(cat) or i['category']}): {i[note]}" for i in open_items]
             out[lg] = head + ("\n" + "\n".join(lines) if lines else " " + none)
         return say(lang, out["id"], out["en"])
 
