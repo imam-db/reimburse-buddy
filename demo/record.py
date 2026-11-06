@@ -255,7 +255,7 @@ class LiveRunner:
 
     def click(self, selector: str) -> None:
         try:
-            self._loc(selector).click(timeout=15000)
+            self._loc(selector).click(timeout=15000, no_wait_after=True)
         except Exception as exc:  # noqa: BLE001
             raise self._fail(f"klik gagal: {selector} ({type(exc).__name__})") from exc
 
@@ -295,8 +295,8 @@ class LiveRunner:
 
     def expect_text(self, text: str, timeout: float = STEP_TIMEOUT) -> None:
         js = ("t => { const s = [...document.body.children].map(e => e.innerText || '').join(' ')"
-              ".replace(/\\s+/g, ' '); return s.includes(t); }")
-        self._wait_fn(js, _norm(text), timeout, f"teks '{text}'")
+              ".replace(/\\s+/g, ' ').toLowerCase(); return s.includes(t); }")
+        self._wait_fn(js, _norm(text).lower(), timeout, f"teks '{text}'")
 
     def expect_value(self, selector: str, text: str, timeout: float = STEP_TIMEOUT) -> None:
         """Nilai input (bukan teks halaman). Selector boleh memakai sintaks Playwright (:has-text)."""
@@ -335,12 +335,16 @@ class LiveRunner:
         self.expect_text(f"Masuk sebagai {name}")
 
     def open_same_tab(self, selector: str) -> None:
+        if self.quiet:
+            return  # penyiapan tanpa rekaman tidak perlu membuka file
         href = self._loc(selector).get_attribute("href")
         if not href:
             raise self._fail(f"tidak ada href: {selector}")
         self.page.goto(href if href.startswith("http") else self.base + href)
 
     def go_back(self) -> None:
+        if self.quiet:
+            return
         self.page.go_back(wait_until="domcontentloaded")
 
     def accept_next_dialog(self) -> None:
