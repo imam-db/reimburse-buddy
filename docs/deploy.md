@@ -9,6 +9,13 @@ Decision and reasons: [ADR 0013](adr/0013-deploy-app-and-demo.md). Two instances
 
 Caddy terminates HTTPS and proxies to the two ports. The files are in [deploy/](../deploy/).
 
+**Privilege separation.** The code and both virtualenvs under `/opt/reimburse-buddy` are owned by `root`; the
+services can read and run them but never change them (so a compromised service cannot rewrite `setup.sh` or code
+that root later runs). Each instance runs as its own system user, `reimburse-app` and `reimburse-demo`, and can
+write only its own state root, `/var/lib/reimburse-buddy/app` or `/var/lib/reimburse-buddy/demo` (mode 750), so a
+compromised public demo cannot read the real app's uploads or state. The managed Python lives in the root-owned
+`/opt/uv-python`.
+
 ## 1. The VPS
 
 - Ubuntu 22.04 or 24.04, at least **2 vCPU, 4 GB RAM, 20 GB SSD**, plus **2 GB swap** (two web processes, an agent
@@ -86,9 +93,10 @@ git clone https://github.com/imam-db/reimburse-buddy.git /opt/reimburse-buddy
 /opt/reimburse-buddy/deploy/setup.sh
 ```
 
-The first run installs `uv` and Caddy, creates the `reimburse` user and `/var/lib/reimburse-buddy/{app,demo}`,
-syncs both Python environments (`uv sync --group rapidocr` and `uv --directory agent sync --extra postgres`),
-installs the units and the Caddyfile, and opens the firewall. It never writes env values. If an env file is
+The first run installs `uv` and Caddy, creates the `reimburse-app` and `reimburse-demo` users and
+`/var/lib/reimburse-buddy/{app,demo}`, makes `/opt/reimburse-buddy` root-owned, builds both Python environments
+as root (`uv sync --group rapidocr` and `uv --directory agent sync --extra postgres`, with
+`UV_PYTHON_INSTALL_DIR=/opt/uv-python`), installs the units and the Caddyfile, and opens the firewall. It never writes env values. If an env file is
 missing it stops and lists it. Then:
 
 1. Copy each example and fill in the values. Both need an LLM budget and prices: the demo is public, and outside
@@ -100,7 +108,8 @@ missing it stops and lists it. Then:
    $EDITOR /etc/reimburse-buddy/app.env /etc/reimburse-buddy/demo.env
    ```
 
-   Use a different `REIMBURSE_DEMO_SESSION_KEY` in each file. `app.env` has `APP_ENV=prod` and no
+   Use a different `REIMBURSE_DEMO_SESSION_KEY` in each file, generated with `openssl rand -hex 32` (production
+   refuses to start with a `CHANGE_ME` placeholder or a key under 32 characters). `app.env` has `APP_ENV=prod` and no
    `REIMBURSE_DEMO_PROFILES`; `demo.env` has `REIMBURSE_DEMO_PROFILES=1` and no `APP_ENV`.
 2. Run `/opt/reimburse-buddy/deploy/setup.sh` again. It fixes the file mode (`root:root`, `600`), enables both
    services and reloads Caddy. It is safe to run as often as needed.
@@ -128,14 +137,49 @@ A startup that aborts shows its reason in `journalctl` (for example a missing `L
 
 ```bash
 cd /opt/reimburse-buddy
-sudo -u reimburse git pull --ff-only
-sudo ./deploy/setup.sh                      # syncs both environments again and refreshes the units
+sudo git pull --ff-only                     # as root: the checkout is root-owned
+sudo ./deploy/setup.sh                      # rebuilds both environments as root (with UV_PYTHON_INSTALL_DIR=/opt/uv-python) and refreshes the units
 sudo systemctl restart reimburse-app reimburse-demo
 ```
+
+Never run `uv sync` as a service user: the services run with `UV_NO_SYNC=1` and cannot write the virtualenvs. To
+sync by hand, run it as root with `UV_PYTHON_INSTALL_DIR=/opt/uv-python uv sync --frozen ...`, exactly as
+`setup.sh` does.
 
 If the release adds a migration, apply it to **both** Neon branches as the owner role before the restart. An
 update restarts both services. Reset demo (`POST /admin/reset`) only exists on the demo instance; it is refused
 in production.
+
+### Migrating an existing VPS (one time, from the shared `reimburse` user)
+
+Older installs ran both services as one `reimburse` user that owned the checkout and a single state directory.
+To move to the separated layout:
+
+```bash
+sudo systemctl stop reimburse-app reimburse-demo
+cd /opt/reimburse-buddy && sudo git pull --ff-only
+sudo ./deploy/setup.sh        # creates reimburse-app / reimburse-demo, re-owns /opt/reimburse-buddy to root,
+                              # rebuilds the environments as root; it leaves the old reimburse user alone
+```
+
+If `setup.sh` stops because an env file is missing, that is fine on an existing VPS only if the files exist; if the
+old layout kept state in `/var/lib/reimburse-buddy/{app,demo}`, hand it to the new owners and start:
+
+```bash
+sudo chown -R reimburse-app:reimburse-app   /var/lib/reimburse-buddy/app
+sudo chown -R reimburse-demo:reimburse-demo /var/lib/reimburse-buddy/demo
+sudo chown -R root:root /opt/reimburse-buddy      # setup.sh already did this; repeat only if you changed anything
+sudo systemctl start reimburse-app reimburse-demo
+curl -fsS http://127.0.0.1:8000/healthz && curl -fsS http://127.0.0.1:8001/healthz
+```
+
+The old `/var/lib/reimburse-buddy/home` (uv cache and managed Python of the old user) is no longer used. Once both
+healthz checks pass and the checks in section 5 are good, remove the old user and its leftovers:
+
+```bash
+sudo rm -rf /var/lib/reimburse-buddy/home
+sudo userdel reimburse
+```
 
 ## Not included
 

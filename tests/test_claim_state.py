@@ -173,7 +173,7 @@ def test_the_web_app_refuses_to_start_with_a_broken_claim_state(monkeypatch):
     monkeypatch.setenv("REIMBURSE_AUDIT_DATABASE_URL", "postgresql://user@db.example:5432/reimburse")
     monkeypatch.setenv("REIMBURSE_PLAN_BACKEND", "postgres")
     install_test_users()
-    monkeypatch.setenv("REIMBURSE_DEMO_SESSION_KEY", "test-session-key-not-a-secret")
+    monkeypatch.setenv("REIMBURSE_DEMO_SESSION_KEY", "test-session-key-not-a-secret-0123456789abcdef")
     monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "2.00")
     monkeypatch.setenv("LLM_PRICE_INPUT_MISS_PER_MTOK", "0.27")
     monkeypatch.setenv("LLM_PRICE_INPUT_HIT_PER_MTOK", "0.07")

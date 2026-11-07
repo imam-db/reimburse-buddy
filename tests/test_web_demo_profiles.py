@@ -466,3 +466,15 @@ def test_the_picker_grid_is_fluid_and_one_column_on_a_phone(client, monkeypatch)
     assert ".demo-grid" in phone and "grid-template-columns: 1fr" in phone
     assert "min-height: 44px" in css[css.index(".demo-card-button {"):css.index(".demo-avatar {")]
     assert "summary:focus-visible" in css  # the keyboard outline covers the details toggle too
+
+
+def test_the_switch_without_a_user_store_refuses_to_start_outside_production(monkeypatch):
+    auth.set_store(None)
+    for var in ("APP_ENV", "REIMBURSE_AUTH_DATABASE_URL", "REIMBURSE_AUDIT_DATABASE_URL"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("REIMBURSE_DEMO_PROFILES", "1")
+    with pytest.raises(auth.AuthConfigError) as exc:
+        auth.startup_check()
+    assert "REIMBURSE_DEMO_PROFILES" in str(exc.value)
+    monkeypatch.delenv("REIMBURSE_DEMO_PROFILES")
+    auth.startup_check()  # the switch unset keeps the old dev behaviour

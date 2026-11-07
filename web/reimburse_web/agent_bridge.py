@@ -47,10 +47,19 @@ LOG_DIR = Path(os.environ.get("REIMBURSE_AGENT_LOG_DIR", Path(tempfile.gettempdi
 _SECRET = re.compile(r"(sk-[A-Za-z0-9_-]{8,}|(?i:(api[_-]?key|authorization|bearer|token)[\"'=: ]+(bearer\s+)?)\S+)")
 
 
+_URL_PASSWORD = re.compile(r"([A-Za-z][A-Za-z0-9+.-]*://[^\s/:@]+:)[^\s/@]+(@)")
+
+
+def _secret_env_name(k: str) -> bool:
+    return (k.endswith("_API_KEY") or k.endswith("_TOKEN") or "SECRET" in k or "SESSION_KEY" in k
+            or k.endswith("_DATABASE_URL") or k.endswith("_DSN") or k == "DATABASE_URL")
+
+
 def redact(text: str) -> str:
     for k, v in os.environ.items():
-        if v and len(v) >= 8 and (k.endswith("_API_KEY") or k.endswith("_TOKEN") or "SECRET" in k):
+        if v and len(v) >= 8 and _secret_env_name(k):
             text = text.replace(v, "***")
+    text = _URL_PASSWORD.sub(r"\1***\2", text)
     return _SECRET.sub("***", text)
 
 

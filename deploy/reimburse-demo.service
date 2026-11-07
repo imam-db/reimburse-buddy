@@ -7,17 +7,20 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=reimburse
-Group=reimburse
+User=reimburse-demo
+Group=reimburse-demo
 WorkingDirectory=/opt/reimburse-buddy
 
 # Secrets and per-instance settings live outside the repo: root-owned, mode 600.
 EnvironmentFile=/etc/reimburse-buddy/demo.env
 
-# Non-secret paths. Uploads and file state are separate per instance so they never mix.
-Environment=HOME=/var/lib/reimburse-buddy/home
-Environment=UV_CACHE_DIR=/var/lib/reimburse-buddy/home/.cache/uv
-Environment=FASTEMBED_CACHE_PATH=/var/lib/reimburse-buddy/home/.cache/fastembed
+# Non-secret paths. Each instance has its own user and state root; nothing else is writable.
+# uv never syncs or writes the root-owned virtualenvs (built by setup.sh as root).
+Environment=HOME=/var/lib/reimburse-buddy/demo/home
+Environment=UV_NO_SYNC=1
+Environment=UV_PYTHON_INSTALL_DIR=/opt/uv-python
+Environment=UV_CACHE_DIR=/var/lib/reimburse-buddy/demo/home/.cache/uv
+Environment=FASTEMBED_CACHE_PATH=/var/lib/reimburse-buddy/demo/home/.cache/fastembed
 Environment=REIMBURSE_PLAN_STORE=/var/lib/reimburse-buddy/demo/plans
 Environment=REIMBURSE_WEB_UPLOADS=/var/lib/reimburse-buddy/demo/uploads
 Environment=REIMBURSE_AGENT_LOG_DIR=/var/lib/reimburse-buddy/demo/agent-runs
@@ -32,9 +35,8 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-# State and uploads, plus the uv home (cache, managed Python) and the two virtualenvs.
-ReadWritePaths=/var/lib/reimburse-buddy
-ReadWritePaths=/opt/reimburse-buddy/.venv /opt/reimburse-buddy/agent/.venv
+# Only this instance's own state root is writable (code and virtualenvs are root-owned).
+ReadWritePaths=/var/lib/reimburse-buddy/demo
 
 [Install]
 WantedBy=multi-user.target
