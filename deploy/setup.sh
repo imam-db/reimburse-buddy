@@ -73,13 +73,14 @@ install -d -o root -g root -m 700 "$BUILD_CACHE"
 
 echo "==> Python environments (as root, read-only for the services)"
 umask 022
-# A virtualenv from an older install points at a Python under the old user's home, which the new service users
-# cannot read: rebuild any venv whose interpreter is not under $UV_PYTHON_DIR.
+# A virtualenv from an older install may point at a Python under the old user's home, which the new service
+# users cannot read: rebuild any venv whose interpreter is missing or not root-owned. A root-owned interpreter
+# (the system Python uv may pick, or one under $UV_PYTHON_DIR) is kept, so a re-run does not rebuild.
 for venv in "$INSTALL_DIR/.venv" "$INSTALL_DIR/agent/.venv"; do
   if [[ -e "$venv" ]]; then
     py="$(readlink -f "$venv/bin/python" 2>/dev/null || true)"
-    if [[ "$py" != "$UV_PYTHON_DIR"/* ]]; then
-      echo "    rebuilding $venv (interpreter ${py:-missing} is outside $UV_PYTHON_DIR)"
+    if [[ -z "$py" || ! -x "$py" || "$(stat -c %U "$py")" != root ]]; then
+      echo "    rebuilding $venv (interpreter ${py:-missing} is missing or not root-owned)"
       rm -rf "$venv"
     fi
   fi
