@@ -310,6 +310,13 @@ def reset_form(text: str) -> str:
             f"onclick=\"return confirm('Reset data demo?')\">{e(text)}</button></form>")
 
 
+def demo_banner() -> str:
+    """ADR 0013: a thin strip on every page while the demo profile picker is on (never in production)."""
+    if not auth.demo_profiles_enabled():
+        return ""
+    return f'<div class="demo-banner" id="demo-banner" role="note">{e(label("demo_banner"))}</div>'
+
+
 def page(title: str, body: str, status_code: int = 200) -> HTMLResponse:
     """The one page shell: language, head metadata, skip link, role-aware header, main and footer."""
     return HTMLResponse(f"""<!doctype html><html lang="id"><head><meta charset="utf-8">
@@ -319,7 +326,7 @@ def page(title: str, body: str, status_code: int = 200) -> HTMLResponse:
 <meta name="theme-color" content="#1a5fb4">
 <link rel="icon" href="{ICON}">
 <link rel="stylesheet" href="{STATIC_URL}"></head><body>
-{ui.skip_link()}<header class="site-header">{nav_html()}</header>
+{demo_banner()}{ui.skip_link()}<header class="site-header">{nav_html()}</header>
 <main id="main" tabindex="-1"><h1>{escape(title)}</h1>{body}</main>
 <footer class="site-footer"><p class="note" id="footer-note">{e(label("ui_footer_note"))}</p></footer>
 <script>window.addEventListener('load',function(){{var a=document.querySelector('.alert');if(a&&!location.hash)a.focus();}});</script>
@@ -514,7 +521,7 @@ def demo_picker_page(target: str, error: str = "", email: str = "") -> HTMLRespo
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>{e(label("demo_picker_title"))} · Reimburse Buddy</title>
 <meta name="theme-color" content="#1a5fb4"><link rel="icon" href="{ICON}">
 <link rel="stylesheet" href="{STATIC_URL}"></head><body class="login-shell demo-shell">
-<main class="demo-picker" id="login">
+{demo_banner()}<main class="demo-picker" id="login">
 <h1>{e(label("demo_picker_title"))}</h1>
 <p class="sub" id="demo-mode-note">{e(label("demo_picker_note"))}</p>
 {grid}

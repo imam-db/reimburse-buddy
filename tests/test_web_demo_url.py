@@ -73,3 +73,26 @@ def test_the_picker_does_not_show_the_link(client, monkeypatch):
     monkeypatch.setenv("REIMBURSE_DEMO_URL", URL)
     monkeypatch.setenv("REIMBURSE_DEMO_PROFILES", "1")
     assert "Coba demo" not in client.get("/login").text
+
+
+# --- demo banner (ADR 0013 section 3) ---------------------------------------------------------
+BANNER = "Mode demo · data sintetis · bisa di-reset kapan saja"
+
+
+def test_banner_is_on_every_page_with_the_picker_on(client, monkeypatch):
+    from conftest import login_as
+    monkeypatch.setenv("REIMBURSE_DEMO_PROFILES", "1")
+    assert BANNER in client.get("/login").text
+    login_as(client, "EMP-102")
+    for path in ("/admin", "/me"):
+        r = client.get(path, follow_redirects=True)
+        assert r.status_code == 200 and BANNER in r.text, path
+
+
+def test_banner_is_absent_with_the_picker_off(client, monkeypatch):
+    from conftest import login_as
+    assert BANNER not in client.get("/login").text
+    login_as(client, "EMP-102")
+    assert BANNER not in client.get("/admin").text
+    monkeypatch.setenv("REIMBURSE_DEMO_PROFILES", "0")
+    assert BANNER not in client.get("/admin").text

@@ -1192,6 +1192,24 @@ details > summary + * {
   margin: 0 0 var(--sp-2);
 }
 
+/* Demo banner (ADR 0013): one thin line above everything while the picker is on. */
+.demo-banner {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-bottom: 1px solid var(--line);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 4px var(--sp-3);
+}
+
+/* The picker shell is a flex row, so the strip is pinned to the top there. */
+.login-shell .demo-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
 /* --- demo profile picker (ADR 0012) ------------------------------------------ */
 
 /* Same shell as the login card, but wider and aligned to the top: the picker is a page, not a card. */
