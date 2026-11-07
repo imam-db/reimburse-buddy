@@ -70,5 +70,5 @@ dengan `--scene all`, adegan berikutnya tetap dijalankan.
 - Reset demo menghapus data web, jadi jangan arahkan ke server yang datanya penting.
 - Adegan `main`, `ch6` memanggil model sungguhan (sekitar satu sen per penyelidikan). Agent selalu ditolak di
   gerbang persetujuan, jadi tidak ada aksi tulis.
-- Setiap `ch3` memakai ID permintaan `APR-001`; pada database dengan audit log Postgres yang sama, menjalankan `ch3`
-  lagi setelah Reset demo dijawab "Permintaan ini sudah dijawab" (jawaban lama masih ada di audit log).
+- Nomor permintaan atasan (`APR-NNN`) tidak pernah berulang, juga setelah Reset demo, karena audit log tidak pernah
+  dihapus. Jadi `ch3` bisa diulang, dan nomor di layar bertambah setiap kali (APR-002, APR-003, ...).
