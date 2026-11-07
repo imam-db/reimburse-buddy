@@ -21,6 +21,7 @@ Status: `Proposed` (written, not yet agreed) → `Accepted` (agreed, work may st
 | [0010](0010-claim-state-in-neon.md) | Claim state survives a restart: web writes go to Neon | Accepted |
 | [0011](0011-agent-sees-web-claims.md) | The agent investigation sees the claim as the web app sees it | Accepted |
 | [0012](0012-demo-profiles.md) | "Pilih profil demo": one-click sign-in in the demo environment only | Accepted |
+| [0013](0013-deploy-app-and-demo.md) | Deploy: the app and the demo side by side, linked by "Coba demo" | Accepted |
 
 ## Template
 
