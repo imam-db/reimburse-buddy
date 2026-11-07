@@ -10,7 +10,7 @@ from reimburse_web import seed_users, users
 
 EXPECTED = {
     "EMP-001": "employee", "EMP-002": "employee", "EMP-003": "employee", "EMP-004": "employee",
-    "EMP-005": "employee", "EMP-100": "reviewer", "EMP-101": "reviewer", "EMP-102": "finance",
+    "EMP-005": "employee", "EMP-100": "reviewer", "EMP-101": "finance", "EMP-102": "finance",
 }
 SHARED = "shared-demo-passphrase"
 
@@ -172,3 +172,11 @@ def test_the_plain_password_never_reaches_stdout_or_stderr(monkeypatch, fake_psy
     captured = capsys.readouterr()
     assert secret not in captured.out and secret not in captured.err
     assert secret not in repr(fake_psycopg["executed"])
+
+
+def test_hendra_derives_finance_and_sari_sits_in_sales_under_dewi():
+    rows = {r["id"]: r for r in json.loads(seed_users.EMPLOYEES.read_text(encoding="utf-8"))}
+    assert (rows["EMP-101"]["department"], rows["EMP-101"]["grade"]) == ("Finance", "manager")
+    assert seed_users.derive_role(rows["EMP-101"]) == "finance"
+    assert (rows["EMP-003"]["department"], rows["EMP-003"]["manager_id"]) == ("Sales", "EMP-100")
+    assert seed_users.derive_role(rows["EMP-003"]) == "employee"

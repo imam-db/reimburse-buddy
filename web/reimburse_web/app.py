@@ -311,6 +311,15 @@ def reset_form(text: str) -> str:
             f"onclick=\"return confirm('Reset data demo?')\">{e(text)}</button></form>")
 
 
+def demo_tools_bar() -> str:
+    """The reset button in a small labelled "Alat demo" corner on the finance page; "" in production."""
+    reset = reset_form(label("ui_demo_reset"))
+    if not reset:
+        return ""
+    return (f'<div class="demo-tools-bar" id="demo-tools-bar"><span class="demo-tools-title">'
+            f'{e(label("ui_demo_tools"))}</span>{reset}</div>')
+
+
 def demo_banner() -> str:
     """ADR 0013: a thin strip on every page while the demo profile picker is on (never in production)."""
     if not auth.demo_profiles_enabled():
@@ -943,7 +952,7 @@ def admin(batch: str = BATCH, msg: str = ""):
                       f'<a href="/admin?batch={e(WEB_BATCH)}">{e(label("ui_new_claims_link"))}</a></div>')
     batch_options = [(BATCH, BATCH), (OWN_BATCH, label("ui_batch_own").format(batch=OWN_BATCH)),
                      (WEB_BATCH, label("ui_batch_web"))]
-    body = f"""{ui.alert(msg, tone="success") if msg else ''}{new_notice}
+    body = f"""{demo_tools_bar()}{ui.alert(msg, tone="success") if msg else ''}{new_notice}
 <form method="get" class="filter"><label>{e(label('ui_batch'))} <select name="batch" aria-label="Pilih batch" onchange="this.form.submit()">{options(batch_options, batch)}</select></label></form>
 <h2 class="visually-hidden">{e(summary)}</h2>
 {ui.stats([ui.stat(label('ui_claims'), t['claims']), ui.stat(label('ui_cleared'), len(cleared)),
@@ -960,8 +969,7 @@ def admin(batch: str = BATCH, msg: str = ""):
 <div class="item-list" id="exceptions">{''.join(cards) or ui.empty_state(label('ui_exceptions_none'))}</div></div>
 <h2>{e(label('ui_all_claims'))}</h2>
 {ui.table([label('ui_claims'), label('ui_employee'), label('ui_batch'), label('ui_status')], others,
-          caption=label('ui_all_claims'))}
-{reset_form(label("ui_demo_reset"))}"""
+          caption=label('ui_all_claims'))}"""
     return page(label("ui_triage_title"), body)
 
 

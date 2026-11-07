@@ -10,8 +10,8 @@ but the web app treats `reviewer` and `finance` the same (`REVIEWER_ROLES` in
 `web/reimburse_web/users.py`): both open every admin page, including batch approval and demo reset.
 The name `reviewer` is left over from the old shared-password demo gate.
 
-The data already describes two different jobs. EMP-100 (Sales) and EMP-101 (Operations) are department
-managers and the `manager_id` of their staff; EMP-102 is in Finance. `request_approval(manager_id, …)`
+The data already describes two different jobs. EMP-100 (Sales) is a department
+manager (since 2026-11, EMP-101 is in Finance and is seeded as finance; Sari, EMP-003, reports to EMP-100) and the `manager_id` of their staff; EMP-102 is in Finance. `request_approval(manager_id, …)`
 already asks the claimant's own manager and refuses anyone else, but nothing lets a manager answer.
 
 ## Decision
