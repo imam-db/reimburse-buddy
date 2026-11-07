@@ -523,3 +523,16 @@ def test_stylesheet_is_public_and_pages_link_it(client):
     login = client.get("/login").text
     assert '<link rel="stylesheet" href="/static/app.css">' in login
     assert "<style>" not in login
+
+
+@pytest.mark.parametrize("key", ["CHANGE_ME_RANDOM_HEX", "xx-change_me-" + "a" * 40, "short-key", "k" * 31])
+def test_prod_refuses_a_placeholder_or_short_session_key_without_echoing_it(prod, store, key):
+    prod.setenv("REIMBURSE_DEMO_SESSION_KEY", key)
+    with pytest.raises(auth.AuthConfigError) as exc:
+        auth.startup_check()
+    assert "REIMBURSE_DEMO_SESSION_KEY" in str(exc.value) and key not in str(exc.value)
+
+
+def test_prod_accepts_a_strong_session_key(prod, store):
+    prod.setenv("REIMBURSE_DEMO_SESSION_KEY", "a1b2c3d4" * 8)
+    auth.startup_check()  # no exception

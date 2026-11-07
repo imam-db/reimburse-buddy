@@ -278,7 +278,7 @@ def prod(ledger_file, monkeypatch):
     monkeypatch.setenv("APP_ENV", "prod")
     monkeypatch.setenv("REIMBURSE_AUDIT_DATABASE_URL", "postgresql://user@db.example:5432/reimburse")
     install_test_users()
-    monkeypatch.setenv("REIMBURSE_DEMO_SESSION_KEY", "test-session-key-not-a-secret")
+    monkeypatch.setenv("REIMBURSE_DEMO_SESSION_KEY", "test-session-key-not-a-secret-0123456789abcdef")
     # Production also defaults the plan state to Postgres (web/reimburse_web/plan_state.py). These tests are
     # about the daily cap, so the plan store stays on disk.
     monkeypatch.setenv("REIMBURSE_PLAN_BACKEND", "file")

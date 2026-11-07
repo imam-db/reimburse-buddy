@@ -92,7 +92,7 @@ def test_startup_accepts_postgres_in_prod(monkeypatch):
     # budget with its prices (web/reimburse_web/spend.py); without them startup stops with
     # AuthConfigError / SpendConfigError, which tests/test_web_auth.py and test_web_cost_cap.py cover.
     install_test_users()
-    monkeypatch.setenv("REIMBURSE_DEMO_SESSION_KEY", "test-session-key-not-a-secret")
+    monkeypatch.setenv("REIMBURSE_DEMO_SESSION_KEY", "test-session-key-not-a-secret-0123456789abcdef")
     monkeypatch.setenv("LLM_DAILY_BUDGET_USD", "2.00")
     monkeypatch.setenv("LLM_PRICE_INPUT_MISS_PER_MTOK", "0.27")
     monkeypatch.setenv("LLM_PRICE_INPUT_HIT_PER_MTOK", "0.07")

@@ -11,7 +11,8 @@ set -euo pipefail
 INSTALL_DIR=/opt/reimburse-buddy
 STATE_DIR=/var/lib/reimburse-buddy
 ENV_DIR=/etc/reimburse-buddy
-SVC_USER=reimburse
+UV_PYTHON_DIR=/opt/uv-python
+BUILD_CACHE=/var/cache/reimburse-buddy-build
 UV_BIN=/usr/local/bin/uv
 
 if [[ $EUID -ne 0 ]]; then
@@ -48,22 +49,45 @@ if ! command -v caddy >/dev/null 2>&1; then
   apt-get install -y -qq caddy
 fi
 
-echo "==> User and directories"
-if ! id "$SVC_USER" >/dev/null 2>&1; then
-  useradd --system --home-dir "$STATE_DIR/home" --create-home --shell /usr/sbin/nologin "$SVC_USER"
-fi
-install -d -o "$SVC_USER" -g "$SVC_USER" -m 750 "$STATE_DIR" "$STATE_DIR/home" "$STATE_DIR/home/.cache"
+echo "==> Users and directories"
+# One system user per instance, each with its own state root: a compromised demo cannot read the app's data.
+# A legacy shared "reimburse" user from an older install is left alone (see docs/deploy.md, migration).
 for inst in app demo; do
-  install -d -o "$SVC_USER" -g "$SVC_USER" -m 750 \
-    "$STATE_DIR/$inst" "$STATE_DIR/$inst/plans" "$STATE_DIR/$inst/uploads" "$STATE_DIR/$inst/agent-runs"
+  u="reimburse-$inst"
+  if ! id "$u" >/dev/null 2>&1; then
+    useradd --system --home-dir "$STATE_DIR/$inst/home" --no-create-home --shell /usr/sbin/nologin "$u"
+  fi
+done
+install -d -o root -g root -m 755 "$STATE_DIR"
+for inst in app demo; do
+  u="reimburse-$inst"
+  install -d -o "$u" -g "$u" -m 750 \
+    "$STATE_DIR/$inst" "$STATE_DIR/$inst/home" "$STATE_DIR/$inst/home/.cache" \
+    "$STATE_DIR/$inst/plans" "$STATE_DIR/$inst/uploads" "$STATE_DIR/$inst/agent-runs"
 done
 install -d -o root -g root -m 755 "$ENV_DIR"
-chown -R "$SVC_USER:$SVC_USER" "$INSTALL_DIR"
+# Code and virtualenvs stay root-owned: the service users can read and execute them, never change them.
+chown -R root:root "$INSTALL_DIR"
+install -d -o root -g root -m 755 "$UV_PYTHON_DIR"
+install -d -o root -g root -m 700 "$BUILD_CACHE"
 
-echo "==> Python environments (as $SVC_USER)"
-as_svc() { runuser -u "$SVC_USER" -- env HOME="$STATE_DIR/home" UV_CACHE_DIR="$STATE_DIR/home/.cache/uv" "$@"; }
-as_svc "$UV_BIN" --directory "$INSTALL_DIR" sync --frozen --group rapidocr
-as_svc "$UV_BIN" --directory "$INSTALL_DIR/agent" sync --frozen --extra postgres
+echo "==> Python environments (as root, read-only for the services)"
+umask 022
+# A virtualenv from an older install points at a Python under the old user's home, which the new service users
+# cannot read: rebuild any venv whose interpreter is not under $UV_PYTHON_DIR.
+for venv in "$INSTALL_DIR/.venv" "$INSTALL_DIR/agent/.venv"; do
+  if [[ -e "$venv" ]]; then
+    py="$(readlink -f "$venv/bin/python" 2>/dev/null || true)"
+    if [[ "$py" != "$UV_PYTHON_DIR"/* ]]; then
+      echo "    rebuilding $venv (interpreter ${py:-missing} is outside $UV_PYTHON_DIR)"
+      rm -rf "$venv"
+    fi
+  fi
+done
+as_root() { env UV_PYTHON_INSTALL_DIR="$UV_PYTHON_DIR" UV_CACHE_DIR="$BUILD_CACHE" "$@"; }
+as_root "$UV_BIN" --directory "$INSTALL_DIR" sync --frozen --group rapidocr
+as_root "$UV_BIN" --directory "$INSTALL_DIR/agent" sync --frozen --extra postgres
+chmod -R go+rX,go-w "$INSTALL_DIR/.venv" "$INSTALL_DIR/agent/.venv" "$UV_PYTHON_DIR"
 
 echo "==> systemd units and Caddyfile"
 install -m 644 "$HERE/reimburse-app.service" /etc/systemd/system/reimburse-app.service

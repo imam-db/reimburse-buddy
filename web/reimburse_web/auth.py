@@ -82,6 +82,8 @@ def enabled() -> bool:
 DEMO_PROFILES = ("EMP-001", "EMP-003", "EMP-100", "EMP-101", "EMP-102")
 DEMO_PROFILES_ENV = "REIMBURSE_DEMO_PROFILES"
 DEMO_LOGIN_PATH = "/login/demo"
+_TRUTHY = ("1", "true", "yes", "on")
+MIN_SESSION_KEY_LEN = 32
 
 # ADR 0013: the real app's login card may link to the separately deployed demo.
 DEMO_URL_ENV = "REIMBURSE_DEMO_URL"
@@ -152,6 +154,11 @@ def startup_check() -> None:
     `REIMBURSE_DEMO_URL` is validated in every environment, so a bad link never reaches a page."""
     demo_url()
     if not is_production():
+        if ((os.environ.get(DEMO_PROFILES_ENV) or "").strip().lower() in _TRUTHY and not enabled()):
+            raise AuthConfigError(
+                f"{DEMO_PROFILES_ENV} is on but the login gate is off (no user database configured): every "
+                "route would be open without a sign-in. Set REIMBURSE_AUTH_DATABASE_URL (or "
+                f"REIMBURSE_AUDIT_DATABASE_URL), or unset {DEMO_PROFILES_ENV}.")
         return
     if (os.environ.get(DEMO_PROFILES_ENV) or "").strip():
         raise AuthConfigError(
@@ -168,10 +175,15 @@ def startup_check() -> None:
             raise AuthConfigError(
                 f"APP_ENV=prod: cannot connect to the user database ({type(exc).__name__}). "
                 "Check REIMBURSE_AUTH_DATABASE_URL and that migration 007_app_users.sql is applied.") from None
-    if not (os.environ.get("REIMBURSE_DEMO_SESSION_KEY") or "").strip():
+    key = (os.environ.get("REIMBURSE_DEMO_SESSION_KEY") or "").strip()
+    if not key:
         raise AuthConfigError(
             "APP_ENV=prod requires REIMBURSE_DEMO_SESSION_KEY: a random per-process key logs everyone "
             "out on restart and breaks with more than one instance.")
+    if "change_me" in key.lower() or len(key) < MIN_SESSION_KEY_LEN:
+        raise AuthConfigError(
+            f"APP_ENV=prod: REIMBURSE_DEMO_SESSION_KEY is a placeholder or shorter than {MIN_SESSION_KEY_LEN} "
+            "characters. Generate one with: openssl rand -hex 32")
 
 
 # --- session cookie ------------------------------------------------------------------------------------
