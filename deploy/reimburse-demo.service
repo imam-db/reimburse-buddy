@@ -1,0 +1,40 @@
+# Reimburse Buddy: the public demo (profile picker, ADR 0012), port 8001.
+# Installed by deploy/setup.sh to /etc/systemd/system/reimburse-demo.service (ADR 0013).
+[Unit]
+Description=Reimburse Buddy (demo)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=reimburse
+Group=reimburse
+WorkingDirectory=/opt/reimburse-buddy
+
+# Secrets and per-instance settings live outside the repo: root-owned, mode 600.
+EnvironmentFile=/etc/reimburse-buddy/demo.env
+
+# Non-secret paths. Uploads and file state are separate per instance so they never mix.
+Environment=HOME=/var/lib/reimburse-buddy/home
+Environment=UV_CACHE_DIR=/var/lib/reimburse-buddy/home/.cache/uv
+Environment=FASTEMBED_CACHE_PATH=/var/lib/reimburse-buddy/home/.cache/fastembed
+Environment=REIMBURSE_PLAN_STORE=/var/lib/reimburse-buddy/demo/plans
+Environment=REIMBURSE_WEB_UPLOADS=/var/lib/reimburse-buddy/demo/uploads
+Environment=REIMBURSE_AGENT_LOG_DIR=/var/lib/reimburse-buddy/demo/agent-runs
+
+# Listen on loopback only; Caddy is the public side.
+ExecStart=/usr/local/bin/uv run --frozen --group rapidocr uvicorn --app-dir web reimburse_web.app:app --host 127.0.0.1 --port 8001
+Restart=on-failure
+RestartSec=5
+
+# Basic hardening.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# State and uploads, plus the uv home (cache, managed Python) and the two virtualenvs.
+ReadWritePaths=/var/lib/reimburse-buddy
+ReadWritePaths=/opt/reimburse-buddy/.venv /opt/reimburse-buddy/agent/.venv
+
+[Install]
+WantedBy=multi-user.target

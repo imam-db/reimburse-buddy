@@ -1,0 +1,13 @@
+# Installed by deploy/setup.sh to /etc/caddy/Caddyfile (ADR 0013).
+# Caddy gets and renews the HTTPS certificates by itself. The DNS A records for both names must already point
+# at this server, and ports 80 and 443 must be open.
+
+reimbursebuddy.my.id {
+	encode gzip
+	reverse_proxy 127.0.0.1:8000
+}
+
+demo.reimbursebuddy.my.id {
+	encode gzip
+	reverse_proxy 127.0.0.1:8001
+}
