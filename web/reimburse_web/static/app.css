@@ -1215,7 +1215,7 @@ details > summary + * {
 /* Same shell as the login card, but wider and aligned to the top: the picker is a page, not a card. */
 .demo-shell {
   align-items: flex-start;
-  padding: var(--sp-5) var(--sp-4);
+  padding: calc(var(--sp-5) + 28px) var(--sp-4) var(--sp-5);
 }
 
 .demo-picker {
