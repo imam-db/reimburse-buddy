@@ -67,6 +67,8 @@ class ClaimRows(Protocol):
     def save_file(self, stored_as: str, data: bytes, owner_id: str, content_type: str = "",
                   sha256: str = "") -> None: ...
     def read_file(self, stored_as: str) -> bytes | None: ...
+    def uploaded_bytes_since(self, owner_id: str, seconds: float) -> int: ...
+    def expire_draft(self, draft_id: str, stored: list[str], owner_id: str) -> None: ...
     def transaction(self): ...
     def bump_epoch(self) -> int: ...
     def hydrate(self, store, review: dict, drafts: dict) -> None: ...
@@ -108,6 +110,12 @@ class MemoryClaimRows:
         return None
 
     def read_file(self, stored_as: str) -> bytes | None:
+        return None
+
+    def uploaded_bytes_since(self, owner_id: str, seconds: float) -> int:
+        return 0
+
+    def expire_draft(self, draft_id: str, stored: list[str], owner_id: str) -> None:
         return None
 
     @contextmanager
@@ -288,6 +296,28 @@ class PostgresClaimRows:
             row = cur.fetchone()
         return bytes(row[0]) if row and row[0] is not None else None
 
+    def uploaded_bytes_since(self, owner_id: str, seconds: float) -> int:
+        """Bytes this owner stored in the last `seconds` (uploaded_files.created_at), current epoch."""
+        with self._cursor() as cur:
+            cur.execute("SELECT COALESCE(SUM(size_bytes), 0) FROM uploaded_files WHERE epoch = %s "
+                        "AND owner_id = %s AND created_at > now() - make_interval(secs => %s)",
+                        (self.epoch(), owner_id, float(seconds)))
+            row = cur.fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+
+    def expire_draft(self, draft_id: str, stored: list[str], owner_id: str) -> None:
+        """Retire an unsubmitted draft without DELETE (the app role has none, see 008): setting
+        submitted_at takes the row out of the startup replay, and the file rows keep their key but lose
+        their bytes (UPDATE only). Only rows of this owner and only an unsubmitted draft are touched."""
+        with self._cursor() as cur:
+            cur.execute("UPDATE employee_drafts SET submitted_at = now(), updated_at = now() "
+                        "WHERE epoch = %s AND draft_id = %s AND employee_id = %s AND submitted_at IS NULL",
+                        (self.epoch(), draft_id, owner_id))
+            for name in stored:
+                cur.execute("UPDATE uploaded_files SET content = %s, size_bytes = 0 "
+                            "WHERE epoch = %s AND stored_as = %s AND owner_id = %s",
+                            (b"", self.epoch(), str(name), owner_id))
+
     # --- startup replay ------------------------------------------------------------------------
     def load(self) -> dict:
         """The stored rows of the current epoch, in the order they were written."""
@@ -305,9 +335,14 @@ class PostgresClaimRows:
                        for row in cur.fetchall()]
             cur.execute("SELECT claim_id, review FROM claim_reviews WHERE epoch = %s", (epoch,))
             reviews = [(row[0], _decode(row[1])) for row in cur.fetchall()]
-            cur.execute("SELECT draft FROM employee_drafts WHERE epoch = %s AND submitted_at IS NULL "
+            cur.execute("SELECT draft, updated_at FROM employee_drafts WHERE epoch = %s AND submitted_at IS NULL "
                         "ORDER BY updated_at, draft_id", (epoch,))
-            drafts = [_decode(row[0]) for row in cur.fetchall()]
+            drafts = []
+            for row in cur.fetchall():
+                draft = _decode(row[0])
+                if row[1] is not None:  # the row's clock is the draft's age (it expires on this)
+                    draft["updated_at"] = row[1].isoformat()
+                drafts.append(draft)
             cur.execute("SELECT message FROM outbox_messages WHERE epoch = %s ORDER BY created_at, message_id",
                         (epoch,))
             outbox = [_decode(row[0]) for row in cur.fetchall()]
@@ -400,6 +435,14 @@ def save_file(stored_as: str, data: bytes, owner_id: str, content_type: str = ""
 
 def read_file(stored_as: str) -> bytes | None:
     return rows().read_file(stored_as)
+
+
+def uploaded_bytes_since(owner_id: str, seconds: float) -> int:
+    return rows().uploaded_bytes_since(owner_id, seconds)
+
+
+def expire_draft(draft_id: str, stored: list[str], owner_id: str) -> None:
+    rows().expire_draft(draft_id, stored, owner_id)
 
 
 @contextmanager
@@ -512,6 +555,9 @@ def startup_hydrate() -> None:
     from . import app as web  # late import: app.py imports this module
 
     hydrate(web.store, web.REVIEW, web.DRAFTS)
+    from . import upload_flow  # late import, as above: expire drafts past their TTL now that they are loaded
+
+    upload_flow.startup_prune()
 
 
 def reset_demo() -> None:

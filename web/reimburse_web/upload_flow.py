@@ -11,12 +11,14 @@ import asyncio
 import copy
 import hashlib
 import json
+import logging
 import os
 import re
+import time
 import uuid
 from urllib.parse import quote
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -34,12 +36,14 @@ from . import auth
 from . import claim_state
 from . import plans  # noqa: F401  # puts agent/ on sys.path
 from . import ui
+from . import upload_quota
 from .labels import label
 from reimburse_agent.qa.tools import UNDER_REVIEW, is_sensitive_item  # noqa: E402  # same masking as Q&A
 from reimburse_buddy.models import to_jsonable  # noqa: E402
 from .extract import DOC_TYPES, FIELDS, LOW_CONFIDENCE, Draft, get_extractor
 
 router = APIRouter()
+log = logging.getLogger(__name__)
 e = core.e
 EXTRACTED = ("ocr", "pdf_text", "vision")
 DOC_TO_CATEGORY = {"hotel_receipt": "hotel", "taxi_receipt": "taxi", "meal_receipt": "meal",
@@ -111,6 +115,80 @@ async def _store_and_extract(data: bytes, safe: str, prefix: str, written: list[
 def _discard(written: list[Path]) -> None:
     for p in written:
         p.unlink(missing_ok=True)
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+# --- expiry of unsubmitted drafts ------------------------------------------------------------------
+PRUNE_EVERY_SECONDS = 3600
+_last_prune = 0.0
+
+
+def _draft_age_start(d: dict, now: datetime) -> datetime:
+    """When the draft was last updated. A draft that carries no stamp (kept before the stamp existed) gets
+    one now, so it lives a full TTL from this moment instead of being deleted on first sight."""
+    raw = d.get("updated_at")
+    try:
+        t = datetime.fromisoformat(str(raw))
+        return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        d["updated_at"] = now.isoformat()
+        return now
+
+
+def _draft_stored_names(d: dict) -> list[str]:
+    return [str(f["stored"]) for c in d.get("cards", []) for f in c.get("files", []) if f.get("stored")]
+
+
+def _unlink_confined(name: str) -> None:
+    """Delete one file of UPLOAD_DIR, never anything outside it (same confinement as restore_file)."""
+    root = Path(core.UPLOAD_DIR).resolve()
+    path = (root / name).resolve()
+    if root in path.parents:
+        path.unlink(missing_ok=True)
+
+
+def prune_stale_drafts(now: datetime | None = None) -> int:
+    """Delete unsubmitted drafts not updated for REIMBURSE_DRAFT_TTL_DAYS: the database rows are retired
+    first (claim_state.expire_draft), then the draft leaves memory and its files leave the disk. Submitted
+    drafts are never in core.DRAFTS (submit pops them), so their claim's files are untouched. Returns the
+    number pruned; only the count is logged."""
+    global _last_prune
+    _last_prune = time.monotonic()
+    now = now or datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=upload_quota.draft_ttl_days())
+    pruned = 0
+    for did, d in list(core.DRAFTS.items()):
+        if _draft_age_start(d, now) >= cutoff:
+            continue
+        names = _draft_stored_names(d)
+        try:
+            claim_state.expire_draft(did, names, d.get("emp", ""))
+        except Exception:  # noqa: BLE001 - keep the draft in memory when the database did not keep the change
+            log.warning("draft expiry skipped: database write failed (%s)", did)
+            continue
+        core.DRAFTS.pop(did, None)
+        for name in names:
+            try:
+                _unlink_confined(name)
+            except OSError:
+                pass
+        pruned += 1
+    if pruned:
+        log.info("pruned %d stale draft(s)", pruned)
+    return pruned
+
+
+def maybe_prune_stale_drafts() -> None:
+    """At most once an hour."""
+    if _last_prune == 0.0 or time.monotonic() - _last_prune >= PRUNE_EVERY_SECONDS:
+        prune_stale_drafts()
+
+
+def startup_prune() -> None:
+    prune_stale_drafts()
 
 
 def get_draft(did: str, emp: str) -> dict:
@@ -258,12 +336,18 @@ async def create_draft(request: Request, purpose: str = Form(...), destination: 
     files = [f for f in files if f.filename]
     if len(files) > MAX_FILES:
         raise HTTPException(400, f"Drop at most {MAX_FILES} files at once")
+    maybe_prune_stale_drafts()
+    upload_quota.check_open_drafts(emp, core.DRAFTS)
     did = uuid.uuid4().hex[:8]
     checked = [await _read_checked(f) for f in files]  # every file is validated before any is written
+    incoming = sum(len(data) for data, _ in checked)
+    upload_quota.check_daily_bytes(emp, incoming)  # the whole request, before anything is written
     written: list[Path] = []
     try:
         entries = [await _store_and_extract(data, safe, f"D{did}", written) for data, safe in checked]
-        return await _save_draft(did, emp, purpose, destination, start_date, end_date, entries)
+        response = await _save_draft(did, emp, purpose, destination, start_date, end_date, entries)
+        upload_quota.record_upload(emp, incoming)
+        return response
     except BaseException:
         _discard(written)
         raise
@@ -287,7 +371,7 @@ async def _save_draft(did, emp, purpose, destination, start_date, end_date, entr
         merged.append(c)
     draft = {"id": did, "emp": emp, "header": {"purpose": purpose, "destination": destination,
                                                "start_date": start_date, "end_date": end_date},
-             "cards": merged or [_card_from_files([])], "errors": []}
+             "cards": merged or [_card_from_files([])], "errors": [], "updated_at": _now_iso()}
     try:  # database first: the draft and the bytes it already points at
         with claim_state.transaction():
             claim_state.save_draft(draft)
@@ -727,6 +811,7 @@ async def update_draft(did: str, request: Request):
     live = get_draft(did, core.require_employee(request))
     # Edits happen on a copy: the draft the page reads only changes once the database kept the new one.
     d = copy.deepcopy(live)
+    d["updated_at"] = _now_iso()
     form = await request.form()
     _apply_edits(d, form)
     action = str(form.get("action", "save"))
@@ -1013,10 +1098,12 @@ async def add_file(cid: str, iid: str, request: Request, file: UploadFile = File
     if not item:
         raise HTTPException(404, f"Unknown item {iid}")
     data, safe = await _read_checked(file)
+    upload_quota.check_daily_bytes(claim["employee_id"], len(data))
     written: list[Path] = []
     try:
         entry = await _store_and_extract(data, safe, cid, written)
         forward_files(claim["employee_id"], cid, claim["trip"], [(item, entry)])
+        upload_quota.record_upload(claim["employee_id"], len(data))
     except BaseException:
         _discard(written)
         raise
