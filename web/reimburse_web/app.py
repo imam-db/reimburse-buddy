@@ -579,7 +579,8 @@ def login_submit(request: Request, email: str = Form(""), password: str = Form("
     if not auth.enabled():
         return RedirectResponse(target, status_code=303)
     ip = client_ip(request)
-    if auth.too_many_failures(ip):
+    account = auth.account_key(email)
+    if auth.too_many_failures(ip) or auth.too_many_failures(account):
         auth.audit_denied("rate_limited", ip=ip)
         return login_card(target, label("auth_rate_limited"), email, 401)
     try:
@@ -592,9 +593,10 @@ def login_submit(request: Request, email: str = Form(""), password: str = Form("
         return login_card(target, label("auth_unavailable"), email, 503)
     if user is None:
         auth.record_failure(ip)
+        auth.record_failure(account)
         auth.audit_denied("bad_credentials", ip=ip)  # reason only: never the email, password or IP
         return login_card(target, label("auth_bad_credentials"), email, 401)
-    auth.clear_failures(ip)
+    auth.clear_failures(account)  # only this account's counter: a success never resets the per-IP bucket
     if target == "/" or not auth.may_open(user.role, target):  # "/" is the form's default: no preference
         target = auth.home_for(user.role)
     r = RedirectResponse(target, status_code=303)
@@ -637,7 +639,8 @@ def logout_page():
 
 
 @app.post("/logout")
-def logout():
+def logout(request: Request):
+    auth.revoke(request.cookies.get(auth.COOKIE, ""))
     r = RedirectResponse("/login", status_code=303)
     r.delete_cookie(auth.COOKIE, path="/")
     return r
@@ -888,6 +891,8 @@ async def forward_evidence(request: Request, subject: str = Form(...), claim_id:
                                       sha256=hashlib.sha256(data).hexdigest())
             claim_state.add_message(message)
     except Exception as exc:  # noqa: BLE001 - a message the database did not keep is not in memory either
+        if stored:
+            (UPLOAD_DIR / stored).unlink(missing_ok=True)  # no orphan file for a request that failed
         raise state_not_saved(exc) from exc
     store.inbox.append(message)
     return RedirectResponse("/employee?msg=File+diteruskan", status_code=303)

@@ -22,6 +22,20 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+# Bounds on untrusted uploads: a slow or huge file fails like any unreadable file (empty card), never hangs a worker.
+OCR_TIMEOUT_S = 60
+PDF_RENDER_TIMEOUT_S = 60
+PDF_RENDER_HEIGHT_PX = 2400  # about A4 at 200 dpi; an oversized page is scaled down instead of rendered in full
+MAX_IMAGE_PIXELS = 40_000_000  # Pillow refuses (DecompressionBombError) above twice this
+
+def check_pixels(path: Path) -> None:
+    """Raise ValueError when an image's header declares more than MAX_IMAGE_PIXELS (reads the header only)."""
+    from PIL import Image
+    with Image.open(path) as img:
+        if img.width * img.height > MAX_IMAGE_PIXELS:
+            raise ValueError(f"image too large ({img.width}x{img.height})")
+
+
 DOC_TYPES = ("hotel_receipt", "taxi_receipt", "meal_receipt", "flight_receipt", "boarding_pass", "other")
 FIELDS = ("doc_type", "date", "amount", "merchant", "flight_no", "nights", "passenger")
 LOW_CONFIDENCE = 0.6
@@ -232,7 +246,8 @@ class TesseractExtractor:
         import pytesseract
         langs = set(pytesseract.get_languages(config=""))
         lang = "+".join(x for x in self.lang.split("+") if x in langs) or "eng"
-        data = pytesseract.image_to_data(img, lang=lang, config=f"--psm {psm}", output_type=pytesseract.Output.DICT)
+        data = pytesseract.image_to_data(img, lang=lang, config=f"--psm {psm}", output_type=pytesseract.Output.DICT,
+                                          timeout=OCR_TIMEOUT_S)
         rows: dict[tuple, list] = {}
         for i, w in enumerate(data["text"]):
             if w.strip():
@@ -254,7 +269,8 @@ class TesseractExtractor:
                     if len(re.findall(r"[A-Za-z]{3,}", txt)) >= 3:
                         return parse_text(txt, None, "pdf_text")
                 from pdf2image import convert_from_path
-                pages = convert_from_path(str(path), dpi=200, first_page=1, last_page=2)
+                pages = convert_from_path(str(path), dpi=200, first_page=1, last_page=2,
+                                          size=(None, PDF_RENDER_HEIGHT_PX), timeout=PDF_RENDER_TIMEOUT_S)
                 parts = [self._ocr_image(p) for p in pages]
                 text, conf, off = "", {}, 0
                 for t, c in parts:
@@ -263,6 +279,7 @@ class TesseractExtractor:
                     text += t + "\n"
                 return parse_text(text, conf, "ocr")
             from PIL import Image
+            Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
             with Image.open(path) as img:
                 img = img.convert("L")
                 if img.width < 1000:
@@ -310,7 +327,8 @@ class VisionExtractor:
                 from pdf2image import convert_from_path
                 import io
                 buf = io.BytesIO()
-                convert_from_path(str(path), dpi=150, first_page=1, last_page=1)[0].save(buf, "PNG")
+                convert_from_path(str(path), dpi=150, first_page=1, last_page=1,
+                                  size=(None, PDF_RENDER_HEIGHT_PX), timeout=PDF_RENDER_TIMEOUT_S)[0].save(buf, "PNG")
                 raw, mime = buf.getvalue(), "image/png"
             else:
                 raw, mime = path.read_bytes(), "image/jpeg" if path.suffix.lower() in (".jpg", ".jpeg") else "image/png"
@@ -401,6 +419,7 @@ class RapidOCRExtractor:
         if path.suffix.lower() == ".pdf":
             return self._pdf.extract(path)
         try:
+            check_pixels(path)  # RapidOCR decodes the file itself: refuse a pixel bomb from its header first
             r = self.engine()(str(path))
             if not r.txts:
                 return parse_text("", None, "ocr")

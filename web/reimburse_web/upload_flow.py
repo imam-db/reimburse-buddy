@@ -7,6 +7,7 @@ forwarded attachment so the reviewer sees it. Approved amounts still come only f
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import hashlib
 import json
@@ -21,6 +22,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from starlette.concurrency import run_in_threadpool
 
 from reimburse_buddy.amounts import normalize_attachment
 from reimburse_buddy.gaps import B_ONLY
@@ -78,19 +80,37 @@ def _file_entry(stored: str, name: str, draft: Draft, sha256: str = "") -> dict:
             "doc_type_source": j["fields"]["doc_type"]["source"], "error": j["error"]}
 
 
-async def _save_and_extract(upload: UploadFile, prefix: str) -> dict:
+# At most two extractions at once: OCR and PDF rendering are CPU-heavy and run off the event loop.
+_EXTRACT_SLOTS = asyncio.Semaphore(2)
+
+
+async def _read_checked(upload: UploadFile) -> tuple[bytes, str]:
+    """Validate one upload (extension allowlist, size) and return its bytes and safe name. Writes nothing."""
     ext = Path(upload.filename or "").suffix.lower()
     if ext not in core.ALLOWED_UPLOAD_EXT:
         raise HTTPException(400, f"File type {ext or '(none)'} not allowed; use {', '.join(sorted(core.ALLOWED_UPLOAD_EXT))}")
     data = await upload.read(core.MAX_UPLOAD_BYTES + 1)
     if len(data) > core.MAX_UPLOAD_BYTES:
         raise HTTPException(413, f"{upload.filename} is larger than 5 MB")
+    return data, re.sub(r"[^A-Za-z0-9._-]", "_", Path(upload.filename).name)[:80]
+
+
+async def _store_and_extract(data: bytes, safe: str, prefix: str, written: list[Path]) -> dict:
+    """Write validated bytes to UPLOAD_DIR (recording the path in `written`) and extract them off the loop."""
     core.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    safe = re.sub(r"[^A-Za-z0-9._-]", "_", Path(upload.filename).name)[:80]
     stored = f"{prefix}_{uuid.uuid4().hex[:6]}_{safe}"
     path = core.UPLOAD_DIR / stored
     path.write_bytes(data)
-    return _file_entry(stored, safe, get_extractor().extract(path), hashlib.sha256(data).hexdigest())
+    written.append(path)
+    extractor = get_extractor()
+    async with _EXTRACT_SLOTS:
+        draft = await run_in_threadpool(extractor.extract, path)
+    return _file_entry(stored, safe, draft, hashlib.sha256(data).hexdigest())
+
+
+def _discard(written: list[Path]) -> None:
+    for p in written:
+        p.unlink(missing_ok=True)
 
 
 def get_draft(did: str, emp: str) -> dict:
@@ -239,7 +259,17 @@ async def create_draft(request: Request, purpose: str = Form(...), destination: 
     if len(files) > MAX_FILES:
         raise HTTPException(400, f"Drop at most {MAX_FILES} files at once")
     did = uuid.uuid4().hex[:8]
-    entries = [await _save_and_extract(f, f"D{did}") for f in files]
+    checked = [await _read_checked(f) for f in files]  # every file is validated before any is written
+    written: list[Path] = []
+    try:
+        entries = [await _store_and_extract(data, safe, f"D{did}", written) for data, safe in checked]
+        return await _save_draft(did, emp, purpose, destination, start_date, end_date, entries)
+    except BaseException:
+        _discard(written)
+        raise
+
+
+async def _save_draft(did, emp, purpose, destination, start_date, end_date, entries):
     cards = [_card_from_files([x]) for x in entries]
     # A boarding pass and an e-ticket for the same flight become one card.
     by_flight: dict[str, dict] = {}
@@ -982,6 +1012,12 @@ async def add_file(cid: str, iid: str, request: Request, file: UploadFile = File
     item = next((i for i in claim["items"] if i["id"] == iid), None)
     if not item:
         raise HTTPException(404, f"Unknown item {iid}")
-    entry = await _save_and_extract(file, cid)
-    forward_files(claim["employee_id"], cid, claim["trip"], [(item, entry)])
+    data, safe = await _read_checked(file)
+    written: list[Path] = []
+    try:
+        entry = await _store_and_extract(data, safe, cid, written)
+        forward_files(claim["employee_id"], cid, claim["trip"], [(item, entry)])
+    except BaseException:
+        _discard(written)
+        raise
     return RedirectResponse(f"/employee/claims/{cid}?msg=File+added&item={quote(iid)}#item-{quote(iid)}", status_code=303)
