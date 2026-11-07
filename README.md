@@ -489,12 +489,14 @@ export LLM_PRICE_OUTPUT_PER_MTOK=...
 - The claim state is checked right after the plan state, before the replay and the expiry sweep: with
   `REIMBURSE_PLAN_BACKEND=postgres` a missing table of `008_claim_state.sql` aborts startup, naming the
   migration. There is no silent fallback to memory either.
-- Apply migrations `001`-`008` before the first request: `005_llm_spend.sql` adds the spend ledger the
+- Apply migrations `001`-`009` before the first request: `005_llm_spend.sql` adds the spend ledger the
   daily cap reads and writes, `006_plan_state.sql` the plan state (`plan_requests`, `plan_versions`,
   `plan_decisions`, `mock_office_rows`; `reimburse_app` gets SELECT, INSERT and UPDATE, never DELETE), and
   `008_claim_state.sql` the claim state (`web_claims`, `web_messages`, `claim_reviews`, `employee_drafts`,
   `outbox_messages`, `approval_requests`, `claim_status_changes`, `uploaded_files`, plus the `demo_epoch`
-  row that Reset demo moves forward; the same grants, never DELETE or TRUNCATE).
+  row that Reset demo moves forward; the same grants, never DELETE or TRUNCATE), and `009_revoked_sessions.sql`
+  the logout revocations (`revoked_sessions`; SELECT, INSERT and DELETE of expired rows; without it logouts
+  are kept in memory only and a warning is logged).
   Apply them in numeric order: `002`-`004` each rewrite the `audit_events.event_type` constraint, so a
   later one applied first would silently narrow it.
 

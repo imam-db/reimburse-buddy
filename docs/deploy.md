@@ -48,14 +48,21 @@ is only for these steps; it never goes into `app.env` or `demo.env`. The service
 role (`reimburse_app`). Use Neon's direct (unpooled) endpoint. Repeat the steps for the `production` branch and the
 `demo` branch; each branch has its own `reimburse_app` password.
 
-1. **Migrations 001 to 008**, in numeric order, as the owner role (see the notes in the
+1. **Migrations 001 to 009**, in numeric order, as the owner role (see the notes in the
    [README](../README.md#environment-variables) on why the order matters):
 
    ```bash
-   for f in agent/migrations/00[1-8]_*.sql; do psql "$OWNER_DATABASE_URL" -f "$f"; done
+   for f in agent/migrations/00[1-9]_*.sql; do psql "$OWNER_DATABASE_URL" -f "$f"; done
    ```
 
    The `demo` branch was copied from `production` and already has 001 to 008. Re-applying is not needed there.
+   `009_revoked_sessions.sql` (durable logout) is newer: apply it on **both** branches:
+
+   ```bash
+   psql "$OWNER_DATABASE_URL" -f agent/migrations/009_revoked_sessions.sql
+   ```
+
+   Until it is applied, each instance logs a warning and keeps logouts in memory only (lost on restart).
 2. **Checkpoint tables** (plan graph), once per database, as the owner role. Safe to re-run:
 
    ```bash

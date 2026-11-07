@@ -9,11 +9,15 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import os
 import secrets
 import threading
+import time
 from dataclasses import dataclass
 from typing import Protocol
+
+log = logging.getLogger(__name__)
 
 SCRYPT_N, SCRYPT_R, SCRYPT_P = 2 ** 14, 8, 1
 SALT_BYTES = 16
@@ -87,6 +91,10 @@ class UserStore(Protocol):
 
     def touch_login(self, user_id: int) -> None: ...
 
+    def session_state(self, employee_id: str, nonce: str) -> tuple[User | None, bool]: ...
+
+    def revoke_session(self, nonce: str, expires_at: float) -> bool: ...
+
 
 class MemoryUserStore:
     """For tests and local dev without a database."""
@@ -95,6 +103,7 @@ class MemoryUserStore:
         self._users: dict[str, User] = {}
         self._by_employee: dict[str, User] = {}
         self.logins: list[int] = []
+        self.revoked: dict[str, float] = {}  # logout nonce -> cookie expiry
         self._next_id = 1
 
     def add(self, employee_id: str, email: str, password: str | None = None, role: str = "reviewer",
@@ -116,6 +125,16 @@ class MemoryUserStore:
 
     def touch_login(self, user_id: int) -> None:
         self.logins.append(user_id)
+
+    def session_state(self, employee_id: str, nonce: str) -> tuple[User | None, bool]:
+        """(user row, revoked?) for one gated request."""
+        expiry = self.revoked.get(nonce)
+        return self.find_by_employee_id(employee_id), expiry is not None and expiry > time.time()
+
+    def revoke_session(self, nonce: str, expires_at: float) -> bool:
+        self.revoked[nonce] = expires_at
+        return True
+
 
 
 class PostgresUserStore:
@@ -160,6 +179,52 @@ class PostgresUserStore:
 
     def touch_login(self, user_id: int) -> None:
         self._run("UPDATE app_users SET last_login_at = now() WHERE id = %s", (user_id,), False)
+
+    # Logout revocations (agent/migrations/009_revoked_sessions.sql). Until the owner applies 009 the table is
+    # missing: then these report "unavailable" and auth keeps its in-process list instead of failing requests.
+    revocations_available = True
+
+    def session_state(self, employee_id: str, nonce: str) -> tuple[User | None, bool]:
+        """(user row, revoked?) in one round trip; falls back to the user row alone without table 009."""
+        if self.revocations_available:
+            try:
+                row = self._run(
+                    "SELECT u.id, u.employee_id, u.email, u.password_hash, u.role, u.is_active,"
+                    " EXISTS (SELECT 1 FROM revoked_sessions r WHERE r.nonce = %s AND r.expires_at > now())"
+                    " FROM app_users u WHERE u.employee_id = %s", (nonce, (employee_id or "").strip()), True)
+                if not row:
+                    return None, False
+                return User(int(row[0]), row[1], row[2], row[3], row[4], bool(row[5])), bool(row[6])
+            except Exception as exc:  # noqa: BLE001 - only a missing table is tolerated
+                if not _missing_table(exc):
+                    raise
+                self._no_revocations()
+        return self.find_by_employee_id(employee_id), False
+
+    def revoke_session(self, nonce: str, expires_at: float) -> bool:
+        """Record a logout; False when table 009 is missing (the caller keeps it in memory instead)."""
+        if not self.revocations_available:
+            return False
+        try:
+            self._run("DELETE FROM revoked_sessions WHERE expires_at <= now()", (), False)
+            self._run("INSERT INTO revoked_sessions (nonce, expires_at) VALUES (%s, to_timestamp(%s))"
+                      " ON CONFLICT (nonce) DO NOTHING", (nonce, float(expires_at)), False)
+            return True
+        except Exception as exc:  # noqa: BLE001
+            if not _missing_table(exc):
+                raise
+            self._no_revocations()
+            return False
+
+    def _no_revocations(self) -> None:
+        self.revocations_available = False
+        log.warning("revoked_sessions table missing (apply agent/migrations/009_revoked_sessions.sql): "
+                    "logout revocation is kept in memory only and is lost on restart")
+
+
+def _missing_table(exc: Exception) -> bool:
+    """psycopg's UndefinedTable (SQLSTATE 42P01), without importing psycopg here."""
+    return getattr(exc, "sqlstate", None) == "42P01" or type(exc).__name__ == "UndefinedTable"
 
 
 def user_dsn() -> str:

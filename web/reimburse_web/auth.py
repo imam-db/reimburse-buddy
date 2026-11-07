@@ -31,6 +31,10 @@ from dataclasses import dataclass
 
 from . import users
 
+import logging
+
+log = logging.getLogger(__name__)
+
 COOKIE = "rb_auth"
 TTL_SECONDS = 12 * 60 * 60
 MAX_FAILS_PER_MINUTE = 5
@@ -240,23 +244,36 @@ def revoke(raw: str, *, now: float | None = None) -> None:
     sess = parse(raw, now=current)
     if sess is None:
         return
-    with _LOCK:
-        for nonce, expiry in list(_REVOKED.items()):
-            if expiry <= current:
+    expiry = sess.issued_at + TTL_SECONDS
+    with _LOCK:  # always kept in process too: covers this instance even if the database write fails
+        for nonce, exp in list(_REVOKED.items()):
+            if exp <= current:
                 del _REVOKED[nonce]
-        _REVOKED[sess.nonce] = sess.issued_at + TTL_SECONDS
+        _REVOKED[sess.nonce] = expiry
+    store = user_store() if enabled() else None
+    if store is not None and hasattr(store, "revoke_session"):
+        try:
+            store.revoke_session(sess.nonce, expiry)  # durable when table 009 exists
+        except Exception as exc:  # noqa: BLE001 - logout itself must not fail; the in-process entry stands
+            log.warning("logout revocation not stored (%s); kept in this process only", type(exc).__name__)
 
 
 def _still_valid(sess: Session) -> bool:
     """Not logged out, and (with a user store configured) the user row is still active with the same role.
-    One indexed lookup per gated request, deliberately uncached so a deactivation takes effect at once."""
+    One indexed query per gated request (user row + revocation together), deliberately uncached so a
+    deactivation or a logout elsewhere takes effect at once."""
     with _LOCK:
         if sess.nonce in _REVOKED:
             return False
     store = user_store() if enabled() else None
     if store is None:
         return True
-    user = store.find_by_employee_id(sess.reviewer)
+    if hasattr(store, "session_state"):
+        user, revoked = store.session_state(sess.reviewer, sess.nonce)
+        if revoked:
+            return False
+    else:
+        user = store.find_by_employee_id(sess.reviewer)
     return bool(user and user.is_active and user.role == sess.role)
 
 
