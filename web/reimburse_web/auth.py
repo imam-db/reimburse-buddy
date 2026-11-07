@@ -217,6 +217,37 @@ def parse(raw: str, *, now: float | None = None) -> Session | None:
     return Session(employee_id, role, issued_at, nonce)
 
 
+# Logout revocation: {cookie nonce: that cookie's own expiry}. Per process and lost on restart: the cookie is
+# stateless, and revoking it everywhere would need a database table (out of scope: migrations are protected).
+_REVOKED: dict[str, float] = {}
+
+
+def revoke(raw: str, *, now: float | None = None) -> None:
+    """Refuse this cookie from now on (POST /logout) until it would have expired anyway."""
+    current = time.time() if now is None else now
+    sess = parse(raw, now=current)
+    if sess is None:
+        return
+    with _LOCK:
+        for nonce, expiry in list(_REVOKED.items()):
+            if expiry <= current:
+                del _REVOKED[nonce]
+        _REVOKED[sess.nonce] = sess.issued_at + TTL_SECONDS
+
+
+def _still_valid(sess: Session) -> bool:
+    """Not logged out, and (with a user store configured) the user row is still active with the same role.
+    One indexed lookup per gated request, deliberately uncached so a deactivation takes effect at once."""
+    with _LOCK:
+        if sess.nonce in _REVOKED:
+            return False
+    store = user_store() if enabled() else None
+    if store is None:
+        return True
+    user = store.find_by_employee_id(sess.reviewer)
+    return bool(user and user.is_active and user.role == sess.role)
+
+
 def session_of(request) -> Session | None:
     if request is None:
         return None
@@ -224,7 +255,8 @@ def session_of(request) -> Session | None:
         raw = request.cookies.get(COOKIE, "")
     except AttributeError:  # a bare dict, used by tests
         raw = (request or {}).get(COOKIE, "")
-    return parse(raw)
+    sess = parse(raw)
+    return sess if sess is not None and _still_valid(sess) else None
 
 
 DEV_EMPLOYEE_ENV = "REIMBURSE_DEV_EMPLOYEE"  # DEV ONLY: acts as this employee when the login gate is off
@@ -326,33 +358,46 @@ _FAILS: dict[str, list[float]] = {}
 _LOCK = threading.Lock()
 
 
-def _recent(ip: str, now: float) -> list[float]:
-    return [t for t in _FAILS.get(ip, []) if now - t < 60]
+def account_key(email: str) -> str:
+    """The per-account throttle key: the submitted email, lowercased and stripped (never mixed with an IP)."""
+    return "acct:" + (email or "").strip().lower()
 
 
-def too_many_failures(ip: str, *, now: float | None = None) -> bool:
+def _recent(key: str, now: float) -> list[float]:
+    return [t for t in _FAILS.get(key, []) if now - t < 60]
+
+
+def _store_recent(key: str, fails: list[float]) -> None:
+    if fails:
+        _FAILS[key] = fails
+    else:
+        _FAILS.pop(key, None)  # bound memory: no empty lists
+
+
+def too_many_failures(key: str, *, now: float | None = None) -> bool:
     now = time.time() if now is None else now
     with _LOCK:
-        fails = _recent(ip, now)
-        _FAILS[ip] = fails
+        fails = _recent(key, now)
+        _store_recent(key, fails)
         return len(fails) >= MAX_FAILS_PER_MINUTE
 
 
-def record_failure(ip: str, *, now: float | None = None) -> None:
+def record_failure(key: str, *, now: float | None = None) -> None:
     now = time.time() if now is None else now
     with _LOCK:
-        _FAILS[ip] = _recent(ip, now) + [now]
+        _store_recent(key, _recent(key, now) + [now])
 
 
-def clear_failures(ip: str) -> None:
+def clear_failures(key: str) -> None:
     with _LOCK:
-        _FAILS.pop(ip, None)
+        _FAILS.pop(key, None)
 
 
 def reset_attempts() -> None:
-    """Forget every failure counter (tests)."""
+    """Forget every failure counter (per IP and per account) and every logout revocation (tests)."""
     with _LOCK:
         _FAILS.clear()
+        _REVOKED.clear()
 
 
 # --- audit ---------------------------------------------------------------------------------------------
