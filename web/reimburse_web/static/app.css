@@ -1167,6 +1167,21 @@ details > summary + * {
   margin-top: var(--sp-4);
 }
 
+.login-card .try-demo {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+  text-align: center;
+}
+
+.login-card .try-demo .btn {
+  display: block;
+}
+
+.login-card .try-demo .note {
+  margin: var(--sp-2) 0 0;
+}
+
 .login-error {
   background: var(--danger-soft);
   color: #7f1d22;
@@ -1177,12 +1192,30 @@ details > summary + * {
   margin: 0 0 var(--sp-2);
 }
 
+/* Demo banner (ADR 0013): one thin line above everything while the picker is on. */
+.demo-banner {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-bottom: 1px solid var(--line);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 4px var(--sp-3);
+}
+
+/* The picker shell is a flex row, so the strip is pinned to the top there. */
+.login-shell .demo-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
 /* --- demo profile picker (ADR 0012) ------------------------------------------ */
 
 /* Same shell as the login card, but wider and aligned to the top: the picker is a page, not a card. */
 .demo-shell {
   align-items: flex-start;
-  padding: var(--sp-5) var(--sp-4);
+  padding: calc(var(--sp-5) + 28px) var(--sp-4) var(--sp-5);
 }
 
 .demo-picker {

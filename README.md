@@ -273,6 +273,8 @@ uv --directory web run python -m reimburse_web.seed_users --dsn "$OWNER_DATABASE
 uv --directory web run python -m reimburse_web.seed_users --all --dry-run
 ```
 
+Deploying the app and the demo on one VPS: [docs/deploy.md](docs/deploy.md) ([ADR 0013](docs/adr/0013-deploy-app-and-demo.md)).
+
 ### Demo environment (passwordless profile picker)
 
 For a recorded demo, `REIMBURSE_DEMO_PROFILES=1` turns `/login` into a picker of five profiles — two
@@ -418,6 +420,7 @@ Secrets come from the environment (or a git-ignored `.env.local`) and are never 
 | `REIMBURSE_AUTH_DATABASE_URL` | audit DSN | Postgres DSN for `app_users` (secret; app role). Falls back to `REIMBURSE_AUDIT_DATABASE_URL`. Unset outside production means the login gate is off; unset in production aborts startup |
 | `REIMBURSE_DEMO_SESSION_KEY` | random per process | HMAC key for the login session cookie (`rb_auth`); required in production, set it in any shared deploy (secret) |
 | `REIMBURSE_DEMO_PROFILES` | unset | Demo only: `1` turns `/login` into a passwordless profile picker for five `app_users` accounts ([ADR 0012](docs/adr/0012-demo-profiles.md)). Ignored unless the login gate is on, and production refuses to start with it set at all |
+| `REIMBURSE_DEMO_URL` | unset | Absolute `https://` URL of the demo instance (`http://` only for localhost). Adds a "Coba demo →" button to the login card; an invalid value aborts startup ([ADR 0013](docs/adr/0013-deploy-app-and-demo.md)) |
 | `REIMBURSE_AUDIT_DATABASE_URL` | unset | Postgres DSN for the audit log (secret; app role, Neon direct endpoint) |
 | `REIMBURSE_AUDIT_LOG` | unset | JSONL audit log path outside production; unset means in memory |
 | `DEEPSEEK_API_KEY` or `REIMBURSE_AGENT_API_KEY` | unset | Model key for the claim agent (secret) |
@@ -549,6 +552,7 @@ agent/
   migrations/           Postgres schemas: audit log (001-004), LLM spend ledger (005), plan state (006)
   eval/                 synthetic eval suites and results
 docs/                   architecture and flow diagrams, request intake, employee Q&A, UI notes
+deploy/                 systemd units, Caddyfile, env examples and setup.sh (see docs/deploy.md)
 src/reimburse_buddy/
   server.py      MCP server (FastMCP, stdio)
   rules.py       deterministic rule engine
