@@ -1716,12 +1716,27 @@ def investigation_resume(rid: str, request: Request, approval_id: str = Form("")
                          reason: str = Form("")):
     run = _get_run(rid)
     if approved == "true":
-        refused = self_approval_refusal(request, run.claim_id, f"investigation:{rid}:resume")
-        if refused:
-            return back_to_claim(run.claim_id, refused)
+        for cid in _approval_claims(run, approval_id):
+            refused = self_approval_refusal(request, cid, f"investigation:{rid}:resume")
+            if refused:
+                return back_to_claim(run.claim_id, refused)
     run.resume(approval_id, approved == "true", reason,
                reviewer=auth.reviewer_of(request))  # stale/duplicate answers are ignored
     return RedirectResponse(f"/admin/investigations/{rid}", status_code=303)
+
+
+def _approval_claims(run, approval_id: str) -> list[str]:
+    """Every claim an approval would act on: the run's claim plus any claim the pending write names
+    (args.claim_id / args.claim_ids). The worker refuses writes for another claim (graph.claim_binding);
+    this checks them again here so self-approval is judged on the claim the write is actually about."""
+    out = [run.claim_id]
+    pend = getattr(run, "pending", None)
+    if isinstance(pend, dict) and pend.get("approval_id") == approval_id:
+        args = pend.get("args") if isinstance(pend.get("args"), dict) else {}
+        for cid in [args.get("claim_id"), *(args.get("claim_ids") or [])]:
+            if isinstance(cid, str) and cid and cid not in out:
+                out.append(cid)
+    return out
 
 
 @app.post("/admin/investigations/{rid}/reply")
@@ -1729,7 +1744,9 @@ async def investigation_reply(rid: str, request: Request):
     run = _get_run(rid)
     form = await request.form()
     decisions = {k[4:]: str(v) for k, v in form.items() if k.startswith("dec_") and str(v)}
-    if any(v.startswith("approve") for v in decisions.values()):
+    # Every choice but reject moves the claim toward payment ("use:MSG-..." picks the receipt that sets the
+    # payable amount), so all of them are refused on the reviewer's own claim.
+    if any(v != "reject" for v in decisions.values()):
         refused = self_approval_refusal(request, run.claim_id, f"investigation:{rid}:reply")
         if refused:
             return back_to_claim(run.claim_id, refused)

@@ -134,7 +134,6 @@ async def test_evidence_request_runs_only_after_approval():
 @pytest.mark.parametrize("calls,why", [
     ([("request_missing_evidence", ev("IT-5", "receipt_missing"))], "no check_claim yet"),
     ([CHECK, ("request_missing_evidence", ev("IT-5", "receipt_missing"))], "run claim document gap"),
-    ([CHECK, ("request_missing_evidence", ev("IT-6", "receipt_missing", "CLM-2026-0104"))], "other claim"),
     ([CHECK, ("request_missing_evidence", ev("IT-3", "hotel_over_cap"))], "decision-adjacent gap"),
     ([CHECK, ("request_missing_evidence", ev("IT-4", "late_checkout_unjustified"))], "decision-adjacent gap"),
     ([CHECK, ("request_missing_evidence", ev("IT-2", "receipt_missing"))], "gap not in latest check"),
@@ -142,6 +141,12 @@ async def test_evidence_request_runs_only_after_approval():
 async def test_evidence_request_gated(calls, why):
     seen, _ = await _evidence_run(calls)
     assert [v["tool"] for v in seen] == ["request_missing_evidence"], why
+
+
+async def test_evidence_request_for_another_claim_is_refused_not_gated():
+    """graph.claim_binding: a run may only write about its own claim, so this never reaches the reviewer."""
+    seen, _ = await _evidence_run([CHECK, ("request_missing_evidence", ev("IT-6", "receipt_missing", "CLM-2026-0104"))])
+    assert seen == []
 
 
 async def test_evidence_request_gated_without_run_claim():

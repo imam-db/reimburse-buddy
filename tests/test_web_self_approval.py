@@ -382,6 +382,40 @@ def test_claim_owner_cannot_approve_items_from_an_agent_reply(client):
     assert r.status_code == 303 and run.replied == [("q1", "tolak", {"IT-1": "reject"}, "EMP-100")]
 
 
+def test_pending_write_for_the_reviewers_own_claim_is_refused_in_another_run(client):
+    """Self-approval is judged on the claim the pending write names, not only the run's claim: a run on
+    someone else's claim cannot carry an approval for the reviewer's own claim."""
+    c = client
+    login(c, "EMP-100")
+    run = _StubRun(SHOWCASE_CLAIM)  # owned by EMP-101
+    run.pending = {"type": "interrupt", "approval_id": "a1", "tool": "update_claim_status",
+                   "args": {"claim_id": OWN_CLAIM, "status": "approved"}}
+    web.INVESTIGATOR.runs["rid-foreign"] = run
+    r = c.post("/admin/investigations/rid-foreign/resume",
+               data={"approval_id": "a1", "approved": "true"}, follow_redirects=False)
+    assert r.status_code == 303 and run.resumed == []
+    assert "msg=" in r.headers["location"]
+
+    # A write that names only the run's claim goes through for a reviewer who does not own it.
+    run.pending["args"] = {"claim_id": SHOWCASE_CLAIM, "status": "on_hold"}
+    r = c.post("/admin/investigations/rid-foreign/resume",
+               data={"approval_id": "a1", "approved": "true"}, follow_redirects=False)
+    assert r.status_code == 303 and run.resumed == [("a1", True, "", "EMP-100")]
+
+
+def test_claim_owner_cannot_pick_the_receipt_from_an_agent_reply(client):
+    """use:MSG-... sets the payable amount, so it is approval-direction like approve_*."""
+    c = client
+    login(c, "EMP-100")
+    run = _StubRun(OWN_CLAIM)
+    web.INVESTIGATOR.runs["rid-use"] = run
+    r = c.post("/admin/investigations/rid-use/reply",
+               data={"question_id": "q1", "reply": "pakai yang ini", "dec_IT-1": "use:MSG-0001"},
+               follow_redirects=False)
+    assert r.status_code == 303 and run.replied == []
+    assert r.headers["location"].startswith(f"/admin/claims/{OWN_CLAIM}?msg=")
+
+
 def test_claim_page_hides_the_approval_controls_for_the_owner(client):
     c = client
     login(c, "EMP-100")

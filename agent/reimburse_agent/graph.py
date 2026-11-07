@@ -647,6 +647,10 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
         try:
             record(config, "approval" if ok else "rejection", aid, actor=actor, action_id=aid,
                    args_hash=h, payload={"tool": tool, "args_only_hash": args_hash(tool, args),
+                                         # which claim the decision is about, next to the run's claim, so an
+                                         # audit reader sees at once whether they differ (claim_binding refuses that)
+                                         **({"run_claim": run_claim} if run_claim else {}),
+                                         **({"claim_id": args["claim_id"]} if args.get("claim_id") else {}),
                                          **({"engine": engine} if engine is not None else {}),
                                          **({"reason": reason} if reason else {})})
         except Exception as exc:
@@ -706,9 +710,24 @@ def build_graph(model, tools, system_prompt: str | None = None, checkpointer=Non
             getattr(schema, "model_fields", {}) if schema is not None else {})
         return {**args, "action_id": aid} if "action_id" in props else args
 
+    def claim_binding(name: str, args: dict) -> list[str]:
+        """A run investigates one claim: a write may only name that claim. Without this the self-approval
+        check (made on the run's claim) could pass for a write about someone else's, or the reviewer's own,
+        claim. Read-only tools may still look at other claims."""
+        if not run_claim or name in READ_ONLY_TOOLS:
+            return []
+        bad = []
+        cid = args.get("claim_id")
+        if cid not in (None, "") and cid != run_claim:
+            bad.append(f"claim_id={cid!r} is not the claim this run investigates ({run_claim})")
+        for one in args.get("claim_ids") or []:
+            if one != run_claim:
+                bad.append(f"claim_ids contains {one!r}, not the claim this run investigates ({run_claim})")
+        return bad
+
     def arg_check(state: State | None, name: str, args: dict) -> list[str]:
         check = latest_check((state or {}).get("messages", []), run_claim) if run_claim and state else None
-        return inj.arg_source_violations(name, args, engine_amounts=engine_amounts(check))
+        return claim_binding(name, args) + inj.arg_source_violations(name, args, engine_amounts=engine_amounts(check))
 
     def screen(config, name: str, content, hits_out: list, notices_out: list, spans_out: list, flagged_out: list):
         """Scan the content fields of a read tool's output. Every hit is logged (injection_detected); HIGH hits
