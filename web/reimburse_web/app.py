@@ -536,6 +536,10 @@ def demo_picker_page(target: str, error: str = "", email: str = "") -> HTMLRespo
 def login_card(target: str, error: str, email: str, status_code: int) -> HTMLResponse:
     err = f'<p class="login-error" id="login-error" role="alert" tabindex="-1">{e(error)}</p>' if error else ""
     show, hide = e(label("show_password")), e(label("hide_password"))
+    link = auth.demo_url()
+    try_demo = (f'<div class="try-demo" id="try-demo"><a class="btn" id="try-demo-link" '
+                f'href="{e(link)}">{e(label("try_demo"))}</a>'
+                f'<p class="note">{e(label("try_demo_note"))}</p></div>') if link else ""
     html = f"""<!doctype html><html lang="id"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>{e(label("sign_in"))} · Reimburse Buddy</title>
 <meta name="theme-color" content="#1a5fb4"><link rel="icon" href="{ICON}">
@@ -552,7 +556,7 @@ def login_card(target: str, error: str, email: str, status_code: int) -> HTMLRes
  aria-label="{e(label("password"))}" required>
 <button type="button" id="toggle-password" aria-controls="password" aria-pressed="false">{show}</button></div>
 <button type="submit" class="submit" id="login-submit">{e(label("sign_in"))}</button>
-</form></main>
+</form>{try_demo}</main>
 <script>
 var pw=document.getElementById("password"),tg=document.getElementById("toggle-password");
 tg.addEventListener("click",function(){{var on=pw.type==="password";pw.type=on?"text":"password";

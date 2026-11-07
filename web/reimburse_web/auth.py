@@ -25,6 +25,7 @@ import os
 import secrets
 import threading
 import time
+from urllib.parse import urlsplit
 from contextvars import ContextVar
 from dataclasses import dataclass
 
@@ -82,6 +83,33 @@ DEMO_PROFILES = ("EMP-001", "EMP-003", "EMP-100", "EMP-101", "EMP-102")
 DEMO_PROFILES_ENV = "REIMBURSE_DEMO_PROFILES"
 DEMO_LOGIN_PATH = "/login/demo"
 
+# ADR 0013: the real app's login card may link to the separately deployed demo.
+DEMO_URL_ENV = "REIMBURSE_DEMO_URL"
+_LOCAL_HOSTS = ("localhost", "127.0.0.1")
+
+
+def demo_url() -> str:
+    """The validated `REIMBURSE_DEMO_URL`, or "" when unset. Raises AuthConfigError for a bad value.
+
+    Only an absolute `https://` URL with a host is accepted (`http://` only for localhost/127.0.0.1), so the
+    link on the login card can never be a `javascript:` or relative URL."""
+    raw = (os.environ.get(DEMO_URL_ENV) or "").strip()
+    if not raw:
+        return ""
+    try:
+        parts = urlsplit(raw)
+        host = parts.hostname or ""
+        parts.port  # noqa: B018 - raises ValueError for a bad port
+    except ValueError:
+        host, parts = "", None
+    ok = bool(host) and parts is not None and (
+        parts.scheme == "https" or (parts.scheme == "http" and host in _LOCAL_HOSTS))
+    if not ok:
+        raise AuthConfigError(
+            f"{DEMO_URL_ENV} must be an absolute https:// URL with a host (http:// only for localhost or "
+            "127.0.0.1).")
+    return raw
+
 
 def demo_profiles_enabled() -> bool:
     """The one answer to "is the profile picker on?": the switch is `1`, not production, and the gate is on.
@@ -119,7 +147,10 @@ def startup_check() -> None:
 
     Registered after plans.startup_config_check (the audit log is the first thing to be right) and
     before startup_sweep, so a misconfigured production process exits before serving a request. An
-    installed store (tests) is trusted as is; otherwise the user DSN must exist and connect."""
+    installed store (tests) is trusted as is; otherwise the user DSN must exist and connect.
+
+    `REIMBURSE_DEMO_URL` is validated in every environment, so a bad link never reaches a page."""
+    demo_url()
     if not is_production():
         return
     if (os.environ.get(DEMO_PROFILES_ENV) or "").strip():

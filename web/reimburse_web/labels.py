@@ -111,6 +111,9 @@ LABELS = {
     # demo profile picker (docs/adr/0012-demo-profiles.md, app.py)
     "demo_picker_title": "Pilih profil",
     "demo_picker_note": "Mode demo: masuk tanpa kata sandi. Data sintetis.",
+    "try_demo": "Coba demo →",
+    "try_demo_note": "Data sintetis, tanpa kata sandi.",
+    "demo_banner": "Mode demo · data sintetis · bisa di-reset kapan saja",
     "demo_picker_empty": "Belum ada akun demo di database ini. Jalankan seed_users lebih dulu.",
     "demo_email_summary": "Masuk dengan email",
     "demo_legend_title": "Apa yang bisa dibuka tiap peran",

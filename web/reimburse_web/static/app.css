@@ -1167,6 +1167,21 @@ details > summary + * {
   margin-top: var(--sp-4);
 }
 
+.login-card .try-demo {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+  text-align: center;
+}
+
+.login-card .try-demo .btn {
+  display: block;
+}
+
+.login-card .try-demo .note {
+  margin: var(--sp-2) 0 0;
+}
+
 .login-error {
   background: var(--danger-soft);
   color: #7f1d22;
