@@ -39,7 +39,7 @@ from reimburse_buddy.models import rupiah
 from reimburse_buddy.rules import check_claim
 from reimburse_buddy.triage import approve_cleared_batch, triage_claims
 
-from . import auth, claim_state, plan_state, spend, ui, users
+from . import auth, claim_state, plan_state, spend, ui, upload_quota, users
 from .agent_bridge import NO_KEY_MESSAGE, Investigator, RateLimited, key_configured
 from .agent_snapshot import SnapshotError, sweep_old_snapshots
 from .intake import router as intake_router
@@ -210,6 +210,7 @@ def reset_all() -> None:
     store.reset()
     REVIEW.clear()
     DRAFTS.clear()
+    upload_quota.reset_ledger()
     INVESTIGATOR.stop_all()
 
 
@@ -871,6 +872,7 @@ async def forward_evidence(request: Request, subject: str = Form(...), claim_id:
         data = await file.read(MAX_UPLOAD_BYTES + 1)
         if len(data) > MAX_UPLOAD_BYTES:
             raise HTTPException(413, "File is larger than 5 MB")
+        upload_quota.check_daily_bytes(emp, len(data))  # before anything is written
         safe = re.sub(r"[^A-Za-z0-9._-]", "_", Path(file.filename).name)[:80]
         # The stored name does not carry the message id: a message id may move on a key collision.
         stored = f"{uuid.uuid4().hex[:8]}_{safe}"
@@ -895,6 +897,7 @@ async def forward_evidence(request: Request, subject: str = Form(...), claim_id:
             (UPLOAD_DIR / stored).unlink(missing_ok=True)  # no orphan file for a request that failed
         raise state_not_saved(exc) from exc
     store.inbox.append(message)
+    upload_quota.record_upload(emp, len(data))
     return RedirectResponse("/employee?msg=File+diteruskan", status_code=303)
 
 
