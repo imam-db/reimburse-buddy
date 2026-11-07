@@ -48,9 +48,9 @@ def arrow(points, label=None, at=None, both=False, dashed=False):
 
 
 # Title and legend
-box(30, 20, 1540, 56, DATA, ["Reimburse Buddy version B: architecture"])
+box(30, 20, 1540, 56, DATA, ["Reimburse Buddy: architecture (version B, web app + agent)"])
 for i, (colors, name) in enumerate([(EMPLOYEE, "Employee"), (AGENT, "AI agent / UI flow"), (CODE, "Deterministic code"),
-                                     (HUMAN, "Finance (human)"), (DATA, "Data / mock systems"), (GUARD, "Guardrail")]):
+                                     (HUMAN, "Human (manager, finance)"), (DATA, "Data / mock systems"), (GUARD, "Guardrail")]):
     fill, stroke = colors
     x = 30 + i * 258
     out.append(f'<rect x="{x}" y="92" width="240" height="28" rx="8" fill="{fill}" stroke="{stroke}" stroke-width="2"/>')
@@ -66,10 +66,16 @@ MX, MW = 1290, 280
 
 # Claims lane
 box(AX, 150, AW, 90, EMPLOYEE, ["Employee", "(browser)"])
-box(C1, 150, C1W, 90, EMPLOYEE, ["Employee portal", "claims, uploads, OCR draft;", "files go to the reimburse@", "mailbox"])
-box(C2, 150, C2W, 90, AGENT, ["Claim agent", "LangGraph + DeepSeek, own process;", "searches evidence, drafts the", "decision note"])
-box(C1, 280, C1W, 80, AGENT, ["Employee Q&A", "flag EMPLOYEE_QA; own claims +", "rulebook only; cites a source"])
+box(C1, 150, C1W, 90, EMPLOYEE, ["Employee portal", "drag-drop receipts, OCR fills", "item cards; honest status", "per item"])
+box(C2, 150, C2W, 90, AGENT, ["Claim agent (LLM)", "LangGraph, own process; reads a", "per-run snapshot of verified", "evidence; drafts the note"])
+box(C1, 280, C1W, 80, AGENT, ["Employee Q&A (no LLM)", "own claims + rulebook only;", "every answer cites the article"])
 box(C2, 280, C2W, 80, CODE, ["Rule engine (check_claim)", "Decimal; every amount and gap", "+ read-only MCP tools"])
+
+# Manager lane (between claims and requests)
+box(AX, 375, AW, 50, HUMAN, ["Manager", "(browser)"])
+box(C1, 375, C1W, 50, HUMAN, ["Approval requests", "manager input; finance decides"])
+arrow([(AX + AW, 400), (C1, 400)])
+arrow([(C1 + C1W, 400), (GX, 400)], "logged before status changes", (600, 393))
 
 # Requests lane
 box(AX, 440, AW, 90, HUMAN, ["Finance reviewer", "(browser)"])
@@ -101,9 +107,9 @@ arrow([(EX + EW, 395), (MX, 395)])
 box(30, 700, 1540, 34, GUARD, ["Safety guardrails (always on)"])
 gw = (1540 - 3 * 20) / 4
 for i, lines in enumerate([
-    ["Audit log, append-only", "Postgres (Neon) in prod, unique", "event_key; app role may only", "INSERT and SELECT"],
+    ["Neon Postgres", "append-only audit log (INSERT +", "SELECT only); claim state", "survives a restart; no DELETE"],
     ["Prompt-injection detector", "HIGH/LOW rules, withheld spans,", "echo check, argument-source", "allowlist, needs_review flag"],
-    ["The rule engine decides money", "not the LLM; documents are data,", "never instructions; no mass send"],
+    ["The rule engine decides money", "documents are data, never", "instructions; no self-approval;", "flagged claims never bulk-approved"],
     ["Caps per claim run", "250k tokens, 600 s, 10 gated calls,", "3 searches per gap; 3 runs/min,", "1 live run at a time"],
 ]):
     box(30 + i * (gw + 20), 750, gw, 100, GUARD, lines)
