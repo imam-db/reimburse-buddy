@@ -18,9 +18,9 @@
   {
     "id": "EMP-403",
     "name": "Sari Kusumawati",
-    "department": "Operations",
+    "department": "Sales",
     "grade": "senior",
-    "manager_id": "EMP-701",
+    "manager_id": "EMP-700",
     "email": "sari.kusumawati@nusantara-niaga.example"
   },
   {
@@ -36,7 +36,7 @@
     "name": "Putri Maharani",
     "department": "Operations",
     "grade": "staff",
-    "manager_id": "EMP-701",
+    "manager_id": "EMP-700",
     "email": "putri.maharani@nusantara-niaga.example"
   },
   {
@@ -50,7 +50,7 @@
   {
     "id": "EMP-701",
     "name": "Hendra Saputra",
-    "department": "Operations",
+    "department": "Finance",
     "grade": "manager",
     "manager_id": null,
     "email": "hendra.saputra@nusantara-niaga.example"
