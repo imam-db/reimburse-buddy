@@ -183,9 +183,9 @@ def test_memory_store_keeps_the_latest_row_for_one_employee_id():
 # --- the picker page ----------------------------------------------------------------------
 CARDS = [  # employee_id, name, department, role chip (users.ROLE_LABELS)
     ("EMP-001", "Rina Wulandari", "Sales", "Karyawan"),
-    ("EMP-003", "Sari Kusumawati", "Operations", "Karyawan"),
+    ("EMP-003", "Sari Kusumawati", "Sales", "Karyawan"),
     ("EMP-100", "Dewi Anggraini", "Sales", "Manager"),
-    ("EMP-101", "Hendra Saputra", "Operations", "Manager"),
+    ("EMP-101", "Hendra Saputra", "Finance", "Manager"),
     ("EMP-102", "Rani Kusuma", "Finance", "Finance"),
 ]
 
@@ -459,7 +459,7 @@ def test_the_picker_grid_is_fluid_and_one_column_on_a_phone(client, monkeypatch)
     css = client.get("/static/app.css").text
     grid = css[css.index(".demo-grid {"):css.index(".demo-card {")]
     assert "display: grid" in grid
-    assert "repeat(auto-fill, minmax(220px, 1fr))" in grid  # fluid tracks, no fixed `width`
+    assert "repeat(auto-fit, minmax(170px, 1fr))" in grid  # fluid tracks, no fixed `width`
     assert not re.search(r"width:/s*/d{3,}px", grid)
     assert not re.search(r"min-width:/s*/d{3,}px", grid)
     phone = css[css.rindex("@media (max-width: 480px)"):]  # the picker's own narrow-screen block

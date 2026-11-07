@@ -18,7 +18,7 @@ from reimburse_agent.office.store import FilePlanStore
 from conftest import install_test_users, login_as
 
 CLAIM, ITEM = "CLM-2026-0101", "IT-1"  # EMP-001, whose manager is EMP-100
-OTHER_TEAM_CLAIM = "CLM-2026-0104"  # EMP-003, whose manager is EMP-101
+OTHER_TEAM_CLAIM = "CLM-2026-0104"  # EMP-003 (Sales), whose manager is EMP-100
 NO_MANAGER_CLAIM = "CLM-2026-0120"  # EMP-101, no manager in the directory
 
 
@@ -229,3 +229,18 @@ def test_postgres_max_request_number_reads_every_epoch():
     assert claim_state.PostgresClaimRows(Pool()).max_request_number() == 7
     sql, params = seen[0]
     assert sql.startswith("SELECT") and "WHERE" not in sql and not params
+
+
+def test_sari_ask_manager_goes_to_dewi_who_can_answer_it(client):
+    """Sari (EMP-003) is in Sales under Dewi (EMP-100); Hendra is Finance, who cannot open /manager."""
+    assert web.store.get_employee("EMP-003")["manager_id"] == "EMP-100"
+    r = ask(client, OTHER_TEAM_CLAIM)
+    assert r.status_code == 303
+    (req,) = web.store.approval_requests
+    assert (req["manager_id"], req["claim_id"], req["status"]) == ("EMP-100", OTHER_TEAM_CLAIM, "pending")
+    as_(client, "EMP-100")
+    page = client.get("/manager").text
+    assert OTHER_TEAM_CLAIM in page and f"/manager/requests/{req['id']}" in page
+    r = client.post(f"/manager/requests/{req['id']}", data={"decision": "approved", "note": "ok"},
+                    follow_redirects=False)
+    assert r.status_code == 303 and web.store.approval_requests[0]["status"] == "approved"

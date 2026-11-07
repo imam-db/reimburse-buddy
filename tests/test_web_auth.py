@@ -291,9 +291,12 @@ def test_nav_has_exactly_the_links_of_the_role(client, emp):
     assert "Synthetic data" not in html
 
 
-def test_manager_lists_only_the_requests_addressed_to_them(client):
+def test_manager_lists_only_the_requests_addressed_to_them(client, monkeypatch):
     c1 = next(c for c in web.store.claims if web.store.get_employee(c["employee_id"])["manager_id"] == "EMP-100")
-    c2 = next(c for c in web.store.claims if web.store.get_employee(c["employee_id"])["manager_id"] == "EMP-101")
+    # Every staff member reports to EMP-100 in the seed, so for this test one other employee reports to EMP-101
+    # (a manager among the test users, conftest); monkeypatch restores the seed afterwards.
+    c2 = next(c for c in web.store.claims if c["employee_id"] not in (c1["employee_id"], "EMP-100", "EMP-101"))
+    monkeypatch.setitem(web.store.get_employee(c2["employee_id"]), "manager_id", "EMP-101")
     r1 = web.store.request_approval("EMP-100", c1["id"], c1["items"][0]["id"], reason="alasan-satu")
     r2 = web.store.request_approval("EMP-101", c2["id"], c2["items"][0]["id"], reason="alasan-dua")
     login_as(client, "EMP-100")
@@ -536,3 +539,16 @@ def test_prod_refuses_a_placeholder_or_short_session_key_without_echoing_it(prod
 def test_prod_accepts_a_strong_session_key(prod, store):
     prod.setenv("REIMBURSE_DEMO_SESSION_KEY", "a1b2c3d4" * 8)
     auth.startup_check()  # no exception
+
+
+def test_admin_shows_the_labelled_demo_tools_area_outside_production_only(client, monkeypatch):
+    login_as(client, "EMP-102")
+    html = client.get("/admin").text
+    assert 'id="demo-tools-bar"' in html and "Alat demo" in html
+    assert html.index('id="demo-tools-bar"') < html.index('id="triage-stats"')
+    assert html.count('action="/admin/reset"') == 1
+    monkeypatch.setenv("APP_ENV", "production")
+    c = TestClient(web.app, base_url="https://testserver")
+    login_as(c, "EMP-102")
+    prod = c.get("/admin").text
+    assert 'id="demo-tools-bar"' not in prod and 'action="/admin/reset"' not in prod

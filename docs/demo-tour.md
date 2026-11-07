@@ -15,7 +15,7 @@ key sungguhan, dan tanpa database. Teks yang dikutip berasal dari gladi itu. Sta
 | Hal | Isi |
 |---|---|
 | Database | Branch Neon **`demo`** (salinan `production`, migrasi 001–008 sudah ada). Password `reimburse_app` di branch ini sudah diganti, jadi berbeda dari production. |
-| Akun | `seed_users --all --same-password`, ditambah **EMP-101 Hendra sebagai `finance`**. Password demo disimpan pemilik di password manager; tidak dipakai saat demo karena masuk lewat kartu profil. |
+| Akun | `seed_users --all --same-password` (EMP-101 Hendra otomatis `finance` karena departemennya Finance). Password demo disimpan pemilik di password manager; tidak dipakai saat demo karena masuk lewat kartu profil. |
 | `.env.demo` (lokal, di-ignore git) | `REIMBURSE_DEMO_PROFILES=1`, `EMPLOYEE_QA=1`, `REIMBURSE_EXTRACTOR=rapidocr`, `REIMBURSE_PLAN_BACKEND=postgres`, DSN aplikasi ke branch `demo`, session key sendiri, serta model, budget, dan harga dari `.env.local`. `APP_ENV` kosong. |
 | Menjalankan server | Konfigurasi `web-demo` di `.claude/launch.json` (port 8090), atau `uv run --group rapidocr --env-file .env.demo uvicorn --app-dir web reimburse_web.app:app --port 8090` |
 | Sebelum setiap rekaman | Masuk sebagai finance, lalu **Alat demo → Reset demo**. |

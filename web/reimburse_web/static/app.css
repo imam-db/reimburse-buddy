@@ -1242,7 +1242,8 @@ details > summary + * {
 /* One column at 375 px, two rows at most on a 1080p screen: the track is fluid, never a fixed width. */
 .demo-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  align-items: start; /* cards keep their own height and sit on one top line */
   gap: var(--sp-3);
   list-style: none;
   margin: 0 0 var(--sp-4);
@@ -1352,6 +1353,47 @@ details > summary + * {
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
+  gap: var(--sp-2);
+  list-style: none; /* display:flex drops the native marker, so draw a chevron */
+}
+
+.demo-email summary::-webkit-details-marker {
+  display: none;
+}
+
+.demo-email summary::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: none;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+
+.demo-email[open] summary::before {
+  transform: rotate(45deg);
+}
+
+/* Finance triage page: a quiet, labelled corner for the demo reset (never rendered in production). */
+.demo-tools-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-3);
+}
+
+.demo-tools-bar .demo-tools-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.demo-tools-bar form {
+  margin: 0;
 }
 
 .demo-email label {

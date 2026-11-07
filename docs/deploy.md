@@ -72,12 +72,16 @@ role (`reimburse_app`). Use Neon's direct (unpooled) endpoint. Repeat the steps 
 3. **Accounts**, as the owner role. Passwords are prompted with `getpass`, never passed as arguments.
    - `production`: real accounts, for example `uv --directory web run python -m reimburse_web.seed_users --dsn "$OWNER_DATABASE_URL" --employee EMP-100 --role reviewer`
      (or `--all` to create everyone in `data/employees.json`).
-   - `demo`: `--all --same-password`, then make EMP-101 finance for the self-approval scene:
+   - `demo`: `--all --same-password`. EMP-101 (Hendra) is in the Finance department in `data/employees.json`,
+     so `seed_users` makes him `finance` by itself (the self-approval scene needs that); no extra step.
 
      ```bash
      uv --directory web run python -m reimburse_web.seed_users --dsn "$OWNER_DATABASE_URL" --all --same-password
-     uv --directory web run python -m reimburse_web.seed_users --dsn "$OWNER_DATABASE_URL" --employee EMP-101 --role finance
      ```
+
+     A demo database seeded earlier with the old extra `--employee EMP-101 --role finance` step needs no
+     change. Sari (EMP-003) is now in Sales under Dewi (EMP-100); `manager_id` is read from the data file at
+     run time, so nothing is re-seeded for that.
 
      The demo password is never used by visitors (they use the profile cards); keep it in a password manager.
 4. **Audit log self-test**, with the **application** DSN (never the owner) in `REIMBURSE_AUDIT_DATABASE_URL`:
