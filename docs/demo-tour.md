@@ -48,7 +48,8 @@ Setelah `fix/demo-rehearsal`, jawabannya: *"IT-1 (Hotel): Melebihi plafon hotel�
 ## Bab 3 · Manager menjawab permintaan (≈ 1 menit) ✓
 
 1. Rani, di halaman klaim, item hotel: **Minta persetujuan atasan**, alasan *"Hotel di atas plafon, mohon
-   konfirmasi kebutuhan menginap."* Muncul flash *"Permintaan persetujuan dikirim ke atasan (APR-001)"*.
+   konfirmasi kebutuhan menginap."* Muncul flash *"Permintaan persetujuan dikirim ke atasan (APR-…)"*. Nomornya
+   bertambah setiap rekaman, karena ID permintaan tidak pernah berulang walau sudah Reset demo.
 2. **Ganti profil → Dewi Anggraini** (atasan Rina). `/manager` menampilkan permintaan untuk klaim itu →
    **Setujui**, dengan catatan *"Rapat selesai sore, wajar menginap 2 malam."*
 3. Kembali sebagai Rani. Item hotel menampilkan *"Atasan Dewi Anggraini: Disetujui atasan"*.

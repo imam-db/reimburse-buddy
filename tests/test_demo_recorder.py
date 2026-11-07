@@ -115,7 +115,7 @@ def test_main_has_the_proof_moments():
 
 def test_chapter_key_texts():
     assert "Pasal 4" in _all("ch2")
-    assert "APR-001" in _all("ch3")
+    assert "Permintaan persetujuan dikirim ke atasan (APR-" in _all("ch3")  # any number: ids never repeat (PR #62)
     assert "10 klaim, 7 bersih, 3 pengecualian" in _all("ch4")
     assert "Rp2.400.000" in _all("ch5") and "CLM-2026-0120" in _all("ch5")
     assert "Dasar persetujuan" in _all("ch6")
